@@ -110,17 +110,17 @@ Ordered by **usefulness ÷ risk** for the thin fork. Each phase has a kill/skip 
 **Done when:** A multi-minute run can be left and resumed from one screen without digging logs.  
 **Kill if:** Progress APIs can’t expose step/artifact reliably — fix visibility before UI chrome.
 
-### Phase 3 — One thin integration (D partial)  
-**Goal:** One external system in a recipe.
+### Phase 3 — Prove plugins in the personal loop (D)  
+**Goal:** Use what already exists; don’t rebuild GitHub.
 
 | Todo | Detail |
 | :--- | :--- |
-| 3.1 | GitHub connector (OAuth or PAT) good enough for “open PR / comment / list issues” |
-| 3.2 | One demo recipe: scheduled or chat-driven, uses GitHub + Needs you |
-| 3.3 | Webhook inbound trigger documented for “something happened out there” |
+| 3.1 | Confirm GitHub connect + one action works on the personal stack (Connectors UI / Forge) — fix friction only |
+| 3.2 | One **seeded or documented** recipe: schedule or chat → GitHub action → Needs you when gated |
+| 3.3 | Only if blocked: add/fix the *missing* life connector (calendar/mail), not a second GitHub |
 
-**Done when:** One non-toy automation hits GitHub without enterprise Admin.  
-**Skip calendar/mail** until GitHub recipe is real.
+**Done when:** A personal user completes a real GitHub action via Foundry without enterprise Admin.  
+**Skip** building any new GitHub plugin surface.
 
 ### Phase 4 — Project memory v1 (G, no vectors)  
 **Goal:** One measured “it remembered.”
