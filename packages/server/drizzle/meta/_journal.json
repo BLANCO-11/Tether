@@ -960,6 +960,34 @@
       "when": 1796800000000,
       "tag": "0136_one_model_connection",
       "breakpoints": true
+    },
+    {
+      "idx": 137,
+      "version": "7",
+      "when": 1796900000000,
+      "tag": "0137_project_memories",
+      "breakpoints": true
+    },
+    {
+      "idx": 138,
+      "version": "7",
+      "when": 1797000000000,
+      "tag": "0138_item_shares",
+      "breakpoints": true
+    },
+    {
+      "idx": 139,
+      "version": "7",
+      "when": 1797100000000,
+      "tag": "0139_edge_devices",
+      "breakpoints": true
+    },
+    {
+      "idx": 140,
+      "version": "7",
+      "when": 1797200000000,
+      "tag": "0140_edge_setup_approve",
+      "breakpoints": true
     }
   ]
 }

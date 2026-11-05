@@ -27,6 +27,13 @@ import {
   sizeLabel,
   type ProjectFile,
 } from "@/lib/project-files";
+import {
+  addProjectMemory,
+  listProjectMemories,
+  setProjectMemoryStatus,
+  type MemoryKind,
+  type ProjectMemory,
+} from "@/lib/project-memories";
 import type { ProjectDetail } from "@/lib/foundry-client";
 import { Page, Zone } from "@/components/layout/Page";
 import { PageHeader, type HeaderAction } from "@/components/layout/PageHeader";
@@ -59,6 +66,7 @@ export default function ProjectPage() {
   const toast = useToast();
   const project = useAsync(() => getProject(id), [id]);
   const files = useAsync(() => listProjectFiles(id), [id]);
+  const memories = useAsync(() => listProjectMemories(id, "active"), [id]);
   const p = project.data;
   const [removing, setRemoving] = useState<Member | null>(null);
   const [handing, setHanding] = useState<Member | null>(null);
@@ -121,6 +129,12 @@ export default function ProjectPage() {
             aside={<People project={p} onChanged={() => project.reload()} onRemove={setRemoving} onHand={setHanding} onLeave={() => setLeaving(true)} />}
           >
             <Instructions project={p} onSaved={() => project.reload()} />
+            <ProjectMemoryPanel
+              projectId={p.id}
+              memories={memories}
+              canAdd={p.mine !== false || p.manages}
+              canManage={p.manages}
+            />
           </MainAside>
         </div>
       </Zone>
@@ -463,6 +477,125 @@ function Instructions({ project, onSaved }: { project: ProjectDetail; onSaved: (
           </p>
         )}
         {!editing && <p className="mt-3 text-caption text-muted">Every chat in this project starts with these.</p>}
+      </div>
+    </section>
+  );
+}
+
+const KIND_LABEL: Record<MemoryKind, string> = {
+  decision: "Decision",
+  preference: "Preference",
+  open_loop: "Open loop",
+  note: "Note",
+};
+
+/** Curated memory ledger: chats in the project start with active items (Phase 4). */
+function ProjectMemoryPanel({
+  projectId,
+  memories,
+  canAdd,
+  canManage,
+}: {
+  projectId: string;
+  memories: ReturnType<typeof useAsync<ProjectMemory[]>>;
+  canAdd: boolean;
+  canManage: boolean;
+}) {
+  const toast = useToast();
+  const [kind, setKind] = useState<MemoryKind>("preference");
+  const [body, setBody] = useState("");
+  const [busy, setBusy] = useState(false);
+  const rows = memories.data ?? [];
+
+  const add = async () => {
+    const text = body.trim();
+    if (!text) return;
+    setBusy(true);
+    try {
+      await addProjectMemory(projectId, { kind, body: text, source: "manual" });
+      setBody("");
+      toast.success("Remembered. New chats in this project will see it.");
+      memories.reload();
+    } catch (e) {
+      toast.error(said(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const close = async (m: ProjectMemory, status: "superseded" | "discarded") => {
+    try {
+      await setProjectMemoryStatus(projectId, m.id, status);
+      toast.success(status === "superseded" ? "Superseded." : "Discarded.");
+      memories.reload();
+    } catch (e) {
+      toast.error(said(e));
+    }
+  };
+
+  return (
+    <section className="pane mt-4" aria-label="Project memory">
+      <div className="flex items-center justify-between border-b border-line px-4 py-3">
+        <h2 className="text-body font-semibold">Memory</h2>
+        <span className="text-caption text-muted">{rows.length} active</span>
+      </div>
+      <div className="px-4 py-3">
+        {memories.error ? (
+          <Notice tone="danger" title="Could not load memory">
+            {memories.error}
+          </Notice>
+        ) : memories.loading && !memories.data ? (
+          <Skeleton />
+        ) : rows.length === 0 ? (
+          <p className="text-caption text-muted">Nothing remembered yet. Add a preference or decision here, or use Remember on a chat message.</p>
+        ) : (
+          <ul className="flex flex-col gap-2">
+            {rows.map((m) => (
+              <li key={m.id} className="flex items-start justify-between gap-3 rounded-md border border-line bg-surface-2/40 px-3 py-2">
+                <div className="min-w-0">
+                  <p className="text-[11px] font-medium uppercase tracking-wide text-muted">{KIND_LABEL[m.kind] ?? m.kind}</p>
+                  <p className="mt-0.5 text-body text-text">{m.body}</p>
+                </div>
+                {canManage ? (
+                  <RowMenu
+                    actions={[
+                      { label: "Supersede", onClick: () => void close(m, "superseded") },
+                      { label: "Discard", danger: true, icon: "delete", onClick: () => void close(m, "discarded") },
+                    ]}
+                  />
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        )}
+        {canAdd ? (
+          <div className="mt-3 flex flex-col gap-2 border-t border-line pt-3">
+            <div className="flex flex-wrap gap-2">
+              <Select aria-label="Memory kind" value={kind} onChange={(e) => setKind(e.target.value as MemoryKind)} className="w-auto">
+                {(Object.keys(KIND_LABEL) as MemoryKind[]).map((k) => (
+                  <option key={k} value={k}>
+                    {KIND_LABEL[k]}
+                  </option>
+                ))}
+              </Select>
+            </div>
+            <Textarea
+              aria-label="New memory"
+              mono={false}
+              rows={2}
+              maxLength={500}
+              value={body}
+              placeholder="e.g. Always use UTC for due dates"
+              onChange={(e) => setBody(e.target.value)}
+            />
+            <div className="flex justify-end">
+              <Button size="sm" disabled={!body.trim() || busy} onClick={() => void add()}>
+                {busy ? "Saving…" : "Remember"}
+              </Button>
+            </div>
+          </div>
+        ) : null}
+        <p className="mt-3 text-caption text-muted">Active items start every chat in this project. No search index — just this list.</p>
       </div>
     </section>
   );

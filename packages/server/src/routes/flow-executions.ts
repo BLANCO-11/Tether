@@ -16,6 +16,10 @@ import { and, desc, eq, inArray } from "drizzle-orm";
 import { db } from "../db/index.js";
 import { usageEvents, webFetches } from "../db/schema.js";
 import { WEB_FETCH_TOOL_NAME } from "../services/platform-tool-names.js";
+import { requireIdentity } from "../middleware/identity.middleware.js";
+import { FlowRunnerError, flowRunnerService, RUNNER_EXECUTION_PREFIX } from "../services/flow-runner.service.js";
+import { KestraError } from "../services/kestra-client.service.js";
+import { stepApprovalService } from "../services/step-approval.service.js";
 
 /**
  * `GET /api/workspaces/:workspaceId/flow-executions` — the step graph's data,
@@ -330,5 +334,45 @@ flowExecutionsRouter.post(
       input.fromStepId ? { fromStepId: input.fromStepId } : {},
     );
     res.status(202).json(result);
+  }),
+);
+
+/**
+ * Stop a live run (personal Phase 2). Foundry id only — never a Kestra id (R5).
+ *
+ * Forge (`fr-…`) runs go through the flow-runner cancel; compiled Kestra runs reuse the same kill path a
+ * rejected gate uses. Identity required: stopping a run records who asked.
+ */
+flowExecutionsRouter.post(
+  "/:id/cancel",
+  requireIdentity,
+  asyncHandler(async (req, res) => {
+    const { workspaceId, id } = req.params as { workspaceId: string; id: string };
+    const view = await flowVisibilityService.get(workspaceId, id);
+    if (!view) return res.status(404).json({ error: "not found" });
+    const row = await flowExecutionRepo.get(id);
+    if (!row || row.workspaceId !== workspaceId) return res.status(404).json({ error: "not found" });
+
+    if (row.kestraExecutionId.startsWith(RUNNER_EXECUTION_PREFIX)) {
+      try {
+        const out = await flowRunnerService.cancel(id);
+        return res.status(202).json(out);
+      } catch (e) {
+        if (e instanceof FlowRunnerError) return res.status(e.statusCode).json({ error: "cancel_refused", message: e.message });
+        throw e;
+      }
+    }
+
+    if (row.status !== "running" && row.status !== "waiting") {
+      return res.status(202).json({ cancelled: false, status: row.status });
+    }
+    try {
+      await stepApprovalService._killRejected(id, row.kestraExecutionId);
+    } catch (e) {
+      // Kill already mirrors 404/409 inside _killRejected; anything else is a real failure.
+      if (!(e instanceof KestraError)) throw e;
+      await flowExecutionRepo.update(id, { status: "cancelled", endedAt: new Date() });
+    }
+    return res.status(202).json({ cancelled: true, status: "cancelled" });
   }),
 );

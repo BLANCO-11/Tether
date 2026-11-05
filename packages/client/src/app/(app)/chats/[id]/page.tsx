@@ -49,7 +49,9 @@ export default function ReadChatPage() {
         ) : (
           <div className="space-y-4">
             <Notice tone="info" title="Shared with you to read">
-              {`${t.chat.createdBy.name ?? "Its owner"} shared this conversation with the workspace. Only they can continue it.`}
+              {t.sharedWithMe
+                ? `${t.chat.createdBy.name ?? "Its owner"} shared this conversation with you. Only they can continue it.`
+                : `${t.chat.createdBy.name ?? "Its owner"} shared this conversation with the workspace. Only they can continue it.`}
             </Notice>
             <ReadOnlyConversation messages={t.chat.messages} />
           </div>

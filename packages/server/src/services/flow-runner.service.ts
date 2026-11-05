@@ -573,6 +573,47 @@ export const flowRunnerService = {
   },
 
   /**
+   * Stop an in-flight Foundry-runner execution (personal Phase 2 Stop).
+   *
+   * Asks the runner to kill its `run_one` child, burns the execution token so steps cannot keep calling back,
+   * and settles the Foundry row as `cancelled` (same outcome vocabulary as a rejected gate — D-14). Idempotent
+   * when the run is already settled.
+   */
+  async cancel(flowExecutionId: string): Promise<{ cancelled: boolean; status: string }> {
+    const row = await flowExecutionRepo.get(flowExecutionId);
+    if (!row) throw new FlowRunnerError("run not found", 404);
+    if (!row.kestraExecutionId.startsWith(RUNNER_EXECUTION_PREFIX)) {
+      throw new FlowRunnerError("this run is not on Foundry's runner", 409);
+    }
+    if (row.status !== "running" && row.status !== "waiting") {
+      return { cancelled: false, status: row.status };
+    }
+    // Kill the child even when waiting — a waiting run has no live process, so the runner answers not_running.
+    if (row.status === "running" && config.flowRunner.secret) {
+      try {
+        const res = await fetch(`${config.flowRunner.url}/runs/${encodeURIComponent(flowExecutionId)}`, {
+          method: "DELETE",
+          headers: { "x-runner-secret": config.flowRunner.secret },
+          signal: AbortSignal.timeout(10_000),
+        });
+        if (!res.ok && res.status !== 404) {
+          console.warn(`[flow-runner] cancel ${flowExecutionId}: runner answered ${res.status}`);
+        }
+      } catch (e) {
+        console.warn(`[flow-runner] cancel ${flowExecutionId}: ${(e as Error).message}`);
+      }
+    }
+    // Expire any undecided gate on this run so Needs you does not keep a dead pause.
+    await db
+      .update(flowStepApprovals)
+      .set({ expiredAt: new Date() })
+      .where(and(eq(flowStepApprovals.flowExecutionId, flowExecutionId), isNull(flowStepApprovals.decidedAt), isNull(flowStepApprovals.expiredAt)));
+    await executionTokenService.burnForExecution(flowExecutionId);
+    await flowExecutionRepo.update(flowExecutionId, { status: "cancelled", endedAt: new Date() });
+    return { cancelled: true, status: "cancelled" };
+  },
+
+  /**
    * Wait for a run to settle and return its recorded step results. Reads Foundry's own rows — the execution's
    * `status` (closed by the runner's `complete`) and `runner_step_results` — so a test run's verdict is the same
    * record the run page will show, not a second account of it.

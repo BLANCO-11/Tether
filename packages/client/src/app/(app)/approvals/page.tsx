@@ -45,6 +45,15 @@ import { Skeleton } from "@/components/ui/Skeleton";
 import { Check, Dots } from "@/components/ui/icons";
 import { ApprovalCard } from "@/components/flow/ApprovalCard";
 import { RiskWord } from "@/components/approval/RiskWord";
+import { PERSONAL_PRODUCT } from "@/lib/personal";
+import {
+  approveEdgeConnect,
+  approveEdgeJob,
+  denyEdgeConnect,
+  listEdgePending,
+  type EdgeDevice,
+} from "@/lib/edge";
+import { useToast } from "@/lib/toast";
 
 // Temporary derivation until `approval_requests` queue exists (backend-required).
 // FAStepApproval carries no `risk` or unified `type`; the six-type queue will.
@@ -67,7 +76,12 @@ function dueLabel(): string {
 
 function ApprovalsPageContent() {
   const epoch = useActivityEpoch();
+  const toast = useToast();
   const { data: approvals, loading, error, reload } = useAsync(() => listPendingApprovals(), [epoch]);
+  const edgePending = useAsync(
+    () => (PERSONAL_PRODUCT ? listEdgePending() : Promise.resolve({ jobs: [], connects: [] as EdgeDevice[] })),
+    [epoch],
+  );
   const [open, setOpen] = useState<FAStepApproval | null>(null);
 
   const searchParams = useSearchParams();
@@ -76,7 +90,9 @@ function ApprovalsPageContent() {
   const activeTab = useMemo(() => getActiveApprovalTab(searchParams.get("tab")), [searchParams]);
 
   const list = approvals ?? [];
-  const pendingCount = list.length;
+  const edgeList = edgePending.data?.jobs ?? [];
+  const edgeConnects = edgePending.data?.connects ?? [];
+  const pendingCount = list.length + edgeList.length + edgeConnects.length;
 
   const onTabChange = (key: string) => {
     const params = new URLSearchParams(searchParams.toString());
@@ -98,8 +114,12 @@ function ApprovalsPageContent() {
   return (
     <Page>
       <PageHeader
-        title="Approvals"
-        purpose="Decide exceptions, publications, access, recoveries and governed changes from one queue."
+        title={PERSONAL_PRODUCT ? "Needs you" : "Approvals"}
+        purpose={
+          PERSONAL_PRODUCT
+            ? "Gates and questions waiting on you — oldest first. Empty means you're clear."
+            : "Decide exceptions, publications, access, recoveries and governed changes from one queue."
+        }
       />
 
       <Zone name="notices" gap="tight">
@@ -125,7 +145,7 @@ function ApprovalsPageContent() {
             <div className="text-2xl font-medium leading-none tracking-tight" data-testid="figure-pending-value">
               {pendingCount}
             </div>
-            <div className="mt-1 text-sm text-muted">pending your approval</div>
+            <div className="mt-1 text-sm text-muted">{PERSONAL_PRODUCT ? "need you" : "pending your approval"}</div>
           </div>
           <div className="rounded-lg border border-line bg-surface px-6 py-5" data-testid="figure-inflight">
             <div className="text-2xl font-medium leading-none tracking-tight" data-testid="figure-inflight-value">
@@ -158,13 +178,85 @@ function ApprovalsPageContent() {
 
       {!error && (
         <Zone name="content">
+          {PERSONAL_PRODUCT && activeTab === "pending-me" && (edgeConnects.length > 0 || edgeList.length > 0) ? (
+            <div className="mb-4 space-y-2 rounded-lg border border-line bg-surface p-4">
+              <div className="flex items-center justify-between gap-2">
+                <h2 className="text-body font-semibold">This computer</h2>
+                <Link href="/devices" className="text-caption font-medium text-accent hover:underline">
+                  Devices
+                </Link>
+              </div>
+              <ul className="flex flex-col gap-2">
+                {edgeConnects.map((d) => (
+                  <li key={d.id} className="flex items-start justify-between gap-3 rounded-md border border-line px-3 py-2">
+                    <div className="min-w-0">
+                      <p className="text-caption font-medium uppercase text-muted">Connect</p>
+                      <p className="text-body font-medium">{d.name}</p>
+                      {d.agentLabel ? <p className="text-caption text-muted">{d.agentLabel}</p> : null}
+                    </div>
+                    <div className="flex shrink-0 gap-2">
+                      <Button
+                        size="sm"
+                        onClick={() =>
+                          void approveEdgeConnect(d.id)
+                            .then(() => {
+                              toast.success("Approved — the agent can collect its credential.");
+                              edgePending.reload();
+                            })
+                            .catch((e) => toast.error(e instanceof Error ? e.message : String(e)))
+                        }
+                      >
+                        Approve
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() =>
+                          void denyEdgeConnect(d.id)
+                            .then(() => {
+                              toast.success("Denied.");
+                              edgePending.reload();
+                            })
+                            .catch((e) => toast.error(e instanceof Error ? e.message : String(e)))
+                        }
+                      >
+                        Deny
+                      </Button>
+                    </div>
+                  </li>
+                ))}
+                {edgeList.map((j) => (
+                  <li key={j.id} className="flex items-start justify-between gap-3 rounded-md border border-line px-3 py-2">
+                    <div className="min-w-0">
+                      <p className="text-caption font-medium uppercase text-muted">{j.kind.replace("_", " ")}</p>
+                      <p className="truncate font-mono text-[13px] text-text">{JSON.stringify(j.payload)}</p>
+                    </div>
+                    <Button
+                      size="sm"
+                      onClick={() =>
+                        void approveEdgeJob(j.id)
+                          .then(() => {
+                            toast.success("Approved — the agent will pick it up.");
+                            edgePending.reload();
+                          })
+                          .catch((e) => toast.error(e instanceof Error ? e.message : String(e)))
+                      }
+                    >
+                      Approve
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
           {loading ? (
             <Skeleton rows={3} />
-          ) : visible.length === 0 ? (
+          ) : visible.length === 0 &&
+            !(PERSONAL_PRODUCT && activeTab === "pending-me" && (edgeList.length > 0 || edgeConnects.length > 0)) ? (
             activeTab === "pending-me" ? (
               <EmptyState
                 icon={<Check s={16} />}
-                title="You're all caught up. Nothing needs your approval."
+                title={PERSONAL_PRODUCT ? "You're clear." : "You're all caught up. Nothing needs your approval."}
                 action={
                   <Button variant="ghost" size="sm" onClick={() => onTabChange("history")}>
                     View history
@@ -178,7 +270,7 @@ function ApprovalsPageContent() {
             ) : (
               <EmptyState icon={<Check s={16} />} title="Nothing delegated to you." />
             )
-          ) : (
+          ) : visible.length === 0 ? null : (
             <div className="overflow-x-auto rounded-lg border border-line bg-surface">
               <table className="w-full text-sm">
                 <thead>

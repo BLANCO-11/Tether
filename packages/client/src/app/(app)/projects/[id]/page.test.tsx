@@ -27,9 +27,15 @@ const files = vi.hoisted(() => ({
   removeProjectFile: vi.fn(async (): Promise<unknown> => undefined),
   projectFileUrl: vi.fn(async (): Promise<string> => "/x"),
 }));
+const memories = vi.hoisted(() => ({
+  listProjectMemories: vi.fn(async (): Promise<unknown> => []),
+  addProjectMemory: vi.fn(async (): Promise<unknown> => ({})),
+  setProjectMemoryStatus: vi.fn(async (): Promise<unknown> => ({})),
+}));
 const push = vi.fn();
 vi.mock("@/lib/api", () => api);
 vi.mock("@/lib/project-files", async (orig) => ({ ...(await orig<typeof import("@/lib/project-files")>()), ...files }));
+vi.mock("@/lib/project-memories", () => memories);
 vi.mock("next/navigation", () => ({ useParams: () => ({ id: "p1" }), useRouter: () => ({ push, replace: vi.fn() }), usePathname: () => "/projects/p1" }));
 vi.mock("@/lib/toast", () => ({ useToast: () => Object.assign(() => {}, { success: () => {}, error: () => {}, warn: () => {} }) }));
 vi.mock("@/lib/workspace", () => ({ useWorkspace: () => ({ workspaceId: "ws-1" }), useResolvedWorkspace: () => "ws-1" }));

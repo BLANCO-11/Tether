@@ -11,6 +11,7 @@ import Link from "next/link";
 import { useResolvedWorkspace } from "@/lib/workspace";
 import { getFlowExecution } from "@/lib/api";
 import type { FlowExecutionDetail } from "@/lib/types";
+import { LiveRunPanel } from "@/components/flow/LiveRunPanel";
 import { PromptJumpRail } from "./PromptJumpRail";
 import {
   answerPiQuestions,
@@ -20,6 +21,7 @@ import {
   openPiEventStream,
   piChatFileUrl,
   savePiVersion,
+  schedulePiSession,
   retryPiTurn,
   sendPiMessage,
   steerPiMessage,
@@ -56,6 +58,8 @@ import { usePermissions } from "@/lib/permissions";
 import { ThinkingBlock, WorkingLine } from "./ThinkingBlock";
 import type { ThinkingLevel as ThinkingLevelValue } from "@/lib/thinking-levels";
 import { CopyButton } from "./CopyButton";
+import { addProjectMemory, pickMemoryCandidatesLocal } from "@/lib/project-memories";
+import { useToast } from "@/lib/toast";
 import {
   Workbench,
   WorkbenchPane,
@@ -73,6 +77,7 @@ import { useAutoGrow } from "@/lib/use-auto-grow";
 import { FadingText, useSmoothText, useStreamedText } from "./StreamedText";
 import { playReceive, playSend } from "@/lib/chat-sounds";
 import { usePageHeader } from "@/lib/page-header";
+import { SCHEDULE_PRESETS } from "@/lib/schedule-presets";
 import { AnsweredCard, QuestionCard } from "./QuestionCard";
 import { ChatResizer, useChatWidth } from "./ChatResizer";
 import { Markdown } from "./Markdown";
@@ -167,6 +172,12 @@ function Workbench_({
   const [chatId, setChatId] = useState<string | null>(null);
   const [context, setContext] = useState<PiContext | null>(null);
   const [compacting, setCompacting] = useState(false);
+  /** Project this chat lives in — Remember / compact promo only when set (Phase 4 memory). */
+  const [projectId, setProjectId] = useState<string | null>(startInProject ?? null);
+  /** After Compact: up to 3 candidate lines to accept into project memory. */
+  const [memoryPromo, setMemoryPromo] = useState<string[] | null>(null);
+  const [memoryPromoBusy, setMemoryPromoBusy] = useState(false);
+  const toast = useToast();
   /** Workflow Builder or Forge Agent, and whether this workspace offers Forge Agent (ModeSwitch). */
   const [mode, setMode] = useState<ChatMode>("workflow");
   const [thinking, setThinking] = useState<ThinkingLevelValue>("balanced");
@@ -315,6 +326,10 @@ function Workbench_({
         setAgentAllowed(s.agentAllowed === true);
         setAccounts(s.accounts ?? {});
         setStorage(s.storage ?? null);
+        {
+          const fromPlace = s.place?.key?.match(/^project:([0-9a-f-]{36})$/i)?.[1] ?? null;
+          setProjectId(fromPlace ?? startInProject ?? null);
+        }
         if (s.lastTestRun) setTestResult({ ok: s.lastTestRun.ok, detail: s.lastTestRun.detail, runId: s.lastTestRun.runId ?? null, waiting: s.lastTestRun.waiting ?? null, needsRealData: s.lastTestRun.needsRealData === true });
         // A reopened flow arrives already saved; its current workflow IS the saved one.
         if (s.savedRevision != null) savedFingerprint.current = JSON.stringify(s.workflow);
@@ -394,6 +409,16 @@ function Workbench_({
           break;
         case "verify":
           if (!ev.ok) setBanner(ev.summary ?? ev.detail, ev.detail);
+          break;
+        case "test_run_started":
+          // Mid-test live panel (Phase 2) — runId before waitForRun settles.
+          setTestResult((prev) => ({
+            ok: prev?.ok ?? false,
+            detail: prev?.detail ?? "Test running…",
+            runId: ev.runId,
+            waiting: prev?.waiting ?? null,
+            needsRealData: prev?.needsRealData,
+          }));
           break;
         case "test_run":
           setTestResult({ ok: ev.ok, detail: ev.detail, runId: ev.runId ?? null, waiting: ev.waiting ?? null, needsRealData: ev.needsRealData === true });
@@ -792,6 +817,39 @@ function Workbench_({
     }
   }, [session, workflow, workspaceId]);
 
+  /** Chat → schedule (Phase 1): preset only, after a green test; saves and switches on when possible. */
+  const onSchedule = useCallback(
+    async (cron: string) => {
+      if (!session || !testResult?.ok || busy || saving) return;
+      setSaving(true);
+      setBanner(null);
+      const timezone = (() => {
+        try {
+          return Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+        } catch {
+          return "UTC";
+        }
+      })();
+      try {
+        const out = await schedulePiSession(workspaceId, session.id, { cron, timezone, arm: true });
+        setFlowId(out.session.flowId);
+        setSavedRevision(out.session.savedRevision);
+        setWorkflow(out.session.workflow);
+        savedFingerprint.current = JSON.stringify(out.session.workflow);
+        setBanner(
+          out.armed
+            ? `On · ${out.label} (${timezone}). It will run on its own.`
+            : `${out.label} saved on the draft — open the workflow to switch it on.`,
+        );
+      } catch (e) {
+        setBanner(errorText(e));
+      } finally {
+        setSaving(false);
+      }
+    },
+    [session, testResult?.ok, busy, saving, workspaceId],
+  );
+
   /**
    * Test run = a REAL draft run of this session's workflow on flow-runner (pi-runtime P2/P3): reads come from test
    * data and messages are held, not delivered. The same executor a production run uses.
@@ -953,11 +1011,41 @@ function Workbench_({
                   {saving ? "Saving…" : isDirty ? "Save" : <><span aria-hidden><Check s={14} /></span>Saved</>}
                 </button>
               ) : null}
+              {/* Chat → schedule: only after a green test (Phase 1.2). Presets only — no cron box. */}
+              {mode !== "agent" && testResult?.ok && hasSteps ? (
+                <label className="relative inline-flex h-8 items-center">
+                  <span className="sr-only">Schedule this workflow</span>
+                  <select
+                    data-testid="builder-schedule"
+                    disabled={saving || busy}
+                    defaultValue=""
+                    onChange={(e) => {
+                      const cron = e.target.value;
+                      e.target.value = "";
+                      if (cron) void onSchedule(cron);
+                    }}
+                    title={workflow.schedule?.cron ? `Scheduled: ${workflow.schedule.cron}` : "Run this on a cadence"}
+                    className="h-8 max-w-[11rem] cursor-pointer appearance-none rounded-md border border-line bg-surface px-2.5 pr-7 text-sm font-medium text-text hover:bg-surface-2 disabled:opacity-50"
+                  >
+                    <option value="" disabled>
+                      {workflow.schedule?.cron ? "Reschedule…" : "Schedule…"}
+                    </option>
+                    {SCHEDULE_PRESETS.map((p) => (
+                      <option key={p.cron} value={p.cron}>
+                        {p.label}
+                      </option>
+                    ))}
+                  </select>
+                  <span className="pointer-events-none absolute right-2 text-dim" aria-hidden>
+                    <ChevronDown s={12} />
+                  </span>
+                </label>
+              ) : null}
             </div>
           ),
         }
       : null,
-    [session != null, openFlowId, workflow.name, workflow.steps.length, flowId, storedTitle, firstLine(messages), stateOpen, status, savedRevision, isDirty, testResult, busy, hasSteps, saving, pane?.kind, canvasOpen, mode],
+    [session != null, openFlowId, workflow.name, workflow.steps.length, workflow.schedule?.cron, flowId, storedTitle, firstLine(messages), stateOpen, status, savedRevision, isDirty, testResult, busy, hasSteps, saving, pane?.kind, canvasOpen, mode],
   );
 
   // Every file in the chat, once each (a later message with the same name is the same stored file): the pane's
@@ -1040,6 +1128,30 @@ function Workbench_({
   return (
     <ChatFileHref.Provider value={fileHref}>
     <OpenChatFile.Provider value={openChatFile}>
+    <ProjectMemory.Provider
+      value={
+        projectId
+          ? {
+              projectId,
+              chatId,
+              remember: async (text: string, messageId?: string) => {
+                try {
+                  await addProjectMemory(projectId, {
+                    kind: "preference",
+                    body: text.slice(0, 500),
+                    source: "promoted",
+                    sourceChatId: chatId,
+                    sourceMessageId: messageId ?? null,
+                  });
+                  toast.success("Remembered for this project.");
+                } catch (e) {
+                  toast.error(e instanceof Error ? e.message : String(e));
+                }
+              },
+            }
+          : null
+      }
+    >
     <DecideProposal.Provider value={decideProposal}>
     <div className="flex h-full min-h-0 flex-col">
       {/* Same 48px draft strip the manual builder uses, with Foundry actions */}
@@ -1128,6 +1240,8 @@ function Workbench_({
                           <ActivityStack activities={liveActivities} />
                           {draftDelta ? <LiveReply text={draftDelta} /> : null}
                           {busy && !(thinkingNow && !thinkLabel) ? <WorkingLine label={thinkLabel} elapsed={elapsed} warn={!!retrying} /> : null}
+                          {/* Mid-test engine watch (Phase 2): step progress + Stop once runId is known. */}
+                          {busy && testResult?.runId ? <LiveRunPanel runId={testResult.runId} /> : null}
                         </div>
                       ) : null;
                       const lastIsTurn = items.at(-1)?.kind === "turn";
@@ -1445,8 +1559,10 @@ function Workbench_({
                             compacting={compacting}
                             canCompact={status !== "running" && !busy && messages.some((m) => m.role === "user")}
                             onCompact={async () => {
+                              const candidates = projectId ? pickMemoryCandidatesLocal(messages, 3) : [];
                               const fresh = await compactPiSession(workspaceId, session.id);
                               setContext(fresh.context ?? null);
+                              if (projectId && candidates.length) setMemoryPromo(candidates);
                             }}
                           />
                           {busy ? (
@@ -1539,6 +1655,50 @@ function Workbench_({
       </Workbench>
     </div>
     </DecideProposal.Provider>
+    {memoryPromo && projectId ? (
+      <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/30 p-4 sm:items-center" role="dialog" aria-label="Remember for this project">
+        <div className="w-full max-w-md rounded-xl border border-line bg-surface p-4 shadow-raised">
+          <h2 className="text-body font-semibold text-text">Remember for this project?</h2>
+          <p className="mt-1 text-caption text-muted">After compacting, keep up to three facts so new chats here start with them.</p>
+          <ul className="mt-3 flex flex-col gap-2">
+            {memoryPromo.map((t, i) => (
+              <li key={i} className="rounded-md border border-line bg-surface-2/50 px-3 py-2 text-[13px] text-text">
+                {t}
+              </li>
+            ))}
+          </ul>
+          <div className="mt-4 flex justify-end gap-2">
+            <button type="button" className="rounded-md px-3 py-1.5 text-xs font-medium text-muted hover:bg-surface-2" disabled={memoryPromoBusy} onClick={() => setMemoryPromo(null)}>
+              Skip
+            </button>
+            <button
+              type="button"
+              className="rounded-md bg-accent px-3 py-1.5 text-xs font-medium text-on-accent disabled:opacity-50"
+              disabled={memoryPromoBusy}
+              onClick={() => {
+                void (async () => {
+                  setMemoryPromoBusy(true);
+                  try {
+                    for (const body of memoryPromo) {
+                      await addProjectMemory(projectId, { kind: "preference", body, source: "compact", sourceChatId: chatId });
+                    }
+                    toast.success(`Remembered ${memoryPromo.length} for this project.`);
+                    setMemoryPromo(null);
+                  } catch (e) {
+                    toast.error(e instanceof Error ? e.message : String(e));
+                  } finally {
+                    setMemoryPromoBusy(false);
+                  }
+                })();
+              }}
+            >
+              {memoryPromoBusy ? "Saving…" : "Remember all"}
+            </button>
+          </div>
+        </div>
+      </div>
+    ) : null}
+    </ProjectMemory.Provider>
     </OpenChatFile.Provider>
     </ChatFileHref.Provider>
   );
@@ -1898,7 +2058,12 @@ function Said({
           <SentAt at={at} />
         </p>
         <div className="text-[13.5px] leading-relaxed text-text">{children}</div>
-        {copy ? <CopyButton text={copy} label="Copy reply" className="-ml-1 mt-0.5" /> : null}
+        {copy ? (
+          <div className="mt-0.5 flex items-center gap-0.5">
+            <CopyButton text={copy} label="Copy reply" className="-ml-1" />
+            <RememberButton text={copy} className="-ml-0.5" />
+          </div>
+        ) : null}
       </div>
     </div>
   );
@@ -1910,6 +2075,39 @@ const ChatFileHref = createContext<((name: string) => string) | null>(null);
 const DecideProposal = createContext<((id: string, decision: "run" | "decline", scope?: GrantScope, choice?: string) => Promise<void>) | null>(null);
 /** Opens a chat file's preview in the Files pane. */
 const OpenChatFile = createContext<((name: string) => void) | null>(null);
+/** Project memory (Phase 4): Remember on a message when the chat lives in a project. */
+const ProjectMemory = createContext<{
+  projectId: string;
+  chatId: string | null;
+  remember: (text: string, messageId?: string) => Promise<void>;
+} | null>(null);
+
+function RememberButton({ text, messageId, className = "" }: { text: string; messageId?: string; className?: string }) {
+  const mem = useContext(ProjectMemory);
+  const [state, setState] = useState<"idle" | "done" | "busy">("idle");
+  if (!mem || !text.trim()) return null;
+  return (
+    <button
+      type="button"
+      aria-label={state === "done" ? "Remembered" : "Remember for this project"}
+      title={state === "done" ? "Remembered" : "Remember for this project"}
+      disabled={state === "busy"}
+      onClick={() => {
+        void (async () => {
+          setState("busy");
+          await mem.remember(text, messageId);
+          setState("done");
+          setTimeout(() => setState("idle"), 1500);
+        })();
+      }}
+      className={`flex h-6 items-center justify-center rounded px-1.5 text-[11px] font-medium text-dim opacity-0 transition-opacity hover:bg-surface-2 hover:text-text focus-visible:opacity-100 group-hover:opacity-100 [@media(hover:none)]:opacity-100 ${
+        state !== "idle" ? "opacity-100" : ""
+      } ${className}`}
+    >
+      {state === "done" ? "✓" : state === "busy" ? "…" : "Remember"}
+    </button>
+  );
+}
 
 /** A person's message. `by` names them — a workflow's conversation is shared, so who asked is part of the record. */
 function Asked({
@@ -1938,7 +2136,12 @@ function Asked({
       {hasText ? <div className="ml-auto max-w-[85%] whitespace-pre-wrap rounded-2xl rounded-br-[5px] bg-accent px-4 py-2.5 text-[13.5px] leading-relaxed text-on-accent shadow-raised">
         {children}
       </div> : null}
-      {hasText && typeof children === "string" ? <CopyButton text={children} label="Copy message" className="-mr-1" /> : null}
+      {hasText && typeof children === "string" ? (
+        <div className="flex items-center gap-0.5">
+          <CopyButton text={children} label="Copy message" className="-mr-1" />
+          <RememberButton text={children} className="-mr-1" />
+        </div>
+      ) : null}
     </div>
   );
 }

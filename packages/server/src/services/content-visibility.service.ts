@@ -35,6 +35,10 @@ export interface Viewer {
   write?: boolean;
   /** The projects this person is in (sharing-boundaries phase 5) — membership IS access to what lives in them. */
   projects?: ReadonlySet<string>;
+  /** Chats shared with this person by id (personal thin Phase 5) — read-only; not a place move. */
+  sharedChats?: ReadonlySet<string>;
+  /** Runs shared with this person by id (personal thin Phase 5) — read-only. */
+  sharedRuns?: ReadonlySet<string>;
 }
 
 export interface FlowFacts {
@@ -52,6 +56,8 @@ export interface FlowFacts {
 }
 
 export interface RunFacts {
+  /** Present when checking a specific execution (Phase 5 per-person share). */
+  id?: string;
   requestedBySubject: string | null;
   kestraNamespace: string;
   /** Whose own account the run acted as (0124); NULL = the workspace's connections only. */
@@ -101,12 +107,19 @@ export const contentVisibility = {
           .innerJoin(projects, eq(projectMembers.projectId, projects.id))
           .where(and(eq(projects.workspaceId, workspaceId), eq(projectMembers.subject, subject)))
       : [];
+    // Per-person shares (Phase 5): loaded here so every chatVisible / runVisible path sees them without a second query.
+    const { itemShareService } = await import("./item-share.service.js");
+    const [sharedChats, sharedRuns] = subject
+      ? await Promise.all([itemShareService.idsFor(workspaceId, subject, "chat"), itemShareService.idsFor(workspaceId, subject, "run")])
+      : [new Set<string>(), new Set<string>()];
     return {
       subject,
       all: eff.permissions.includes("content.read.others"),
       reviewer: eff.permissions.includes("flows.approve"),
       write: eff.permissions.includes("flows.write"),
       projects: new Set(mine.map((r) => r.id)),
+      sharedChats,
+      sharedRuns,
     };
   },
 
@@ -145,6 +158,7 @@ export const contentVisibility = {
   runVisible(v: Viewer, r: RunFacts, flow: FlowFacts | null): boolean {
     if (v.all) return true;
     if (v.subject != null && r.requestedBySubject === v.subject) return true;
+    if (r.id != null && v.sharedRuns?.has(r.id) === true) return true;
     if (!flow) return false;
     if (v.reviewer && isReviewable(flow)) return true;
     if (v.subject != null && flow.ownerSubject === v.subject) return true;
@@ -160,9 +174,16 @@ export const contentVisibility = {
     return v.all || !r.actsAsSubject || r.actsAsSubject === v.subject;
   },
 
-  /** A chat its owner shared (0122) is every member's to READ; otherwise its owner's and an Admin's. */
-  chatVisible(v: Viewer, c: { createdBySubject: string | null; visibility: string; projectId?: string | null }): boolean {
-    return v.all || sharedWith(v, c) || (v.subject != null && c.createdBySubject === v.subject);
+  /**
+   * A chat its owner shared with the workspace (0122), put in a project they are in, shared with them by id
+   * (Phase 5), or theirs / an Admin's.
+   */
+  chatVisible(
+    v: Viewer,
+    c: { id?: string; createdBySubject: string | null; visibility: string; projectId?: string | null },
+  ): boolean {
+    if (v.all || sharedWith(v, c) || (v.subject != null && c.createdBySubject === v.subject)) return true;
+    return c.id != null && v.sharedChats?.has(c.id) === true;
   },
 
   /**

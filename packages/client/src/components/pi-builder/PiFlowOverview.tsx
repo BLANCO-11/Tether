@@ -17,10 +17,14 @@ import type { WorkspaceMember } from "@/lib/types";
 import { Modal } from "@/components/ui/Modal";
 import { Field, Select } from "@/components/ui/Field";
 import { describeCron } from "@/lib/cron";
+import { MY_SCHEDULES } from "@/lib/schedule-presets";
 import { fmtWhen, startOfDay } from "@/lib/stats";
 import { isRunningUnattended, offReason } from "@/lib/flow-views";
 import { useToast } from "@/lib/toast";
 import { conditionText } from "@/components/pi-builder/PiDagCanvas";
+
+/** Plain schedules a person may pick for their own copy (P3-I4) — words, never a cron box. */
+export { MY_SCHEDULES, SCHEDULE_PRESETS } from "@/lib/schedule-presets";
 import { Page, Zone } from "@/components/layout/Page";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { MainAside } from "@/components/layout/MainAside";
@@ -995,15 +999,8 @@ function NeedsCard({ flowId, readiness, onChanged, title = "Before it can run" }
 /**
  * "Turn on for me" (sharing-boundaries phase 3): a shared workflow that runs on each person's own account, run for this
  * person on its schedule, as them. Paused — and said so — when a newer version was approved since they turned it on.
+ * Schedule pick list: MY_SCHEDULES ("" keeps the workflow's own).
  */
-/** Plain schedules a person may pick for their own copy (P3-I4) — words, never a cron box. "" is the workflow's own. */
-export const MY_SCHEDULES: ReadonlyArray<{ cron: string; label: string }> = [
-  { cron: "0 9 * * *", label: "Every day at 9:00" },
-  { cron: "0 9 * * 1-5", label: "Weekdays at 9:00" },
-  { cron: "0 9 * * 1", label: "Mondays at 9:00" },
-  { cron: "0 9 1 * *", label: "The 1st of each month at 9:00" },
-];
-
 function ForMeCard({ flowId, activation, onChanged }: { flowId: string; activation: FlowActivation; onChanged: (a: FlowActivation) => void }) {
   const toast = useToast();
   const [busy, setBusy] = useState(false);

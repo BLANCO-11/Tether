@@ -280,6 +280,8 @@ export type PiEvent =
   | { type: "questions"; questions: PiQuestionsFile }
   | { type: "verify"; ok: boolean; detail: string; summary?: string }
   | { type: "test_run"; ok: boolean; detail: string; summary?: string; runId: string | null; waiting?: PiTestWaiting | null; needsRealData: boolean }
+  /** Draft/live test started — runId is known before waitForRun settles (personal Phase 2 live panel). */
+  | { type: "test_run_started"; runId: string }
   | { type: "snapshot"; id: string; label: string }
   | { type: "saved"; flowId: string; revision: number }
   /** The person's first message saved this conversation as a chat (0095). */

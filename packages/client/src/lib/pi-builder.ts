@@ -346,6 +346,7 @@ export type PiEvent =
   | { type: "questions"; questions: PiQuestionsFile }
   | { type: "verify"; ok: boolean; detail: string; summary?: string }
   | { type: "test_run"; ok: boolean; detail: string; summary?: string; runId: string | null; waiting?: PiTestWaiting | null; needsRealData?: boolean }
+  | { type: "test_run_started"; runId: string }
   | { type: "snapshot"; id: string; label: string }
   | { type: "saved"; flowId: string; revision: number }
   /** The person's first message saved this conversation as a chat. */
@@ -450,6 +451,8 @@ export type PiChatTranscript = {
   };
   mine: boolean;
   canChange: boolean;
+  /** Per-person share (Phase 5) — true when this person may only read because they were granted access. */
+  sharedWithMe?: boolean;
 };
 
 /** The Chats page's filters (2026-10-13): by mode, or the chats holding a build nobody has saved. */
@@ -488,6 +491,24 @@ export function deletePiChat(wsId: string, chatId: string) {
 /** Read a chat without opening it — starts no Forge process (sharing-boundaries). */
 export function getPiChat(wsId: string, chatId: string) {
   return req<PiChatTranscript>(`/workspaces/${wsId}/pi-builder/chats/${chatId}`);
+}
+
+/** Per-person read shares on a chat (Phase 5) — People-listed members only. */
+export function listChatShares(wsId: string, chatId: string) {
+  return req<{ shares: Array<{ id: string; subject: string; grantedBy: string; createdAt: string }> }>(
+    `/workspaces/${wsId}/pi-builder/chats/${chatId}/shares`,
+  ).then((r) => r.shares);
+}
+
+export function grantChatShare(wsId: string, chatId: string, subject: string) {
+  return req<{ share: { id: string; subject: string } }>(`/workspaces/${wsId}/pi-builder/chats/${chatId}/shares`, {
+    method: "POST",
+    body: JSON.stringify({ subject }),
+  }).then((r) => r.share);
+}
+
+export function revokeChatShare(wsId: string, chatId: string, subject: string) {
+  return req<void>(`/workspaces/${wsId}/pi-builder/chats/${chatId}/shares/${encodeURIComponent(subject)}`, { method: "DELETE" });
 }
 
 /** Give a chat a new name (the person who started it, or a workspace admin). */
@@ -762,6 +783,21 @@ export function savePiVersion(wsId: string, sessionId: string, name?: string) {
     `/workspaces/${wsId}/pi-builder/sessions/${sessionId}/save-version`,
     { method: "POST", body: JSON.stringify({ name }) },
   ).then((r) => r.session);
+}
+
+/**
+ * Chat → schedule: write a preset cron onto the session workflow, optionally save + switch on.
+ * Server refuses non-presets and refuses arming without a green test run.
+ */
+export function schedulePiSession(
+  wsId: string,
+  sessionId: string,
+  body: { cron: string; timezone?: string; arm?: boolean },
+) {
+  return req<{ session: PiSession; armed: boolean; label: string }>(
+    `/workspaces/${wsId}/pi-builder/sessions/${sessionId}/schedule`,
+    { method: "POST", body: JSON.stringify(body) },
+  );
 }
 
 /**

@@ -7,7 +7,7 @@ import type { PiEvent } from "../pi-builder/types.js";
 import { THINKING_LEVELS } from "../pi-builder/thinking.js";
 import { flowRunnerService, FlowRunnerError, type PiBundle } from "../services/flow-runner.service.js";
 import { requesterOf } from "../services/run-requester.js";
-import { authorOf } from "../middleware/identity.middleware.js";
+import { authorOf, requireIdentity } from "../middleware/identity.middleware.js";
 import { MAX_ATTACHMENT_BYTES, MAX_ATTACHMENTS_PER_MESSAGE } from "../pi-builder/attachments.js";
 import { contentVisibility } from "../services/content-visibility.service.js";
 import { parsePlace, projectService } from "../services/project.service.js";
@@ -109,7 +109,12 @@ piBuilderRouter.get(
   asyncHandler(async (req, res) => {
     const viewer = await contentVisibility.viewer(req.user, req.params.workspaceId);
     const chats = (await piBuilderService.listChats(req.params.workspaceId)).filter((c) =>
-      contentVisibility.chatVisible(viewer, { createdBySubject: c.createdBy.subject, visibility: c.visibility, projectId: c.projectId }),
+      contentVisibility.chatVisible(viewer, {
+        id: c.id,
+        createdBySubject: c.createdBy.subject,
+        visibility: c.visibility,
+        projectId: c.projectId,
+      }),
     );
     const projectNames = await projectService.namesIn(req.params.workspaceId);
     res.json({
@@ -219,6 +224,12 @@ piBuilderRouter.get(
     const chat = await piChatRepo.get(ws, chatId);
     if (!chat) return res.status(404).json({ error: "not_found", message: "This chat is not here any more." });
     const viewer = await contentVisibility.viewer(req.user, ws);
+    const canChange = contentVisibility.chatChangeable(viewer, chat);
+    const sharedToMe = viewer.subject != null && viewer.sharedChats?.has(chat.id) === true;
+    // Phase 5.2: non-owners reading a shared chat get redacted message text (secrets never leave for a sharee).
+    const { redactChatMessages } = await import("../services/item-share.service.js");
+    const rawMessages = (Array.isArray(chat.messages) ? chat.messages : []) as Array<{ text?: string | null; [k: string]: unknown }>;
+    const messages = canChange ? rawMessages : redactChatMessages(rawMessages);
     res.json({
       chat: {
         id: chat.id,
@@ -229,11 +240,57 @@ piBuilderRouter.get(
         projectId: chat.projectId ?? null,
         createdBy: { subject: chat.createdBySubject, name: chat.createdByName },
         updatedAt: chat.updatedAt,
-        messages: chat.messages,
+        messages,
       },
       mine: viewer.subject != null && chat.createdBySubject === viewer.subject,
-      canChange: contentVisibility.chatChangeable(viewer, chat),
+      canChange,
+      /** True when this person may read because of a per-person share (Phase 5), not Workspace/project place. */
+      sharedWithMe: sharedToMe && !canChange,
     });
+  }),
+);
+
+/** Per-person read shares on a chat (Phase 5) — People-listed members only; no public links. */
+piBuilderRouter.get(
+  "/chats/:chatId/shares",
+  requireIdentity,
+  asyncHandler(async (req, res) => {
+    const { itemShareService } = await import("../services/item-share.service.js");
+    const chatId = z.string().uuid().parse(req.params.chatId);
+    const viewer = await contentVisibility.viewer(req.user, req.params.workspaceId!);
+    res.json({ shares: await itemShareService.list(req.params.workspaceId!, "chat", chatId, viewer) });
+  }),
+);
+
+piBuilderRouter.post(
+  "/chats/:chatId/shares",
+  requireIdentity,
+  asyncHandler(async (req, res) => {
+    const { itemShareService } = await import("../services/item-share.service.js");
+    const chatId = z.string().uuid().parse(req.params.chatId);
+    const { subject } = z.object({ subject: z.string().min(1).max(320) }).strict().parse(req.body ?? {});
+    const viewer = await contentVisibility.viewer(req.user, req.params.workspaceId!);
+    const share = await itemShareService.grant(
+      req.params.workspaceId!,
+      "chat",
+      chatId,
+      viewer,
+      req.user!.email ?? req.user!.subject,
+      subject,
+    );
+    res.status(201).json({ share });
+  }),
+);
+
+piBuilderRouter.delete(
+  "/chats/:chatId/shares/:subject",
+  requireIdentity,
+  asyncHandler(async (req, res) => {
+    const { itemShareService } = await import("../services/item-share.service.js");
+    const chatId = z.string().uuid().parse(req.params.chatId);
+    const viewer = await contentVisibility.viewer(req.user, req.params.workspaceId!);
+    await itemShareService.revoke(req.params.workspaceId!, "chat", chatId, viewer, req.params.subject!);
+    res.status(204).end();
   }),
 );
 
@@ -654,6 +711,35 @@ piBuilderRouter.post(
       { name: input.name, author: authorOf(req, undefined) },
     );
     res.json({ session });
+  }),
+);
+
+/**
+ * Chat → schedule (personal Phase 1): put a preset cron on the workflow, optionally save + switch on.
+ * Identity is required — arming is enableOwn, which needs the verified subject.
+ */
+piBuilderRouter.post(
+  "/sessions/:sessionId/schedule",
+  requireIdentity,
+  asyncHandler(async (req, res) => {
+    const input = z
+      .object({
+        cron: z.string().min(1).max(64),
+        timezone: z.string().min(1).max(64).optional(),
+        arm: z.boolean().optional(),
+      })
+      .strict()
+      .parse(req.body ?? {});
+    const subject = req.user!.subject;
+    const out = await piBuilderService.setSchedule(req.params.workspaceId, req.params.sessionId, {
+      cron: input.cron,
+      timezone: input.timezone,
+      arm: input.arm === true,
+      author: authorOf(req, undefined),
+      subject,
+      actor: req.user?.email || subject,
+    });
+    res.json(out);
   }),
 );
 

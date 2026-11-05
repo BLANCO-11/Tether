@@ -386,6 +386,12 @@ export async function watchFlowExecution(id: string): Promise<{ ticket: string; 
   return foundryApi.watchFlowExecution(ws, id);
 }
 
+/** Stop a live run — Foundry id only (personal Phase 2). */
+export async function cancelFlowExecution(id: string): Promise<{ cancelled: boolean; status: string }> {
+  const ws = await resolveWorkspaceId();
+  return foundryApi.cancelFlowExecution(ws, id);
+}
+
 /**
  * Flow executions as History rows.
  *

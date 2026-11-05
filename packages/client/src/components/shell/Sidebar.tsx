@@ -20,6 +20,8 @@ import { usePathname } from "next/navigation";
 import { useAuth } from "@/lib/auth";
 import { useWorkspace } from "@/lib/workspace";
 import { getMe, listPendingApprovals } from "@/lib/api";
+import { listEdgePending } from "@/lib/edge";
+import { PERSONAL_PRODUCT } from "@/lib/personal";
 import { useAsync } from "@/lib/hooks";
 import { usePermissions } from "@/lib/permissions";
 import { useActivityEpoch } from "@/lib/activity";
@@ -85,15 +87,21 @@ export const groups: NavGroup[] = [
       },
       {
         href: "/approvals",
-        label: "Approvals",
+        // Personal: one morning inbox for gates + agent questions (Phase 1.3) — unify, don't add.
+        label: PERSONAL_PRODUCT ? "Needs you" : "Approvals",
         Icon: CheckCheck,
         badgeHref: "/approvals?tab=pending-me",
-        children: [
-          { href: "/approvals?tab=pending-me", label: "Pending me" },
-          { href: "/approvals?tab=requested-by-me", label: "Requested by me" },
-          { href: "/approvals?tab=delegated", label: "Delegated" },
-          { href: "/approvals?tab=history", label: "History" },
-        ],
+        children: PERSONAL_PRODUCT
+          ? [
+              { href: "/approvals?tab=pending-me", label: "Waiting" },
+              { href: "/approvals?tab=history", label: "History" },
+            ]
+          : [
+              { href: "/approvals?tab=pending-me", label: "Pending me" },
+              { href: "/approvals?tab=requested-by-me", label: "Requested by me" },
+              { href: "/approvals?tab=delegated", label: "Delegated" },
+              { href: "/approvals?tab=history", label: "History" },
+            ],
       },
     ],
   },
@@ -184,6 +192,13 @@ export const groups: NavGroup[] = [
         label: "People",
         Icon: User,
         ownedPaths: ["/people"],
+      },
+      {
+        // Phase 6 edge agent: pair this computer, approve local commands.
+        href: "/devices",
+        label: "Devices",
+        Icon: Activity,
+        ownedPaths: ["/devices"],
       },
     ],
   },
@@ -286,7 +301,14 @@ export function Sidebar({
   const me = useAsync(() => getMe(workspaceId), [workspaceId]);
   const epoch = useActivityEpoch();
   const { data: pendingApprovals, error: approvalsError } = useAsync(listPendingApprovals, [workspaceId, epoch]);
-  const pendingCount = !approvalsError ? (pendingApprovals?.length ?? 0) : 0;
+  const edgePending = useAsync(
+    () => (PERSONAL_PRODUCT && workspaceId ? listEdgePending() : Promise.resolve({ jobs: [], connects: [] })),
+    [workspaceId, epoch],
+  );
+  const pendingCount =
+    (!approvalsError ? (pendingApprovals?.length ?? 0) : 0) +
+    (edgePending.data?.jobs.length ?? 0) +
+    (edgePending.data?.connects.length ?? 0);
 
   /* ⚠ An unreadable access check leaves the Admin row HIDDEN — see the comment at the group filter below. */
   const isVisible = (i: NavItem) =>

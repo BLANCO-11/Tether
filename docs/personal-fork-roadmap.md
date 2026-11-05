@@ -85,7 +85,7 @@ One-sitting success: sign in → project → chat that uses a tool → turn it i
 
 Ordered by **usefulness ÷ risk** for the thin fork. Each phase has a kill/skip criterion.
 
-### Phase 1 — Close the loop (A + B)  
+### Phase 1 — Close the loop (A + B) — SHIPPED 2026-11-04  
 **Goal:** Daily habit without new infra dogma.
 
 | Todo | Detail |
@@ -98,7 +98,17 @@ Ordered by **usefulness ÷ risk** for the thin fork. Each phase has a kill/skip 
 **Done when:** User can go chat → success → weekday 7:00 armed, and see a pending ask in one inbox.  
 **Kill if:** Presets can’t map cleanly to current schedule model — fix the model first, don’t invent a second scheduler.
 
-### Phase 2 — Watchability (C)  
+#### POC results (2026-11-04) → shipped on this branch
+
+| Uncertainty | Finding | Action taken |
+| :--- | :--- | :--- |
+| Does chat need a new scheduler? | **No.** Forge `workflow.schedule` + Foundry runner tick (`flowRunnerService` armed foundry flows) already fire cron. | `POST …/pi-builder/sessions/:id/schedule` writes allowlisted preset, optional `arm` → `saveVersion` + `enableOwn`. |
+| Cron UI swamp? | Presets already exist as `MY_SCHEDULES` on the flow overview. | Shared `schedule-presets` (client + server allowlist). Builder shows **Schedule…** only when `testResult.ok`. |
+| Gate before arm? | `enableOwn` / `_approveForge` already refuse missing input defaults (`forgeScheduleRefusal`). | Server also **409** if `lastTestRun.ok` is false before any schedule write. |
+| New Needs you backend? | **No.** `listPendingApprovals` already returns gate + `question` kinds; Sidebar badge already counts them. | Personal rename: nav/page **Needs you**, empty **“You're clear.”** No second queue. |
+| In-chat `awaiting_answers` in the inbox? | Separate from `flow_step_approvals`; no cross-chat list API for open builder questions. | **Deferred** — morning inbox stays run/gate/question rows; builder status pill still says “Needs your answer”. |
+
+### Phase 2 — Watchability (C) — SHIPPED 2026-11-04  
 **Goal:** Long work feels alive.
 
 | Todo | Detail |
@@ -110,7 +120,16 @@ Ordered by **usefulness ÷ risk** for the thin fork. Each phase has a kill/skip 
 **Done when:** A multi-minute run can be left and resumed from one screen without digging logs.  
 **Kill if:** Progress APIs can’t expose step/artifact reliably — fix visibility before UI chrome.
 
-### Phase 3 — Prove plugins in the personal loop (D)  
+#### POC results (2026-11-04) → shipped
+
+| Uncertainty | Finding | Action taken |
+| :--- | :--- | :--- |
+| Need a new socket? | **No.** `openFlowStream` already does ticket + poll. | Reused. |
+| Stop API? | **Missing** — UI deliberately had no Stop. Runner had no cancel. | `DELETE` on flow-runner `/runs/:id`; `POST …/flow-executions/:id/cancel`; Stop on run page + LiveRunPanel. |
+| Chat mid-test blind? | `runId` only after `waitForRun`. | Emit `test_run_started` right after `startDraftRun`; builder mounts `LiveRunPanel`. |
+| 2.3 notify? | Optional. | **Skipped** until needed. |
+
+### Phase 3 — Prove plugins in the personal loop (D) — BLOCKED on human OAuth  
 **Goal:** Use what already exists; don’t rebuild GitHub.
 
 | Todo | Detail |
@@ -121,6 +140,8 @@ Ordered by **usefulness ÷ risk** for the thin fork. Each phase has a kill/skip 
 
 **Done when:** A personal user completes a real GitHub action via Foundry without enterprise Admin.  
 **Skip** building any new GitHub plugin surface.
+
+**Blocked 2026-11-04:** Real connect needs a GitHub OAuth app (client id/secret on `/apps/github`) and a signed-in person. Harness is `packages/server/src/scenarios/plugins-github.ts`. Resume when those exist — do not rebuild the piece.
 
 ### Phase 4 — Project memory v1 (G, no vectors)  
 **Goal:** One measured “it remembered.”
@@ -196,26 +217,27 @@ Only if Phase 4 succeeds and “find that old discussion” remains painful.
 
 Copy into issues or a sprint board as needed:
 
-- [ ] **1.1** Schedule CTA after successful chat/flow  
-- [ ] **1.2** Gate schedule on successful run  
-- [ ] **1.3** Needs you unified inbox + badge  
-- [ ] **1.4** Honest empty/error states for inbox  
-- [ ] **2.1** Live run watch panel (status / step / stop / artifact)  
-- [ ] **2.2** Progress via existing ticket + poll only  
+- [x] **1.1** Schedule CTA after successful chat/flow  
+- [x] **1.2** Gate schedule on successful run  
+- [x] **1.3** Needs you unified inbox + badge  
+- [x] **1.4** Honest empty/error states for inbox  
+- [x] **2.1** Live run watch panel (status / step / stop / artifact)  
+- [x] **2.2** Progress via existing ticket + poll only  
 - [ ] **2.3** Optional done notification  
-- [ ] **3.1** GitHub (existing plugin) works on personal stack — friction only  
+- [ ] **3.1** GitHub (existing plugin) works on personal stack — friction only *(blocked: needs human OAuth)*  
 - [ ] **3.2** One real recipe: schedule/chat → GitHub → Needs you  
 - [ ] **3.3** New connector only if a recipe is blocked (not GitHub)  
-- [ ] **4.1** Project memory schema + API  
-- [ ] **4.2** Remember + compact promotion  
-- [ ] **4.3** Capped inject into project chats  
-- [ ] **4.4** Project memory panel UI  
-- [ ] **5.1** Share chat/run with allowed user (read)  
-- [ ] **5.2** Redaction on share  
-- [ ] **5.3** Block public links  
-- [ ] **6.1** Edge pairing OTP + device credential  
-- [ ] **6.2** Edge capabilities + approval  
-- [ ] **6.3** Edge recipe wired to watch  
+- [x] **4.1** Project memory schema + API  
+- [x] **4.2** Remember + compact promotion  
+- [x] **4.3** Capped inject into project chats  
+- [x] **4.4** Project memory panel UI  
+- [x] **5.1** Share chat with allowed user (read) — run share table ready, UI later  
+- [x] **5.2** Redaction on share  
+- [x] **5.3** Block public links (no link path added)  
+- [x] **6.1** Edge pairing OTP + device credential (`/devices`, `scripts/edge-agent.mjs`)  
+- [x] **6.2** Edge capabilities + approval (`run_command` / `read_path` / `write_path`)  
+- [x] **6.3** Edge approvals surface on Needs you + Devices enqueue (chat/schedule enqueue still open)  
+
 - [ ] **7.x** RAG only after 4.x succeeds  
 
 ---

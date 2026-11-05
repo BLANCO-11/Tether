@@ -1733,6 +1733,137 @@ export const projectFiles = pgTable(
   (t) => ({ nameIdx: uniqueIndex("uq_project_files_name").on(t.projectId, t.name) }),
 );
 
+/**
+ * Per-person read shares (personal thin product Phase 5): a People-listed member may READ a chat or a run
+ * without moving it to the Workspace or a project. No public links. Owner / Admin grants; sharee cannot continue a chat.
+ */
+export const itemShares = pgTable(
+  "item_shares",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    kind: varchar("kind", { length: 16 }).notNull(),
+    itemId: uuid("item_id").notNull(),
+    subject: text("subject").notNull(),
+    grantedBy: text("granted_by").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => ({
+    uniq: uniqueIndex("uq_item_shares_item_subject").on(t.kind, t.itemId, t.subject),
+    bySubject: index("ix_item_shares_subject").on(t.workspaceId, t.subject, t.kind),
+  }),
+);
+
+/**
+ * Edge agent devices (personal thin Phase 6): OTP legacy, or setup-link → awaiting_connect → owner approves → active.
+ * Device token hash at rest; `connectTokenOnce` holds the plaintext only until the agent collects it after approve.
+ */
+export const edgeDevices = pgTable(
+  "edge_devices",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    ownerSubject: text("owner_subject").notNull(),
+    status: varchar("status", { length: 32 }).notNull().default("pairing"),
+    pairingCodeHash: varchar("pairing_code_hash", { length: 64 }),
+    pairingExpiresAt: timestamp("pairing_expires_at", { withTimezone: true }),
+    waitSecretHash: varchar("wait_secret_hash", { length: 64 }),
+    connectTokenOnce: text("connect_token_once"),
+    agentLabel: text("agent_label"),
+    tokenHash: varchar("token_hash", { length: 64 }),
+    lastSeenAt: timestamp("last_seen_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+  },
+  (t) => ({
+    byOwner: index("ix_edge_devices_ws_owner").on(t.workspaceId, t.ownerSubject),
+    token: uniqueIndex("uq_edge_devices_token_hash").on(t.tokenHash),
+  }),
+);
+
+/** Short-lived setup links: curl fetches instructions; registering only requests connect (owner must Approve). */
+export const edgeSetupLinks = pgTable(
+  "edge_setup_links",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    ownerSubject: text("owner_subject").notNull(),
+    tokenHash: varchar("token_hash", { length: 64 }).notNull(),
+    label: text("label").notNull().default("This computer"),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    consumedAt: timestamp("consumed_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => ({
+    token: uniqueIndex("uq_edge_setup_links_token_hash").on(t.tokenHash),
+    byOwner: index("ix_edge_setup_links_owner").on(t.workspaceId, t.ownerSubject),
+  }),
+);
+
+/** Jobs for an edge device: run_command / read_path / write_path. Write/command require approval before running. */
+export const edgeJobs = pgTable(
+  "edge_jobs",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    deviceId: uuid("device_id")
+      .notNull()
+      .references(() => edgeDevices.id, { onDelete: "cascade" }),
+    kind: varchar("kind", { length: 32 }).notNull(),
+    payload: jsonb("payload").$type<Record<string, unknown>>().notNull().default({}),
+    status: varchar("status", { length: 32 }).notNull().default("pending"),
+    approvalId: uuid("approval_id"),
+    result: jsonb("result").$type<Record<string, unknown> | null>(),
+    error: text("error"),
+    createdBy: text("created_by").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    startedAt: timestamp("started_at", { withTimezone: true }),
+    finishedAt: timestamp("finished_at", { withTimezone: true }),
+  },
+  (t) => ({
+    byDevice: index("ix_edge_jobs_device_status").on(t.deviceId, t.status),
+  }),
+);
+
+/**
+ * Project memory ledger (personal thin product Phase 4) — curated facts a project's chats start with.
+ * Not vectors: each row is an accepted decision / preference / open loop / note. Active rows inject into
+ * `projectService.contextOf`; superseded/discarded stay for history. Deleted with the project.
+ */
+export const projectMemories = pgTable(
+  "project_memories",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    kind: varchar("kind", { length: 32 }).notNull(),
+    body: text("body").notNull(),
+    status: varchar("status", { length: 32 }).notNull().default("active"),
+    source: varchar("source", { length: 32 }).notNull().default("manual"),
+    sourceChatId: uuid("source_chat_id"),
+    sourceMessageId: varchar("source_message_id", { length: 64 }),
+    createdBy: text("created_by").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    supersededAt: timestamp("superseded_at", { withTimezone: true }),
+  },
+  (t) => ({
+    projectStatus: index("ix_project_memories_project_status").on(t.projectId, t.status),
+  }),
+);
+
 export const piChats = pgTable(
   "pi_chats",
   {

@@ -21,6 +21,7 @@ vi.mock("@/lib/api", () => ({
   // crashes every test. `emailsForRun` was added to the page and not here, which failed this file at HEAD.
   emailsForRun: async () => [],
   callsForRun: async () => ({ calls: [], truncated: false }),
+  cancelFlowExecution: async () => ({ cancelled: true, status: "cancelled" }),
 }));
 vi.mock("next/navigation", async () => {
   const { routeParams } = await import("@/lib/test-route-params");
@@ -168,10 +169,11 @@ describe("the failed run renders ITS OWN steps", () => {
 });
 
 describe("the live run stops fabricating", () => {
-  it("has NO Stop test button while running — there is no cancel route behind one", async () => {
+  it("shows Stop while running — cancel route exists (personal Phase 2)", async () => {
     currentDetail = detail({ steps: uuidSteps.slice(0, 1), engineStatus: "running" });
     render(atRoute("RUN-1", <RunPage />));
     await waitFor(() => expect(screen.getByText("Live execution trace")).toBeTruthy());
+    expect(screen.getByTestId("run-stop")).toBeTruthy();
     expect(screen.queryByText("Stop test")).toBeNull();
   });
 

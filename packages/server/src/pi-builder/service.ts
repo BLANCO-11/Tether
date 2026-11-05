@@ -84,6 +84,9 @@ import { flowRunnerService, describeRun, failedOnEmptyData, readProblems, summar
 import { runInputsOf } from "../services/run-inputs.js";
 import { forgeRefsOf, piFlowService } from "../services/pi-flow.service.js";
 import type { PiBundle } from "../services/flow-runner.service.js";
+import { isAllowedScheduleCron, labelForCron } from "./schedule-presets.js";
+import { parseCron } from "../services/cron.js";
+import { flowApprovalService } from "../services/flow-approval.service.js";
 import { stepBatchSchema, stepExecutionService } from "../services/step-execution.service.js";
 import { auditService } from "../services/audit.service.js";
 import { toolRepo, type Tool } from "../repositories/tool.repo.js";
@@ -868,7 +871,7 @@ export type TurnWorkspace = {
   /** Forge Agent may propose switching an action on or off (agent-grants.ts). */
   settings?: boolean;
   /** The project this chat lives in (sharing-boundaries phase 5): its shared instructions start every turn. */
-  project?: { name: string; instructions: string; files?: string[] } | null;
+  project?: { name: string; instructions: string; files?: string[]; memories?: Array<{ kind: string; body: string }> } | null;
 };
 
 /** At most this many workspace File names are listed per turn; the catalogue has them all. */
@@ -882,9 +885,17 @@ const TURN_FILE_NAMES = 60;
 export function projectLines(p: TurnWorkspace["project"]): string[] {
   if (!p) return [];
   const text = p.instructions.trim();
+  const memories = p.memories?.filter((m) => m.body.trim()) ?? [];
   return [
     `This chat is in the project “${p.name}”. Everything made here is seen by the project's members.`,
     ...(text ? [`The project's shared instructions (from its members; follow them where SYSTEM.md allows):\n${text.slice(0, PROJECT_INSTRUCTIONS_MAX)}`] : []),
+    ...(memories.length
+      ? [
+          `The project's remembered facts (accepted by its members; follow them where SYSTEM.md allows — do not invent extras):\n${memories
+            .map((m) => `- [${m.kind}] ${m.body.trim()}`)
+            .join("\n")}`,
+        ]
+      : []),
     ...(p.files?.length
       ? [
           `The project's files (shared by its members; open one with node tools/open-file.mjs --project "<name>"; never ask for one of these to be uploaded): ${p.files
@@ -1133,6 +1144,10 @@ async function verifyAndRun(
       sessionId: s.id,
       chatId: s.chatId,
     });
+    // Emit before waitForRun so the builder can open the live progress stream (Phase 2).
+    s.lastRunId = flowExecutionId;
+    runId = flowExecutionId;
+    emit(s, { type: "test_run_started", runId: flowExecutionId });
     const run = await flowRunnerService.waitForRun(flowExecutionId);
     // Waiting at an approval is the test getting as far as it can without a person — not a failure to fix.
     ok = run.status === "succeeded" || run.status === "waiting";
@@ -2626,6 +2641,81 @@ export const piBuilderService = {
     return publicOf(s);
   },
 
+  /**
+   * Put a plain schedule on the session's workflow (personal Phase 1), then optionally save + switch it on.
+   *
+   * ⚠ **Only the allowlisted presets.** Free cron is refused — the product surface is words, not crontab.
+   * ⚠ **Arming needs a green test run** (`lastTestRun.ok`). Declaring a schedule without arming still
+   * requires a green test so an untested draft cannot pick up a timer from the overview later by surprise.
+   */
+  async setSchedule(
+    workspaceId: string,
+    sessionId: string,
+    opts: {
+      cron: string;
+      timezone?: string;
+      /** Save the draft and switch the saved revision on (Foundry runner schedule tick). */
+      arm?: boolean;
+      author: RevisionAuthor;
+      subject: string;
+      actor: string;
+    },
+  ): Promise<{ session: PiSessionPublic; armed: boolean; label: string }> {
+    const s = getOrThrow(workspaceId, sessionId);
+    if (s.abort) throw httpErr("Forge is still working. Wait for it to finish, then schedule.", 409);
+    const cron = opts.cron.trim();
+    if (!isAllowedScheduleCron(cron)) {
+      throw httpErr("Pick one of the suggested schedules — a custom cron is not accepted here.", 400);
+    }
+    try {
+      parseCron(cron);
+    } catch (e) {
+      throw httpErr((e as Error).message, 400);
+    }
+    const timezone = (opts.timezone?.trim() || "UTC").slice(0, 64);
+    try {
+      Intl.DateTimeFormat(undefined, { timeZone: timezone });
+    } catch {
+      throw httpErr(`"${timezone}" is not a timezone`, 400);
+    }
+    if (!s.lastTestRun?.ok) {
+      throw httpErr("Run a successful test before scheduling this workflow.", 409);
+    }
+    const wf = readWorkflowRaw(s.workspaceId, s.id) as Record<string, unknown>;
+    if (!Array.isArray(wf.steps) || wf.steps.length === 0) {
+      throw httpErr("the workflow has no steps to schedule", 400);
+    }
+    wf.schedule = { cron, timezone };
+    writeWorkflowRaw(s.workspaceId, s.id, wf);
+    emit(s, { type: "workflow", workflow: readWorkflow(s.workspaceId, s.id), files: readBundle(s.workspaceId, s.id).files });
+    const label = labelForCron(cron) ?? cron;
+
+    if (!opts.arm) {
+      touch(s);
+      return { session: publicOf(s), armed: false, label };
+    }
+
+    const saved = await this.saveVersion(workspaceId, sessionId, { author: opts.author });
+    if (!saved.flowId || saved.savedRevision == null) {
+      throw httpErr("Saved, but there is no workflow id to switch on.", 500);
+    }
+    try {
+      await flowApprovalService.enableOwn(workspaceId, saved.flowId, {
+        revision: saved.savedRevision,
+        subject: opts.subject,
+        actor: opts.actor,
+        note: `Switched on from chat with schedule: ${label} (${timezone}).`,
+      });
+    } catch (e) {
+      // Schedule is on the saved draft; arming failed (needs reviewer, shared, etc.). Surface that honestly.
+      const err = e as Error & { statusCode?: number };
+      throw httpErr(
+        `${label} is on the saved draft, but it could not be switched on yet: ${err.message}`,
+        err.statusCode && err.statusCode >= 400 && err.statusCode < 600 ? err.statusCode : 409,
+      );
+    }
+    return { session: saved, armed: true, label };
+  },
 
   // ── Workflow references (plans/workflow-references-2026-10-16) ────────────────────────────────────────────────
   // Same workspace, saved workflows only, never the chat's own, at most MAX_REFERENCES, Workflow Builder only. A

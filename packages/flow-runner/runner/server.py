@@ -25,6 +25,10 @@ MAX_BODY = 8 * 1024 * 1024
 # What a child may see. Nothing secret, nothing from this process's own configuration.
 CHILD_ENV = {"PATH": "/usr/local/bin:/usr/bin:/bin", "LANG": "C.UTF-8", "PYTHONDONTWRITEBYTECODE": "1"}
 
+# Live run_one children — keyed by Foundry flowExecutionId so DELETE /runs/<id> can stop one (personal Phase 2).
+RUNNING: dict[str, subprocess.Popen] = {}
+_RUNNING_LOCK = threading.Lock()
+
 
 def _log(**fields: object) -> None:
     print(json.dumps({"svc": "flow-runner", **fields}), flush=True)
@@ -32,6 +36,9 @@ def _log(**fields: object) -> None:
 
 def _reap(proc: subprocess.Popen, execution_id: str) -> None:
     code = proc.wait()
+    with _RUNNING_LOCK:
+        if RUNNING.get(execution_id) is proc:
+            RUNNING.pop(execution_id, None)
     _log(event="run_exit", flowExecutionId=execution_id, code=code)
 
 
@@ -47,18 +54,47 @@ class Handler(BaseHTTPRequestHandler):
     def log_message(self, fmt: str, *args: object) -> None:  # quiet default access log
         return
 
+    def _authorize(self) -> bool:
+        presented = self.headers.get("x-runner-secret", "")
+        # Constant-time, and an unset secret refuses everything rather than accepting everything.
+        if not SECRET or not hmac.compare_digest(presented.encode(), SECRET.encode()):
+            self._send(401, {"error": "unauthorized"})
+            return False
+        return True
+
     def do_GET(self) -> None:
         if self.path == "/healthz":
             return self._send(200, {"ok": True})
         return self._send(404, {"error": "not_found"})
 
+    def do_DELETE(self) -> None:
+        # Stop one in-flight run (personal Phase 2 Stop). Path: /runs/<flowExecutionId>
+        if not self.path.startswith("/runs/"):
+            return self._send(404, {"error": "not_found"})
+        if not self._authorize():
+            return
+        execution_id = self.path[len("/runs/") :].strip("/")
+        if not execution_id or "/" in execution_id:
+            return self._send(400, {"error": "bad_id"})
+        with _RUNNING_LOCK:
+            proc = RUNNING.pop(execution_id, None)
+        if proc is None or proc.poll() is not None:
+            # Already gone — still 202 so the API can settle the Foundry row idempotently.
+            _log(event="run_cancel_noop", flowExecutionId=execution_id)
+            return self._send(202, {"cancelled": False, "flowExecutionId": execution_id, "reason": "not_running"})
+        try:
+            proc.kill()
+        except OSError as e:
+            _log(event="run_cancel_failed", flowExecutionId=execution_id, error=str(e)[:200])
+            return self._send(500, {"error": "kill_failed", "message": str(e)[:200]})
+        _log(event="run_cancelled", flowExecutionId=execution_id, pid=proc.pid)
+        return self._send(202, {"cancelled": True, "flowExecutionId": execution_id})
+
     def do_POST(self) -> None:
         if self.path != "/runs":
             return self._send(404, {"error": "not_found"})
-        presented = self.headers.get("x-runner-secret", "")
-        # Constant-time, and an unset secret refuses everything rather than accepting everything.
-        if not SECRET or not hmac.compare_digest(presented.encode(), SECRET.encode()):
-            return self._send(401, {"error": "unauthorized"})
+        if not self._authorize():
+            return
         length = int(self.headers.get("content-length") or 0)
         if length <= 0 or length > MAX_BODY:
             return self._send(413 if length > MAX_BODY else 400, {"error": "bad_length"})
@@ -81,6 +117,8 @@ class Handler(BaseHTTPRequestHandler):
         assert proc.stdin is not None
         proc.stdin.write(json.dumps(job).encode())
         proc.stdin.close()
+        with _RUNNING_LOCK:
+            RUNNING[execution_id] = proc
         threading.Thread(target=_reap, args=(proc, execution_id), daemon=True).start()
         _log(event="run_accepted", flowExecutionId=execution_id, pid=proc.pid)
         return self._send(202, {"accepted": True, "flowExecutionId": execution_id})

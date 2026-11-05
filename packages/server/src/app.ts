@@ -53,6 +53,7 @@ import { emailBoxRouter } from "./routes/email-box.js";
 import { pinsRouter } from "./routes/pins.js";
 import { notificationsRouter } from "./routes/notifications.js";
 import { projectsRouter } from "./routes/projects.js";
+import { edgePublicRouter, edgeRouter } from "./routes/edge.js";
 import { nextFiresRouter } from "./routes/next-fires.js";
 import { searchRouter } from "./routes/search.js";
 import { bootstrapRouter } from "./routes/bootstrap.js";
@@ -447,6 +448,9 @@ export function createApp() {
   // Sharing boundaries: the signed-in person's own notices (an Admin opened your private work).
   app.use("/api/workspaces/:workspaceId/notifications", requireApiKey, notificationsRouter);
   app.use("/api/workspaces/:workspaceId/projects", requireApiKey, projectsRouter);
+  // Edge agent (personal Phase 6): person routes under the workspace; host pairs/polls at /api/edge (OTP / device token).
+  app.use("/api/workspaces/:workspaceId/edge", requireApiKey, edgeRouter);
+  app.use("/api/edge", edgePublicRouter);
   // B-01 next-fire armed only 30d + overflow — GET /workspaces/:ws/next-fires?limit=4&window=30d honouring armed only D-18, derived in Foundry
   app.use("/api/workspaces/:workspaceId/next-fires", requireApiKey, nextFiresRouter);
   // B-30 search index 6 kinds workspace-scoped replacing STATIC_SEARCH_INDEX — GET /workspaces/:ws/search?q=

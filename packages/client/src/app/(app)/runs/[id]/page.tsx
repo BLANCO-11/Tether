@@ -8,6 +8,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams, useSearchParams } from "next/navigation";
 import { openFlowStream, isLive } from "@/lib/flow-stream";
+import { cancelFlowExecution } from "@/lib/api";
 import { fmtDuration } from "@/lib/stats";
 import type { FlowExecutionDetail, StepRun } from "@/lib/types";
 import { Page, Zone } from "@/components/layout/Page";
@@ -20,6 +21,7 @@ import { TraceList, ScenarioPanel, MockCaveat } from "@/components/flow/TraceLis
 import { RunOutput } from "@/components/flow/RunOutput";
 import { StepEvidence } from "@/components/flow/StepEvidence";
 import { ToolActivity } from "@/components/flow/ToolActivity";
+import { Button } from "@/components/ui/Button";
 
 /**
  * ⚠ SIX `PACK_*` CONSTANTS WERE DELETED FROM HERE, AND WHAT THEY DID IS WORTH
@@ -131,6 +133,7 @@ export default function RunPage() {
   const [run, setRun] = useState<FlowExecutionDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<number | null>(null);
+  const [stopping, setStopping] = useState(false);
 
   useEffect(() => {
     const stream = openFlowStream(id, {
@@ -397,22 +400,26 @@ export default function RunPage() {
     </span>
   );
   /**
-   * ⚠ THERE IS NO "Stop test" BUTTON, AND ITS ABSENCE IS DELIBERATE.
-   *
-   * It used to be `{ label: "Stop test", onClick: () => {}, variant: "danger" }`
-   * — a red, primary-looking control on a RUNNING run that did nothing, so a
-   * person believed they had halted a run against real data. There is no
-   * cancel-execution method in `lib/foundry-client.ts` and no route behind one,
-   * so the honest options were to build the backend or to remove the control,
-   * and a UI pass does not half-build a backend to fill a card.
-   *
-   * ⚠ Do not restore it until `POST …/flow-executions/:id/cancel` exists.
+   * Stop is real as of personal Phase 2: `POST …/flow-executions/:id/cancel`.
+   * The old inert "Stop test" control was removed for honesty; this one calls the route.
    */
   const s21Action: HeaderAction | null = live
     ? null
     : run.engineStatus === "success"
       ? { label: "View results", href: `/runs/${run.id}` }
       : { label: "Run again", href: `/runs/${run.id}` };
+
+  const onStop = async () => {
+    setStopping(true);
+    setError(null);
+    try {
+      await cancelFlowExecution(run.id);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setStopping(false);
+    }
+  };
 
   return (
     <Page measure="wide">
@@ -421,7 +428,21 @@ export default function RunPage() {
       for displaying the view result button 
       
       actions={s21Action ? [s21Action] : undefined}*/}
-      <PageHeader eyebrow={s21Eyebrow} title="Live execution trace" badge={s21BadgeNode} purpose="Every step reports what came in, what it did and what came out."  />
+      <PageHeader
+        eyebrow={s21Eyebrow}
+        title="Live execution trace"
+        badge={
+          <span className="inline-flex items-center gap-2">
+            {s21BadgeNode}
+            {live ? (
+              <Button size="xs" variant="danger" disabled={stopping} onClick={() => void onStop()} data-testid="run-stop">
+                {stopping ? "Stopping…" : "Stop"}
+              </Button>
+            ) : null}
+          </span>
+        }
+        purpose="Every step reports what came in, what it did and what came out."
+      />
       <Zone name="notices" gap="tight">
         {isRealData && <Notice tone="danger" title="This run read production data">A draft run read the tenant\u2019s real database. Anything this flow sends downstream to a model or an external endpoint carried those rows.</Notice>}
         {run.autoTest && <Notice tone="info" title="Automatic test">The builder ran this on its own after a build turn, on test data with the workflow's default inputs.</Notice>}

@@ -236,6 +236,8 @@ export const ROUTE_PERMISSIONS: ReadonlyMap<string, RouteRequirement> = Object.f
     ["POST /api/workspaces/:workspaceId/flow-chat/threads/:threadId/turns", { kind: "workspace", permission: "flows.write", param: "workspaceId" }],
     ["POST /api/workspaces/:workspaceId/flow-executions/:id/replay", { kind: "workspace", permission: "runs.replay", param: "workspaceId" }],
     ["POST /api/workspaces/:workspaceId/flow-executions/:id/watch", { kind: "workspace", permission: "runs.read", param: "workspaceId" }],
+    // Same bar as starting a run: an author who can fire one can stop one of theirs.
+    ["POST /api/workspaces/:workspaceId/flow-executions/:id/cancel", { kind: "workspace", permission: "flows.write", param: "workspaceId" }],
     ["POST /api/workspaces/:workspaceId/flow-templates", { kind: "workspace", permission: "templates.write", param: "workspaceId" }],
     ["POST /api/workspaces/:workspaceId/flow-templates/:id/instantiate", { kind: "workspace", permission: "flows.write", param: "workspaceId" }],
     ["POST /api/workspaces/:workspaceId/flow-templates/:id/plan", { kind: "workspace", permission: "templates.write", param: "workspaceId" }],

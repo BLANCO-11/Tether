@@ -2602,6 +2602,13 @@ export const foundryApi = {
       { method: "POST" },
     ),
 
+  /** Stop a live run (personal Phase 2). Foundry execution id only. */
+  cancelFlowExecution: (wsId: string, execId: string) =>
+    req<{ cancelled: boolean; status: string }>(
+      `/workspaces/${wsId}/flow-executions/${execId}/cancel`,
+      { method: "POST", body: "{}" },
+    ),
+
   // ── Flows, revisions and approvals (Kestra migration, Phase 3) ─────────────
   listFlows: (wsId: string) =>
     req<{ flows: FAFlow[] }>(`/workspaces/${wsId}/flows`).then((r) => r.flows),

@@ -265,11 +265,12 @@ describe("where a chat lives (sharing-boundaries phases 5–6)", () => {
     expect(screen.queryByText("Mine", { selector: "span" })).toBeNull();
     expect(screen.getByText("In payroll")).toBeTruthy();
   });
-  it("⚠ Move is the one action for where it lives — no Share to read, no Make private (P6-D4)", async () => {
+  it("Move places the chat; Share with… grants a person read (Phase 5) — not the old workspace Share to read", async () => {
     listPiChats.mockResolvedValueOnce([chat({ canChange: true, visibility: "public" })]);
     render(<ChatsPage />);
     fireEvent.click(await screen.findByLabelText("Actions for Email me the weekly attendance report"));
     expect(screen.getByText("Move…")).toBeTruthy();
+    expect(screen.getByText("Share with…")).toBeTruthy();
     expect(screen.queryByText("Share to read")).toBeNull();
     expect(screen.queryByText("Make private")).toBeNull();
   });

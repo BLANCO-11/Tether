@@ -5,6 +5,7 @@ import { requireIdentity, requireWorkspaceRole } from "../middleware/identity.mi
 import { contentVisibility } from "../services/content-visibility.service.js";
 import { projectService } from "../services/project.service.js";
 import { MAX_PROJECT_FILE_BYTES, projectFileService } from "../services/project-file.service.js";
+import { MEMORY_KINDS, MEMORY_SOURCES, pickMemoryCandidates, projectMemoryService } from "../services/project-memory.service.js";
 
 /**
  * `/api/workspaces/:workspaceId/projects` — projects (sharing-boundaries phase 5). A project this person is not in
@@ -145,5 +146,68 @@ projectsRouter.delete(
   asyncHandler(async (req, res) => {
     await projectFileService.remove(req.params.workspaceId!, req.params.projectId!, await viewerOf(req), req.params.fileId!);
     res.status(204).end();
+  }),
+);
+
+/**
+ * Project memory ledger (Phase 4) — curated facts chats in the project start with. Members list and add;
+ * owner / Admin supersede or discard. Compact promotions are accepted through POST with source=compact.
+ */
+projectsRouter.get(
+  "/:projectId/memories",
+  asyncHandler(async (req, res) => {
+    const status = z.enum(["active", "superseded", "discarded", "all"]).optional().parse(req.query.status);
+    res.json({ memories: await projectMemoryService.list(req.params.workspaceId!, req.params.projectId!, await viewerOf(req), { status }) });
+  }),
+);
+
+projectsRouter.post(
+  "/:projectId/memories",
+  requireIdentity,
+  requireWorkspaceRole("author"),
+  asyncHandler(async (req, res) => {
+    const body = z
+      .object({
+        kind: z.enum(MEMORY_KINDS),
+        body: z.string().min(1).max(500),
+        source: z.enum(MEMORY_SOURCES).optional(),
+        sourceChatId: z.string().uuid().nullish(),
+        sourceMessageId: z.string().max(64).nullish(),
+      })
+      .strict()
+      .parse(req.body ?? {});
+    const memory = await projectMemoryService.create(req.params.workspaceId!, req.params.projectId!, await viewerOf(req), { subject: req.user!.subject }, body);
+    res.status(201).json({ memory });
+  }),
+);
+
+projectsRouter.post(
+  "/:projectId/memories/propose",
+  requireIdentity,
+  asyncHandler(async (req, res) => {
+    await projectMemoryService.list(req.params.workspaceId!, req.params.projectId!, await viewerOf(req));
+    const body = z
+      .object({
+        messages: z.array(z.object({ role: z.string(), text: z.string() })).max(200).optional(),
+      })
+      .strict()
+      .parse(req.body ?? {});
+    res.json({ candidates: pickMemoryCandidates(body.messages ?? [], 3) });
+  }),
+);
+
+projectsRouter.patch(
+  "/:projectId/memories/:memoryId",
+  requireIdentity,
+  asyncHandler(async (req, res) => {
+    const { status } = z.object({ status: z.enum(["superseded", "discarded"]) }).strict().parse(req.body ?? {});
+    const memory = await projectMemoryService.setStatus(
+      req.params.workspaceId!,
+      req.params.projectId!,
+      req.params.memoryId!,
+      await viewerOf(req),
+      status,
+    );
+    res.json({ memory });
   }),
 );

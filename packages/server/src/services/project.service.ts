@@ -23,6 +23,7 @@ import { auditService } from "./audit.service.js";
 import { contentVisibility, type Viewer } from "./content-visibility.service.js";
 import { effectiveAccounts, type PiRunAs } from "./run-as.service.js";
 import { notificationService } from "./notification.service.js";
+import { projectMemoryService } from "./project-memory.service.js";
 
 export type Project = typeof projects.$inferSelect;
 /** Where an item lives, as a person names it. */
@@ -149,13 +150,20 @@ export const projectService = {
     return new Map(rows.map((r) => [r.id, r.name]));
   },
 
-  /** What a chat in the project is given each turn: its name, shared instructions and file names. Null when it is gone. */
-  async contextOf(workspaceId: string, projectId: string | null | undefined): Promise<{ name: string; instructions: string; files: string[] } | null> {
+  /**
+   * What a chat in the project is given each turn: its name, shared instructions, file names, and active memory
+   * ledger items (Phase 4). Null when it is gone.
+   */
+  async contextOf(
+    workspaceId: string,
+    projectId: string | null | undefined,
+  ): Promise<{ name: string; instructions: string; files: string[]; memories: Array<{ kind: string; body: string }> } | null> {
     if (!projectId) return null;
     const [p] = await db.select({ name: projects.name, instructions: projects.instructions }).from(projects).where(and(eq(projects.id, projectId), eq(projects.workspaceId, workspaceId)));
     if (!p) return null;
     const files = (await db.select({ name: projectFiles.name }).from(projectFiles).where(eq(projectFiles.projectId, projectId)).orderBy(asc(projectFiles.name))).map((r) => r.name);
-    return { ...p, files };
+    const memories = await projectMemoryService.activeForInject(workspaceId, projectId).catch(() => [] as Array<{ kind: string; body: string }>);
+    return { ...p, files, memories };
   },
 
   manages(v: Viewer, p: Pick<Project, "ownerSubject">): boolean {
