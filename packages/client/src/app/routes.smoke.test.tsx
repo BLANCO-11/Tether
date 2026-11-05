@@ -179,6 +179,7 @@ const ROUTES: Array<{ path: string; load: () => Promise<PageModule>; props?: Rec
   { path: "/keys", load: () => import("./(app)/keys/page") },
   { path: "/email-box", load: () => import("./(app)/email-box/page") },
   { path: "/ai-provider", load: () => import("./(app)/ai-provider/page") },
+  { path: "/people", load: () => import("./(app)/people/page") },
   // Personal thin: /organization and /admin/* and /incidents/* purged (redirect only).
   // ⚠ RBAC: the page a refused person lands on. It must render for somebody who holds
   // NOTHING, so it is the one page whose smoke test is closest to its real audience.

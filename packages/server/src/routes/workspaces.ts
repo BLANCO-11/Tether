@@ -19,6 +19,7 @@ import {
   effectivePermissionsService,
   PlatformRoleCache,
 } from "../services/effective-permissions.service.js";
+import { personalHomeService } from "../services/personal-home.service.js";
 
 export const workspacesRouter = Router();
 
@@ -162,6 +163,11 @@ workspacesRouter.get(
   "/",
   requireIdentity,
   asyncHandler(async (req, res) => {
+    // Personal fork: never leave a signed-in person with an empty list — that
+    // used to dump them on /no-access with a SUPER_ADMIN_EMAILS lecture.
+    if (req.user?.subject) {
+      await personalHomeService.ensureHome({ subject: req.user.subject, email: req.user.email });
+    }
     const all = await workspaceService.list();
     const cache = new PlatformRoleCache();
 

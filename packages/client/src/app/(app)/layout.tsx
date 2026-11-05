@@ -16,6 +16,7 @@ import { storedRailCollapsed, storeRailCollapsed } from "@/lib/rail-preference";
 import { ActivityProvider } from "@/lib/activity";
 import { useAsync } from "@/lib/hooks";
 import { listWorkspaces } from "@/lib/api";
+import { PERSONAL_PRODUCT } from "@/lib/personal";
 import { PermissionsProvider } from "@/lib/permissions";
 import { Sidebar } from "@/components/shell/Sidebar";
 import { Topbar } from "@/components/shell/Topbar";
@@ -43,10 +44,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   /**
    * ⚠ **FR-016 — A PERSON WITH NO WORKSPACE IS SENT SOMEWHERE THAT EXPLAINS IT.**
    *
-   * `GET /api/workspaces` is filtered per grant now, so somebody who holds nothing
-   * anywhere gets an empty list. Before this, that rendered as a workspace switcher with
-   * nothing in it and no explanation — a dead end that reads as a broken product rather
-   * than as access they have not been given.
+   * Enterprise: empty list → /no-access. Personal fork: the API ensures a home
+   * workspace on list, and we never send anyone to that dead-end page.
    *
    * ⚠ **It redirects on an EMPTY list, never on a FAILED read.** `useAsync` reports those
    * separately, and sending somebody to "you have no access" because the API was
@@ -55,6 +54,11 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
    */
   const visibleWorkspaces = useAsync(() => listWorkspaces(), []);
   useEffect(() => {
+    if (PERSONAL_PRODUCT) {
+      // Leftover bookmark / race: bounce off the enterprise dead-end.
+      if (pathname === "/no-access") router.replace("/dashboard");
+      return;
+    }
     if (pathname === "/no-access") return;
     if (visibleWorkspaces.loading || visibleWorkspaces.error) return;
     if ((visibleWorkspaces.data?.length ?? 0) === 0) router.replace("/no-access");

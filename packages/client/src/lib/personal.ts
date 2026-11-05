@@ -4,7 +4,11 @@
  * Enterprise admin / org / compliance chrome is not part of the personal product.
  * Routes below stay in the tree for now but redirect to Home and are absent from
  * nav and the command palette. Do not re-link them without an explicit product decision.
+ *
+ * ⚠ **Always on in this repository.** Sign-in must never dump someone on
+ * /no-access — the API ensures a Personal home workspace instead.
  */
+export const PERSONAL_PRODUCT = true;
 
 /** Paths (and prefixes) removed from the personal product surface. */
 export const PERSONAL_REMOVED_PREFIXES = [

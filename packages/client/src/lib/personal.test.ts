@@ -1,7 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { isPersonalRemovedPath } from "./personal";
+import { isPersonalRemovedPath, PERSONAL_PRODUCT } from "./personal";
 
 describe("personal fork removed paths", () => {
+  it("is always on in this fork", () => {
+    expect(PERSONAL_PRODUCT).toBe(true);
+  });
+
   it("flags enterprise admin and org surfaces", () => {
     expect(isPersonalRemovedPath("/admin")).toBe(true);
     expect(isPersonalRemovedPath("/admin/people")).toBe(true);

@@ -23,7 +23,7 @@ import { getMe, listPendingApprovals } from "@/lib/api";
 import { useAsync } from "@/lib/hooks";
 import { usePermissions } from "@/lib/permissions";
 import { useActivityEpoch } from "@/lib/activity";
-import { Chat, Folder, Workflow, Wrench, Activity, CheckCheck, Close, Shield, Database, Key, Bolt, ChevronLeft, Home, Plus, Cube, Mail, LogOut, Apps } from "@/components/ui/icons";
+import { Chat, Folder, Workflow, Wrench, Activity, CheckCheck, Close, Shield, Database, Key, Bolt, ChevronLeft, Home, Plus, Cube, Mail, LogOut, Apps, User } from "@/components/ui/icons";
 import { AlphaChip } from "@/components/shell/AlphaChip";
 
 // ── Pack nav: 04 § nav rail — the full product, not just the 5-row prototype ──
@@ -177,6 +177,13 @@ export const groups: NavGroup[] = [
         label: "AI models",
         Icon: Shield,
         ownedPaths: ["/ai-provider"],
+      },
+      {
+        // Personal fork: thin allowlist + invites (not enterprise Admin → People).
+        href: "/people",
+        label: "People",
+        Icon: User,
+        ownedPaths: ["/people"],
       },
     ],
   },
