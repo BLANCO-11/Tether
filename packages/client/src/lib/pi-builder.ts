@@ -165,6 +165,10 @@ export type PiChatMessage = {
   thinking?: { text: string; ms: number };
   /** Changes Forge Agent proposed in this reply: each a card, done only when the person clicks Do it. */
   proposals?: PiProposal[];
+  /**
+   * Server-driven turn (edge job settled): still starts a Forge turn, but the workbench does not draw an Asked bubble.
+   */
+  silent?: boolean;
 };
 
 /**
@@ -768,6 +772,8 @@ export function decidePiProposal(
   choice?: string,
   surfaceAct?: { actionId?: string; selected?: string[] },
   always?: EdgeAlways | null,
+  /** Directory grant (dock “Allow this folder”) — server also approves siblings under it. */
+  folder?: string | null,
 ) {
   return req<{ proposal: PiProposal }>(`/workspaces/${wsId}/pi-builder/sessions/${sessionId}/proposals/${proposalId}`, {
     method: "POST",
@@ -778,6 +784,7 @@ export function decidePiProposal(
       ...(surfaceAct?.actionId ? { actionId: surfaceAct.actionId } : {}),
       ...(surfaceAct?.selected ? { selected: surfaceAct.selected } : {}),
       ...(always ? { always } : {}),
+      ...(folder ? { folder } : {}),
     }),
   }).then((r) => r.proposal);
 }

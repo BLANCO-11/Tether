@@ -74,6 +74,8 @@ import { mentionAt, setPiModel, withoutMention } from "@/lib/pi-builder";
 import { ATTACH_ACCEPT, clearPiAccount, decidePiProposal, type GrantScope, type PiAccountChoice, type PiAttachment, type PiProposal } from "@/lib/pi-builder";
 import { ChatConnections } from "./ChatConnections";
 import { ProposalCard } from "./ProposalCard";
+import { commonEdgeFolder, edgeFolderHint } from "@/lib/edge-folder-hint";
+import { Button } from "@/components/ui/Button";
 import { useAutoGrow } from "@/lib/use-auto-grow";
 import { FadingText, useSmoothText, useStreamedText } from "./StreamedText";
 import { playReceive, playSend } from "@/lib/chat-sounds";
@@ -1154,10 +1156,31 @@ function Workbench_({
             choice?: string,
             surfaceAct?: { actionId?: string; selected?: string[] },
             always?: EdgeAlways | null,
-          ) => void (await decidePiProposal(workspaceId, sessionIdForDecide, id, decision, scope, choice, surfaceAct, always))
+            folder?: string | null,
+          ) => void (await decidePiProposal(workspaceId, sessionIdForDecide, id, decision, scope, choice, surfaceAct, always, folder))
         : null,
     [sessionIdForDecide, workspaceId],
   );
+  /** Pending edge Approves — pinned above the composer so scrolling the transcript cannot hide them. */
+  const pendingEdgeApprovals = useMemo(() => {
+    const out: PiProposal[] = [];
+    const seen = new Set<string>();
+    for (const m of messages) {
+      for (const p of m.proposals ?? []) {
+        if (p.kind !== "edge" || p.status !== "pending" || seen.has(p.id)) continue;
+        seen.add(p.id);
+        out.push(p);
+      }
+    }
+    return out;
+  }, [messages]);
+  /** One folder for the dock — common ancestor of every pending edge path. */
+  const pendingEdgeFolder = useMemo(() => {
+    const hints = pendingEdgeApprovals
+      .map((p) => edgeFolderHint(p.edge?.kind ?? "", (p.params && !Array.isArray(p.params) ? p.params : {}) as Record<string, unknown>))
+      .filter((h): h is string => !!h);
+    return commonEdgeFolder(hints) ?? hints[0] ?? null;
+  }, [pendingEdgeApprovals]);
   // Agent: chat is the only column. Builder: canvas column still exists; never leave both panes folded.
   const agentFull = mode === "agent";
   /** Canvas lives in the workbench column in Builder — only put it in tools when that column is gone. */
@@ -1416,6 +1439,36 @@ function Workbench_({
                       </div>
                     ) : null}
                     <OthersChatNotice othersChat={session?.othersChat ?? null} />
+                    {pendingEdgeApprovals.length ? (
+                      <div className="mb-2 space-y-2" data-testid="pending-edge-dock" role="region" aria-label="Needs your approval">
+                        <p className="text-[10px] font-medium uppercase tracking-widest text-warn">Needs your approval</p>
+                        {pendingEdgeFolder && decideProposal ? (
+                          <div className="rounded-xl border border-warn/30 bg-warn/5 p-3 space-y-2">
+                            <p className="text-sm font-medium text-text">Allow work in this folder</p>
+                            <p className="truncate font-mono text-[12.5px] text-muted" title={pendingEdgeFolder}>
+                              {pendingEdgeFolder}
+                            </p>
+                            <p className="text-caption text-dim">
+                              {pendingEdgeApprovals.length} pending action{pendingEdgeApprovals.length === 1 ? "" : "s"} — one Allow covers
+                              this folder for the rest of this workspace.
+                            </p>
+                            <div className="flex flex-wrap gap-2">
+                              <Button
+                                size="sm"
+                                disabled={busy}
+                                onClick={() =>
+                                  void decideProposal(pendingEdgeApprovals[0]!.id, "run", undefined, undefined, undefined, "path_read", pendingEdgeFolder)
+                                }
+                              >
+                                Allow this folder
+                              </Button>
+                            </div>
+                          </div>
+                        ) : (
+                          pendingEdgeApprovals.map((p) => <ProposalCard key={p.id} p={p} onDecide={decideProposal} />)
+                        )}
+                      </div>
+                    ) : null}
                     <BackgroundChip live={bg.live} onOpen={() => setBgOpen(true)} />
                     <StorageNotice storage={storage} onOpenFiles={() => openFilesPane()} />
                     <ReferenceChips
@@ -2003,7 +2056,10 @@ export function chatItems(messages: PiChatMessage[]): ChatItem[] {
       out.push({ kind: "welcome", m });
       cur = null;
     } else if (m.role === "user") {
-      cur = { kind: "turn", user: m, replies: [] };
+      // Silent continues (edge settle) still start a turn for replies, but with no Asked bubble / jump target.
+      // Legacy chats stored the same continue without `silent` — hide that exact status string too.
+      const hideAsked = !!m.silent || m.text === "(work on your computer finished)";
+      cur = { kind: "turn", user: hideAsked ? null : m, replies: [] };
       out.push(cur);
     } else if (cur) {
       cur.replies.push(m);
@@ -2112,12 +2168,14 @@ export function ReadOnlyConversation({ messages }: { messages: PiChatMessage[] }
   );
 }
 
-/** The changes Forge Agent proposed in a reply: each a card the person decides. */
+/** The changes Forge Agent proposed in a reply: each a card the person decides. Pending edge Approves live in the dock. */
 function Proposals({ proposals }: { proposals: PiProposal[] }) {
   const decide = useContext(DecideProposal);
+  const shown = proposals.filter((p) => !(p.kind === "edge" && p.status === "pending"));
+  if (!shown.length) return null;
   return (
     <div className="space-y-2">
-      {proposals.map((p) => (
+      {shown.map((p) => (
         <ProposalCard key={p.id} p={p} onDecide={decide} />
       ))}
     </div>
@@ -2209,7 +2267,7 @@ function Said({
 const ChatFileHref = createContext<((name: string) => string) | null>(null);
 /** Do or cancel a proposed change in this chat (null until the session exists). */
 const DecideProposal = createContext<
-  ((id: string, decision: "run" | "decline", scope?: GrantScope, choice?: string, surfaceAct?: { actionId?: string; selected?: string[] }, always?: EdgeAlways | null) => Promise<void>) | null
+  ((id: string, decision: "run" | "decline", scope?: GrantScope, choice?: string, surfaceAct?: { actionId?: string; selected?: string[] }, always?: EdgeAlways | null, folder?: string | null) => Promise<void>) | null
 >(null);
 /** Opens a chat file's preview in the Files pane. */
 const OpenChatFile = createContext<((name: string) => void) | null>(null);

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { activityStatusNote } from "./ActivityAccordion";
+import { activityHeaderLine, activityStatusNote } from "./ActivityAccordion";
 import type { PiActivity } from "@/lib/pi-builder";
 
 const act = (kind: PiActivity["kind"], title: string, status: PiActivity["status"] = "running"): PiActivity => ({
@@ -17,5 +17,14 @@ describe("what Forge is doing, as a sentence — never a file name", () => {
   });
   it("control: nothing running says nothing", () => {
     expect(activityStatusNote([act("write", "workflow.json", "done")])).toBeNull();
+  });
+});
+
+describe("Actions header one-liner", () => {
+  it("shows the latest action, with a count when there are several", () => {
+    expect(activityHeaderLine([act("bash", "npm install", "done")])).toBe("$ npm install");
+    expect(activityHeaderLine([act("write", "package.json", "done"), act("bash", "npm install", "done")])).toBe(
+      "$ npm install · 2",
+    );
   });
 });

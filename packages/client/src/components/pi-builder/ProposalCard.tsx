@@ -7,6 +7,7 @@
 // shown in full, as they will be sent — what the person reads is what runs.
 import { useState } from "react";
 import type { EdgeAlways, GrantScope, PiAccount, PiAccountQuestion, PiEdgeJob, PiProposal, PiSettingChange } from "@/lib/pi-builder";
+import { commandFamily, edgeActionLine, edgeFolderHint } from "@/lib/edge-folder-hint";
 import { SurfaceCard } from "./SurfaceCard";
 import { Button } from "@/components/ui/Button";
 import { StatusPill } from "@/components/ui/Badge";
@@ -120,6 +121,7 @@ type Decide = (
   choice?: string,
   surfaceAct?: { actionId?: string; selected?: string[] },
   always?: EdgeAlways | null,
+  folder?: string | null,
 ) => Promise<void>;
 
 /** A connection as people read it: "your own GitHub “Mine”", "the workspace's “Team GitHub”". */
@@ -137,7 +139,8 @@ export function ProposalCard({ p, onDecide }: { p: PiProposal; onDecide: Decide 
 
 /**
  * Forge asked to run something on a paired computer. Approve lets the edge agent claim it;
- * Always-allow / Deny-always persist trust rules. Harmless commands never reach this card.
+ * Allow always remembers the *tool family* (docker, npm, …); Allow this folder remembers a path tree.
+ * Harmless commands never reach this card. Settled jobs collapse to an Actions-density one-liner.
  */
 function EdgeCard({ p, e, onDecide }: { p: PiProposal; e: PiEdgeJob; onDecide: Decide | null }) {
   const [busy, setBusy] = useState<"once" | "command" | "path_read" | "deny" | "decline" | null>(null);
@@ -148,30 +151,133 @@ function EdgeCard({ p, e, onDecide }: { p: PiProposal; e: PiEdgeJob; onDecide: D
   const command = typeof params.command === "string" ? params.command : null;
   const path = typeof params.path === "string" ? params.path : null;
   const contents = typeof params.contents === "string" ? params.contents : null;
-  const folderHint = (() => {
-    if (path) return path;
-    if (!command) return null;
-    const parts = command.trim().split(/\s+/);
-    if (parts[0] !== "ls") return null;
-    const paths = parts.slice(1).filter((a) => !a.startsWith("-"));
-    return paths.length === 1 ? paths[0]! : null;
-  })();
-  const showFolder = (e.kind === "run_command" && !!folderHint) || e.kind === "read_path";
-  const showCommandAlways = e.kind === "run_command" && !!command;
+  const folderHint = edgeFolderHint(e.kind, params);
+  const family = e.kind === "run_command" && command ? commandFamily(command) : null;
+  const showFolder = !!folderHint;
+  const showCommandAlways = e.kind === "run_command" && !!command && !!family;
+  const alwaysLabel = family ? `Allow always (${family})` : "Allow always";
   const mono = command ?? path ?? null;
-  const resultPreview = p.result ? p.result.replace(/\s+/g, " ").trim().slice(0, 120) : null;
+  const line = edgeActionLine(e.deviceName, e.kind, params);
   const decide = async (d: "run" | "decline", always?: EdgeAlways | null) => {
     if (!onDecide) return;
     setBusy(always ?? (d === "run" ? "once" : "decline"));
     setError(null);
     try {
-      await onDecide(p.id, d, undefined, undefined, undefined, always ?? null);
+      await onDecide(p.id, d, undefined, undefined, undefined, always ?? null, always === "path_read" ? folderHint : null);
     } catch (err) {
       setError((err as Error).message);
     } finally {
       setBusy(null);
     }
   };
+
+  const details = open ? (
+    <div className="mt-1 flex flex-col gap-2 border-t border-line px-2 pb-1.5 pt-2">
+      <dl className="pc-values sans" aria-label="What will run">
+        <Fact k="On">{e.deviceName}</Fact>
+        {command != null ? (
+          <Fact k="Command">
+            <code className="font-mono text-[13px]">{command}</code>
+          </Fact>
+        ) : null}
+        {path != null ? (
+          <Fact k="Path">
+            <code className="font-mono text-[13px]">{path}</code>
+          </Fact>
+        ) : null}
+        {contents != null ? (
+          <Fact k="Contents">
+            <Value v={contents} />
+          </Fact>
+        ) : null}
+      </dl>
+      {p.status === "pending" ? (
+        <div className="flex flex-col gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            {showCommandAlways ? (
+              <Button size="sm" variant="ghost" disabled={!!busy || !onDecide} onClick={() => void decide("run", "command")}>
+                {busy === "command" ? "Saving…" : alwaysLabel}
+              </Button>
+            ) : null}
+            {showFolder ? (
+              <Button size="sm" variant="ghost" disabled={!!busy || !onDecide} onClick={() => void decide("run", "path_read")}>
+                {busy === "path_read" ? "Saving…" : "Allow this folder"}
+              </Button>
+            ) : null}
+            {showCommandAlways ? (
+              <Button size="sm" variant="ghost" disabled={!!busy || !onDecide} onClick={() => void decide("decline", "deny")}>
+                {busy === "deny" ? "Saving…" : family ? `Deny always (${family})` : "Deny always"}
+              </Button>
+            ) : null}
+          </div>
+          <span className="text-caption text-dim">
+            {family && showFolder
+              ? `${alwaysLabel} remembers later ${family} commands. Allow this folder remembers ${folderHint}.`
+              : family
+                ? `${alwaysLabel} remembers later ${family} commands in this workspace (compose, ps, build, …).`
+                : showFolder
+                  ? `Allow this folder remembers ${folderHint}: later reads, writes, and path-bound commands under it skip Approve.`
+                  : "Runs on your computer only after you Approve."}
+          </span>
+        </div>
+      ) : null}
+      {(p.status === "done" || p.status === "failed") && p.result ? (
+        <div className={`pc-outcome ${p.status === "done" ? "ok" : "danger"}`}>
+          <span className="min-w-0 whitespace-pre-wrap break-words">{p.result}</span>
+        </div>
+      ) : null}
+      {p.decidedBy && p.status !== "pending" ? (
+        <p className="text-caption text-dim">
+          {p.status === "declined" ? "Cancelled" : "Approved"} by {p.decidedBy}
+          {p.decidedAt ? ` · ${new Date(p.decidedAt).toLocaleString()}` : ""}
+        </p>
+      ) : null}
+    </div>
+  ) : null;
+
+  // Settled / running: Actions-density one-liner (same quiet row as What Forge did).
+  if (p.status !== "pending") {
+    const mark =
+      p.status === "running" ? (
+        <span className="shrink-0 text-accent" aria-hidden>
+          …
+        </span>
+      ) : p.status === "failed" ? (
+        <span className="shrink-0 text-danger" aria-hidden>
+          !
+        </span>
+      ) : null;
+    return (
+      <div
+        className={`my-0.5 rounded-lg text-[12px] ${p.status === "failed" ? "bg-danger/10" : p.status === "running" ? "bg-accent/10" : ""}`}
+        data-testid="edge-action-line"
+      >
+        <button
+          type="button"
+          className="flex w-full items-center gap-2 rounded-lg px-2 py-1 text-left transition-colors hover:bg-surface-2"
+          onClick={() => setOpen((v) => !v)}
+          aria-expanded={open}
+          aria-label={`Edge job: ${line}`}
+          title={mono ?? p.summary}
+        >
+          <span
+            className={`inline-block h-1.5 w-1.5 shrink-0 rounded-full ${
+              p.status === "running" ? "animate-pulse bg-accent" : p.status === "failed" ? "bg-danger" : "bg-muted/40"
+            }`}
+            aria-hidden
+          />
+          <span className="min-w-0 flex-1 truncate font-mono text-[11px] text-text">{line}</span>
+          {mark}
+          <span className="shrink-0 text-[10px] text-muted" aria-hidden>
+            {open ? "▾" : "▸"}
+          </span>
+        </button>
+        {details}
+        {error ? <p className="px-2 pb-1 text-xs text-danger">{error}</p> : null}
+      </div>
+    );
+  }
+
   return (
     <section aria-label={`Edge job: ${p.summary}`} className="pc-card">
       <div className="flex flex-wrap items-center gap-2">
@@ -182,102 +288,47 @@ function EdgeCard({ p, e, onDecide }: { p: PiProposal; e: PiEdgeJob; onDecide: D
           <StatusPill status={state.tone}>{state.label}</StatusPill>
         </span>
       </div>
-      <p className="text-body font-medium text-text">{p.summary}</p>
+      <p className="text-body font-medium text-text" title={p.summary}>
+        {p.summary.length > 120 ? `${p.summary.slice(0, 117)}…` : p.summary}
+      </p>
       {mono ? (
         <p className="truncate font-mono text-[12.5px] text-muted" title={mono}>
           {mono}
         </p>
       ) : null}
-      {p.status === "pending" ? (
-        <div className="flex flex-wrap items-center gap-2 pt-0.5">
-          <Button size="sm" disabled={!!busy || !onDecide} onClick={() => void decide("run")}>
-            {busy === "once" ? "Approving…" : "Approve"}
-          </Button>
-          <Button size="sm" variant="ghost" disabled={!!busy || !onDecide} onClick={() => void decide("decline")}>
-            {busy === "decline" ? "Cancelling…" : "Cancel"}
-          </Button>
-          <button
-            type="button"
-            className="text-caption font-medium text-muted hover:text-text"
-            aria-expanded={open}
-            onClick={() => setOpen((v) => !v)}
+      <div className="flex flex-wrap items-center gap-2 pt-0.5">
+        <Button size="sm" disabled={!!busy || !onDecide} onClick={() => void decide("run")}>
+          {busy === "once" ? "Approving…" : "Approve"}
+        </Button>
+        {showCommandAlways ? (
+          <Button
+            size="sm"
+            variant="ghost"
+            disabled={!!busy || !onDecide}
+            onClick={() => void decide("run", "command")}
+            title={family ? `Remember ${family} commands in this workspace` : undefined}
           >
-            {open ? "Less" : "Details"}
-          </button>
-        </div>
-      ) : (
-        <div className="flex flex-wrap items-center gap-2 pt-0.5">
-          {(p.status === "done" || p.status === "failed") && resultPreview ? (
-            <p className={`min-w-0 flex-1 truncate text-caption ${p.status === "done" ? "text-ok" : "text-danger"}`} title={p.result ?? undefined}>
-              {resultPreview}
-              {(p.result?.length ?? 0) > 120 ? "…" : ""}
-            </p>
-          ) : null}
-          <button
-            type="button"
-            className="ml-auto text-caption font-medium text-muted hover:text-text"
-            aria-expanded={open}
-            onClick={() => setOpen((v) => !v)}
-          >
-            {open ? "Less" : "Details"}
-          </button>
-        </div>
-      )}
-      {open ? (
-        <div className="mt-2 flex flex-col gap-2 border-t border-line pt-2">
-          <dl className="pc-values sans" aria-label="What will run">
-            <Fact k="On">{e.deviceName}</Fact>
-            {command != null ? (
-              <Fact k="Command">
-                <code className="font-mono text-[13px]">{command}</code>
-              </Fact>
-            ) : null}
-            {path != null ? (
-              <Fact k="Path">
-                <code className="font-mono text-[13px]">{path}</code>
-              </Fact>
-            ) : null}
-            {contents != null ? (
-              <Fact k="Contents">
-                <Value v={contents} />
-              </Fact>
-            ) : null}
-          </dl>
-          {p.status === "pending" ? (
-            <div className="flex flex-col gap-2">
-              <div className="flex flex-wrap items-center gap-2">
-                {showCommandAlways ? (
-                  <Button size="sm" variant="ghost" disabled={!!busy || !onDecide} onClick={() => void decide("run", "command")}>
-                    {busy === "command" ? "Saving…" : "Always allow this command"}
-                  </Button>
-                ) : null}
-                {showFolder ? (
-                  <Button size="sm" variant="ghost" disabled={!!busy || !onDecide} onClick={() => void decide("run", "path_read")}>
-                    {busy === "path_read" ? "Saving…" : "Always allow this folder"}
-                  </Button>
-                ) : null}
-                {showCommandAlways ? (
-                  <Button size="sm" variant="ghost" disabled={!!busy || !onDecide} onClick={() => void decide("decline", "deny")}>
-                    {busy === "deny" ? "Saving…" : "Deny always"}
-                  </Button>
-                ) : null}
-              </div>
-              <span className="text-caption text-dim">Runs on your computer only after you Approve. Always-allow remembers for next time in this workspace.</span>
-            </div>
-          ) : null}
-          {(p.status === "done" || p.status === "failed") && p.result ? (
-            <div className={`pc-outcome ${p.status === "done" ? "ok" : "danger"}`}>
-              <span className="min-w-0 whitespace-pre-wrap break-words">{p.result}</span>
-            </div>
-          ) : null}
-          {p.decidedBy && p.status !== "pending" ? (
-            <p className="text-caption text-dim">
-              {p.status === "declined" ? "Cancelled" : "Approved"} by {p.decidedBy}
-              {p.decidedAt ? ` · ${new Date(p.decidedAt).toLocaleString()}` : ""}
-            </p>
-          ) : null}
-        </div>
-      ) : null}
+            {busy === "command" ? "Saving…" : alwaysLabel}
+          </Button>
+        ) : null}
+        {showFolder ? (
+          <Button size="sm" variant="ghost" disabled={!!busy || !onDecide} onClick={() => void decide("run", "path_read")} title={folderHint ?? undefined}>
+            {busy === "path_read" ? "Saving…" : "Allow this folder"}
+          </Button>
+        ) : null}
+        <Button size="sm" variant="ghost" disabled={!!busy || !onDecide} onClick={() => void decide("decline")}>
+          {busy === "decline" ? "Cancelling…" : "Cancel"}
+        </Button>
+        <button
+          type="button"
+          className="text-caption font-medium text-muted hover:text-text"
+          aria-expanded={open}
+          onClick={() => setOpen((v) => !v)}
+        >
+          {open ? "Less" : "Details"}
+        </button>
+      </div>
+      {details}
       {error && <p className="text-xs text-danger">{error}</p>}
     </section>
   );

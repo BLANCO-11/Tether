@@ -102,7 +102,8 @@ import { filesUsedBy, workspaceFileService } from "../services/workspace-file.se
 import { stepApprovalService } from "../services/step-approval.service.js";
 import { usageService } from "../services/usage.service.js";
 import { edgeDeviceService, type EdgeJobKind } from "../services/edge-device.service.js";
-import { applyEdgeAlways, type EdgeAlways } from "../services/edge-trust.service.js";
+import { applyEdgeAlways, edgeJobNeedsApprovalForOwner, type EdgeAlways } from "../services/edge-trust.service.js";
+import { edgeJobUnderFolder, folderPatternFromJob } from "../services/edge-command-allowlist.js";
 import { PERSONAL_PRODUCT } from "../personal.js";
 import type { RunRequester } from "../services/run-requester.js";
 import type { RevisionAuthor } from "../services/revision-author.js";
@@ -283,10 +284,20 @@ type Session = {
   /** What a workflow account card stopped (a test, with its options, or a save): a test runs again once they choose. */
   accountResume?: { kind: "test"; opts: Parameters<typeof verifyAndRun>[2] } | { kind: "save" };
   /**
-   * Edge jobs that finished while a turn was still running: Forge continues with each result once idle.
-   * Without this, the chat dumps stdout and then sits on Ready until the person says "okay".
+   * Edge jobs that finished and are waiting for ONE batched Forge continue (Actions rows + a short summary).
+   * Without this, each settle fired its own turn and the chat filled with micro-updates.
    */
-  pendingEdgeContinues: Array<{ jobId: string; told: string }>;
+  pendingEdgeContinues: Array<{
+    jobId: string;
+    status: string;
+    error: string | null;
+    result: Record<string, unknown> | null;
+    kind: string;
+    payload: Record<string, unknown>;
+    activity: PiActivity;
+  }>;
+  /** Debounce timer so rapid settles (folder-grant auto-approves) coalesce into one continue. */
+  edgeFlushTimer: ReturnType<typeof setTimeout> | null;
   /** Job ids already handed to a continuation turn — never continue the same settle twice. */
   edgeContinued: Set<string>;
 };
@@ -1667,11 +1678,16 @@ async function prepareReferences(s: Session): Promise<string[]> {
   return cardsBlock(refs, s.refsMoved.splice(0));
 }
 
+type RunTurnShown = Pick<PiChatMessage, "text" | "answers" | "by" | "attachments" | "silent"> & {
+  /** Edge jobs already finished — show under What Forge did; chat reply stays a short summary. */
+  seedActivities?: PiActivity[];
+};
+
 async function runTurn(
   s: Session,
   userText: string,
   fixRound = 0,
-  shown?: Pick<PiChatMessage, "text" | "answers" | "by" | "attachments">,
+  shown?: RunTurnShown,
   /** Try again: re-run the last turn — no second copy of the person's message in the chat. */
   retry = false,
 ) {
@@ -1679,6 +1695,11 @@ async function runTurn(
     const err = new Error("a turn is already running") as Error & { statusCode?: number };
     err.statusCode = 409;
     throw err;
+  }
+
+  if (s.edgeFlushTimer) {
+    clearTimeout(s.edgeFlushTimer);
+    s.edgeFlushTimer = null;
   }
 
   const userMsg: PiChatMessage = {
@@ -1690,6 +1711,7 @@ async function runTurn(
     ...(fixRound === 0 && shown?.answers?.length ? { answers: shown.answers } : {}),
     ...(fixRound === 0 && shown?.by ? { by: shown.by } : {}),
     ...(fixRound === 0 && shown?.attachments?.length ? { attachments: shown.attachments } : {}),
+    ...(fixRound === 0 && shown?.silent ? { silent: true } : {}),
   };
   if (!retry) {
     s.messages.push(userMsg);
@@ -1705,7 +1727,8 @@ async function runTurn(
   }
   let followUp: string | null = null;
 
-  s.liveActivities = [];
+  s.liveActivities = [...(shown?.seedActivities ?? [])];
+  for (const a of s.liveActivities) emit(s, { type: "activity", activity: a });
   s.draftText = "";
   resetThinking(s);
   setStatus(s, "running");
@@ -1950,15 +1973,25 @@ async function runTurn(
     setStatus(s, "failed");
     followUp = null;
   } finally {
+    const stopped = ac.signal.aborted;
     s.abort = null;
     if (!followUp) emit(s, { type: "done" });
+    if (stopped) {
+      // Stop must mean stop: do not flush edge continues into a new turn.
+      if (s.edgeFlushTimer) {
+        clearTimeout(s.edgeFlushTimer);
+        s.edgeFlushTimer = null;
+      }
+      s.pendingEdgeContinues = [];
+      followUp = null;
+    }
   }
   if (followUp) {
     s.lastFixFailure = followUp;
     await runTurn(s, fixPrompt(followUp), fixRound + 1);
-  } else {
-    // Edge jobs that finished mid-turn (or while we were talking) — continue now that we are idle.
-    flushPendingEdgeContinues(s);
+  } else if (!ac.signal.aborted && s.pendingEdgeContinues.length) {
+    // Edge jobs that finished mid-turn — one batched continue once idle (debounce coalesces stragglers).
+    scheduleFlushEdgeContinues(s);
   }
 }
 
@@ -2131,6 +2164,7 @@ export const piBuilderService = {
       proposalOutcomes: [],
       accounts: chat?.connectionChoices && typeof chat.connectionChoices === "object" && !Array.isArray(chat.connectionChoices) ? (chat.connectionChoices as Record<string, PiAccountChoice>) : {},
       pendingEdgeContinues: [],
+      edgeFlushTimer: null,
       edgeContinued: new Set(),
       filesBefore: new Set(),
       refs: chat ? await loadRefs(workspaceId, chat.id).catch(() => []) : [],
@@ -2510,6 +2544,33 @@ export const piBuilderService = {
 
   stop(workspaceId: string, sessionId: string): PiSessionPublic {
     const s = getOrThrow(workspaceId, sessionId);
+    // Drop queued edge continues — otherwise the turn's finally flush restarts Forge after Stop.
+    if (s.edgeFlushTimer) {
+      clearTimeout(s.edgeFlushTimer);
+      s.edgeFlushTimer = null;
+    }
+    s.pendingEdgeContinues = [];
+    // Revoke open edge jobs for this chat so Approve cards and Background don't keep running.
+    const subject = talker(s)?.subject;
+    if (subject) {
+      void edgeDeviceService.listSessionJobs(workspaceId, sessionId, subject).then(async (jobs) => {
+        for (const j of jobs) {
+          if (j.status !== "awaiting_approval" && j.status !== "approved" && j.status !== "running") continue;
+          await edgeDeviceService.cancelJob(workspaceId, j.id, subject, false).catch(() => undefined);
+        }
+        s.pendingEdgeContinues = [];
+        for (const m of s.messages) {
+          for (const p of m.proposals ?? []) {
+            if (p.kind === "edge" && (p.status === "pending" || p.status === "running")) {
+              p.status = "declined";
+              p.result = "Stopped.";
+            }
+          }
+        }
+        emit(s, { type: "messages", messages: s.messages });
+        persistChat(s);
+      });
+    }
     if (s.abort) {
       // Forge is asked to stop (and killed if it has not within a few seconds). The turn clears itself when it
       // ends — clearing it here let the next message reach a process still finishing the old one.
@@ -3216,6 +3277,8 @@ export const piBuilderService = {
     settleEdgeProposalCard(s, { id: job.id, status: job.status, error: job.error, result: job.result });
     emit(s, { type: "background", jobId: job.id, status: job.status } as never);
     if (job.status !== "succeeded" && job.status !== "failed" && job.status !== "revoked") return;
+    // Stop cancelled the job — do not start a new Forge turn.
+    if (job.status === "revoked" && job.error === "Stopped.") return;
     queueOrContinueAfterEdge(s, job);
   },
 };
@@ -3251,18 +3314,23 @@ function forgeEdgeCaller(token: string): { workspaceId: string; subject: string;
   return { workspaceId: s.workspaceId, subject, session: s };
 }
 
-/** One-line summary for an edge job card. */
+/** Short title for an edge job card — full command/path live in params (Details), never in the title. */
 function edgeJobSummary(kind: EdgeJobKind, payload: Record<string, unknown>, deviceName: string): string {
   if (kind === "run_command") {
     const cmd = typeof payload.command === "string" ? payload.command.trim() : "";
-    return cmd ? `Run \`${cmd}\` on ${deviceName}` : `Run a command on ${deviceName}`;
+    if (!cmd) return `Run a command on ${deviceName}`;
+    const one = cmd.replace(/\s+/g, " ");
+    const short = one.length > 48 ? `${one.slice(0, 45)}…` : one;
+    return `Run \`${short}\` on ${deviceName}`;
   }
   if (kind === "write_path") {
     const path = typeof payload.path === "string" ? payload.path : "a file";
-    return `Write to ${path} on ${deviceName}`;
+    const short = path.length > 48 ? `${path.slice(0, 45)}…` : path;
+    return `Write to ${short} on ${deviceName}`;
   }
   const path = typeof payload.path === "string" ? payload.path : "a path";
-  return `Read ${path} on ${deviceName}`;
+  const short = path.length > 48 ? `${path.slice(0, 45)}…` : path;
+  return `Read ${short} on ${deviceName}`;
 }
 
 function edgeJobAction(kind: EdgeJobKind): string {
@@ -3278,9 +3346,53 @@ function pendingEdgeWork(s: Session): boolean {
   );
 }
 
-/** Prompt Forge gets when an edge job settles — full result, not shown as a chat dump. */
-function edgeContinueTold(job: {
+/** How long to wait so rapid edge settles coalesce into one chat reply. */
+const EDGE_FLUSH_MS = 500;
+
+/** One Actions row for a finished edge job (same density as local bash/write). */
+function edgeJobToActivity(job: {
   id: string;
+  status: string;
+  error: string | null;
+  result: Record<string, unknown> | null;
+  kind: string;
+  payload: Record<string, unknown>;
+}): PiActivity {
+  const kind = job.kind as EdgeJobKind;
+  const payload = job.payload ?? {};
+  let actKind: PiActivity["kind"] = "other";
+  let title = edgeJobSummary(kind, payload, "Mac");
+  if (kind === "run_command") {
+    actKind = "bash";
+    const cmd = typeof payload.command === "string" ? payload.command.trim().replace(/\s+/g, " ") : "";
+    title = cmd ? (cmd.length > 72 ? `${cmd.slice(0, 71)}…` : cmd) : "command";
+  } else if (kind === "write_path") {
+    actKind = "write";
+    const path = typeof payload.path === "string" ? payload.path : "";
+    const base = path.includes("/") ? path.slice(path.lastIndexOf("/") + 1) : path;
+    title = base ? `Wrote ${base}` : "Wrote a file";
+  } else if (kind === "read_path") {
+    actKind = "read";
+    const path = typeof payload.path === "string" ? payload.path : "";
+    const base = path.includes("/") ? path.slice(path.lastIndexOf("/") + 1) : path;
+    title = base ? `Read ${base}` : "Read a file";
+  }
+  const outcome = edgeJobOutcomeText(job);
+  const now = new Date().toISOString();
+  return {
+    id: `edge-${job.id}`,
+    tool: "edge-run",
+    kind: actKind,
+    title,
+    detail: outcome.length > 800 ? `${outcome.slice(0, 799)}…` : outcome,
+    status: job.status === "failed" || job.status === "revoked" ? "error" : "done",
+    startedAt: now,
+    endedAt: now,
+  };
+}
+
+/** Prompt block for one settled job (batched into edgeContinueToldBatch). */
+function edgeContinueJobBlock(job: {
   status: string;
   error: string | null;
   result: Record<string, unknown> | null;
@@ -3288,16 +3400,39 @@ function edgeContinueTold(job: {
   payload: Record<string, unknown>;
 }): string {
   const summary = edgeJobSummary(job.kind as EdgeJobKind, job.payload ?? {}, "their computer");
-  const outcome = edgeJobOutcomeText(job);
+  return `(${job.status}) ${summary}\nResult:\n${edgeJobOutcomeText(job)}`;
+}
+
+/**
+ * What Forge is told when edge work settles — full results for the model, but the chat reply must be short.
+ * The Actions accordion already lists each job.
+ */
+function edgeContinueToldBatch(
+  jobs: Array<{
+    status: string;
+    error: string | null;
+    result: Record<string, unknown> | null;
+    kind: string;
+    payload: Record<string, unknown>;
+  }>,
+): string {
+  const n = jobs.length;
+  const body =
+    n === 1
+      ? `Work on the person's computer finished:\n\n${edgeContinueJobBlock(jobs[0]!)}`
+      : `Several jobs finished on the person's computer (${n}):\n\n` +
+        jobs.map((j, i) => `${i + 1}. ${edgeContinueJobBlock(j)}`).join("\n\n");
   return (
-    `Work on the person's computer finished (${job.status}) for: ${summary}\n\n` +
-    `Result:\n${outcome}\n\n` +
-    `Continue their request with this result. Do not ask them to approve again, and do not ask them to say "okay" — proceed.`
+    `${body}\n\n` +
+    `Continue their request with these results. Reply with ONE short summary of where things stand (a few sentences). ` +
+    `Each job already appears under What Forge did — do not narrate every file or command in the chat. ` +
+    `Do not ask them to approve again, and do not ask them to say "okay" — proceed.`
   );
 }
 
 /**
- * Continue Forge with an edge result when idle; if a turn is still running, queue for flushPendingEdgeContinues.
+ * Queue a settled edge job for a batched continue. Never starts a turn per job — that flooded the chat.
+ * Mid-turn settles wait for the turn's finally; idle settles debounce then flush once.
  */
 function queueOrContinueAfterEdge(
   s: Session,
@@ -3311,15 +3446,26 @@ function queueOrContinueAfterEdge(
   },
 ): void {
   if (s.edgeContinued.has(job.id)) return;
-  const told = edgeContinueTold(job);
-  if (s.abort || s.testing || s.compacting || s.status === "running") {
-    if (!s.pendingEdgeContinues.some((p) => p.jobId === job.id)) {
-      s.pendingEdgeContinues.push({ jobId: job.id, told });
-    }
-    return;
-  }
-  s.edgeContinued.add(job.id);
-  void runTurn(s, told, 0, { text: "(work on your computer finished)", by: edgeContinueBy(s) });
+  if (s.pendingEdgeContinues.some((p) => p.jobId === job.id)) return;
+  s.pendingEdgeContinues.push({
+    jobId: job.id,
+    status: job.status,
+    error: job.error,
+    result: job.result,
+    kind: job.kind,
+    payload: job.payload ?? {},
+    activity: edgeJobToActivity(job),
+  });
+  if (s.abort || s.testing || s.compacting || s.status === "running") return;
+  scheduleFlushEdgeContinues(s);
+}
+
+function scheduleFlushEdgeContinues(s: Session): void {
+  if (s.edgeFlushTimer) clearTimeout(s.edgeFlushTimer);
+  s.edgeFlushTimer = setTimeout(() => {
+    s.edgeFlushTimer = null;
+    flushPendingEdgeContinues(s);
+  }, EDGE_FLUSH_MS);
 }
 
 /** Attribution for a Foundry-driven continuation — keep the person's subject so later cards still know who asked. */
@@ -3372,21 +3518,35 @@ function updateEdgeCardResult(s: Session, jobId: string, result: string): void {
 }
 
 /**
- * Chat reopen after a job already finished: continue once if the card still looks unfinished.
+ * Chat reopen after a job already finished while the card still looks unfinished (pending/running).
+ * Do NOT continue historical Done cards — that re-fired Forge on every reopen and littered the chat.
+ * Also: if a folder grant now covers an awaiting job, approve it (printf/heredoc under the granted tree).
  */
 async function catchUpSettledEdgeJobs(s: Session): Promise<void> {
   const subject = talker(s)?.subject;
   if (!subject) return;
   const cards = [...s.proposals, ...s.messages.flatMap((m) => m.proposals ?? [])].filter(
-    (p): p is PiProposal & { edge: NonNullable<PiProposal["edge"]> } => p.kind === "edge" && !!p.edge?.jobId,
+    (p): p is PiProposal & { edge: NonNullable<PiProposal["edge"]> } =>
+      p.kind === "edge" && !!p.edge?.jobId && (p.status === "pending" || p.status === "running"),
   );
   for (const p of cards) {
     if (s.edgeContinued.has(p.edge.jobId)) continue;
-    if (p.status === "declined") continue;
     try {
       const job = await edgeDeviceService.getJob(s.workspaceId, p.edge.jobId, subject, false);
+      if (job.status === "awaiting_approval" && p.status === "pending") {
+        const payload = (job.payload ?? {}) as Record<string, unknown>;
+        const stillNeeds = await edgeJobNeedsApprovalForOwner(s.workspaceId, subject, job.kind as EdgeJobKind, payload);
+        if (!stillNeeds) {
+          p.status = "running";
+          p.result = `Approved by folder grant. Running on ${p.edge.deviceName}…`;
+          emit(s, { type: "messages", messages: s.messages });
+          persistChat(s);
+          await edgeDeviceService.approveJob(s.workspaceId, job.id, subject, false).catch(() => undefined);
+          void followEdgeJobAfterApprove(s, job.id, subject);
+        }
+        continue;
+      }
       if (job.status !== "succeeded" && job.status !== "failed" && job.status !== "revoked") continue;
-      // Card may already show Done (settle ran with no live session to continue). Still continue once.
       settleEdgeProposalCard(s, { id: job.id, status: job.status, error: job.error, result: job.result });
       queueOrContinueAfterEdge(s, {
         id: job.id,
@@ -3402,16 +3562,21 @@ async function catchUpSettledEdgeJobs(s: Session): Promise<void> {
   }
 }
 
+/** Drain every queued edge settle into one Forge turn: Actions rows + one summary reply. */
 function flushPendingEdgeContinues(s: Session): void {
-  if (s.abort || s.testing || s.compacting) return;
-  const next = s.pendingEdgeContinues.shift();
-  if (!next) return;
-  if (s.edgeContinued.has(next.jobId)) {
-    flushPendingEdgeContinues(s);
-    return;
-  }
-  s.edgeContinued.add(next.jobId);
-  void runTurn(s, next.told, 0, { text: "(work on your computer finished)", by: edgeContinueBy(s) });
+  if (s.abort || s.testing || s.compacting || s.status === "running") return;
+  const batch = s.pendingEdgeContinues.splice(0);
+  if (!batch.length) return;
+  const fresh = batch.filter((p) => !s.edgeContinued.has(p.jobId));
+  for (const p of fresh) s.edgeContinued.add(p.jobId);
+  if (!fresh.length) return;
+  const told = edgeContinueToldBatch(fresh);
+  void runTurn(s, told, 0, {
+    text: "(work on your computer finished)",
+    silent: true,
+    by: edgeContinueBy(s),
+    seedActivities: fresh.map((p) => p.activity),
+  });
 }
 
 /**
@@ -4051,6 +4216,52 @@ function maybeResumeAfterSurfaceAct(s: Session, label: string, kind: "ask" | "ac
   void runTurn(s, told, 0, { text: shown, by: { subject: null, name: label } });
 }
 
+/**
+ * After a directory grant: approve every other pending edge card in this chat whose paths sit under that folder.
+ * Without this, "Allow this folder" still left N file cards waiting one-by-one.
+ */
+async function approvePendingEdgeUnderFolder(
+  s: Session,
+  workspaceId: string,
+  subject: string,
+  label: string,
+  folder: string,
+  exceptProposalId: string,
+): Promise<void> {
+  const pending: PiProposal[] = [];
+  for (const m of s.messages) {
+    for (const p of m.proposals ?? []) {
+      if (p.id === exceptProposalId) continue;
+      if (p.kind !== "edge" || p.status !== "pending" || !p.edge?.jobId) continue;
+      const payload = (p.params ?? {}) as Record<string, unknown>;
+      if (!edgeJobUnderFolder(p.edge.kind as EdgeJobKind, payload, folder)) continue;
+      pending.push(p);
+    }
+  }
+  if (!pending.length) return;
+  for (const p of pending) {
+    p.status = "running";
+    p.decidedBy = label;
+    p.decidedAt = new Date().toISOString();
+    p.result = `Approved with folder ${folder}. Running on ${p.edge!.deviceName}…`;
+    try {
+      await edgeDeviceService.approveJob(workspaceId, p.edge!.jobId, subject, false);
+      s.proposalOutcomes.push(outcomeLine(p));
+      void followEdgeJobAfterApprove(s, p.edge!.jobId, subject);
+    } catch (e) {
+      const code = (e as { statusCode?: number }).statusCode;
+      if (code === 409) {
+        void followEdgeJobAfterApprove(s, p.edge!.jobId, subject);
+      } else {
+        p.status = "failed";
+        p.result = (e as Error).message;
+      }
+    }
+  }
+  emit(s, { type: "messages", messages: s.messages });
+  persistChat(s);
+}
+
 async function decideProposal(
   workspaceId: string,
   sessionId: string,
@@ -4064,6 +4275,8 @@ async function decideProposal(
   surfaceAct?: { actionId?: string; selected?: string[] },
   /** Edge Approve card: remember allow/deny for later jobs. */
   always?: EdgeAlways | null,
+  /** Directory grant target (common folder from the dock); overrides inference from this job alone. */
+  folder?: string | null,
 ): Promise<PiProposal> {
   const s = getOrThrow(workspaceId, sessionId);
   const at = s.messages.findIndex((m) => m.proposals?.some((p) => p.id === proposalId));
@@ -4120,15 +4333,33 @@ async function decideProposal(
     return actSurface(s, p, update, label, person, surfaceAct);
   }
   if (p.kind === "edge" && p.edge) {
+    const payload = (p.params ?? {}) as Record<string, unknown>;
+    let grantedFolder: string | null = null;
     if (always === "command" || always === "path_read") {
-      await applyEdgeAlways(
+      grantedFolder = await applyEdgeAlways(
         workspaceId,
         person.subject,
         person.subject,
         always,
         p.edge.kind as EdgeJobKind,
-        (p.params ?? {}) as Record<string, unknown>,
+        payload,
+        always === "path_read" ? folder : null,
       );
+    } else if (always == null && (folder || folderPatternFromJob(p.edge.kind as EdgeJobKind, payload))) {
+      // First Approve on a folder-touching job is the directory grant — matches "ask once, then work there".
+      grantedFolder = await applyEdgeAlways(
+        workspaceId,
+        person.subject,
+        person.subject,
+        "path_read",
+        p.edge.kind as EdgeJobKind,
+        payload,
+        folder,
+      );
+    }
+    // One folder Allow clears every pending edge card under that tree — not one Approve per file.
+    if (grantedFolder) {
+      await approvePendingEdgeUnderFolder(s, workspaceId, person.subject, label, grantedFolder, proposalId);
     }
     update({ status: "running", decidedBy: label, decidedAt: new Date().toISOString(), result: `Approved. Running on ${p.edge.deviceName}…` });
     try {

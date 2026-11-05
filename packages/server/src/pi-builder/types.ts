@@ -150,6 +150,11 @@ export type PiChatMessage = {
   files?: { name: string; size: number; type: string }[];
   /** Changes Forge Agent proposed in this reply (plugins phase 6): each shown as a card, done only by the person's click. */
   proposals?: PiProposal[];
+  /**
+   * Server-driven turn (edge job settled): the model still gets `text` as the user prompt, but the UI does not
+   * draw an Asked bubble — otherwise "(work on your computer finished)" littered the chat.
+   */
+  silent?: boolean;
 };
 
 /**

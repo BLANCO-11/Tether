@@ -219,3 +219,33 @@ describe("which account (plugins 8.5)", () => {
     expect(screen.getByText(/Confirmed by me, through their own “Mine”/)).toBeTruthy();
   });
 });
+
+describe("edge jobs (remote computer)", () => {
+  const edge = (over: Partial<PiProposal> = {}): PiProposal =>
+    ({
+      id: "e1",
+      kind: "edge",
+      tool: "edge-run",
+      connector: "mac",
+      action: "Run a command",
+      summary: "Run `npm install` on mac",
+      params: { command: "npm install" },
+      status: "pending",
+      at: "",
+      edge: { jobId: "j1", deviceId: "d1", deviceName: "mac", kind: "run_command" },
+      ...over,
+    }) as PiProposal;
+
+  it("a pending edge job stays a full Approve card", () => {
+    render(<ProposalCard p={edge()} onDecide={vi.fn()} />);
+    expect(screen.getByRole("button", { name: "Approve" })).toBeTruthy();
+    expect(screen.queryByTestId("edge-action-line")).toBeNull();
+  });
+
+  it("a settled edge job collapses to an Actions one-liner", () => {
+    render(<ProposalCard p={edge({ status: "done", result: "ok\n" })} onDecide={null} />);
+    expect(screen.queryByRole("button", { name: "Approve" })).toBeNull();
+    expect(screen.getByTestId("edge-action-line")).toBeTruthy();
+    expect(screen.getByText("mac · $ npm install")).toBeTruthy();
+  });
+});

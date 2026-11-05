@@ -145,6 +145,19 @@ describe("one header, and the chat as turns (2026-10-10)", () => {
     // control: a system note with no turn to belong to stands alone
     expect(chatItems([m("note", "system")] as never).map((i) => i.kind)).toEqual(["note"]);
   });
+
+  it("silent edge-continue user messages start a turn with no Asked bubble", () => {
+    const m = (id: string, role: "user" | "assistant" | "system", extra = {}) => ({ id, role, text: id, at: "", ...extra });
+    const items = chatItems([
+      m("cont", "user", { silent: true, text: "(work on your computer finished)" }),
+      m("a1", "assistant"),
+    ] as never);
+    expect(items).toHaveLength(1);
+    const turn = items[0] as { kind: "turn"; user: { id: string } | null; replies: Array<{ id: string }> };
+    expect(turn.kind).toBe("turn");
+    expect(turn.user).toBeNull();
+    expect(turn.replies.map((r) => r.id)).toEqual(["a1"]);
+  });
 });
 
 describe("the Pi builder's live connection", () => {

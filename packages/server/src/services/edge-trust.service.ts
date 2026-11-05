@@ -5,9 +5,9 @@ import { and, eq } from "drizzle-orm";
 import { db } from "../db/index.js";
 import { edgeTrustRules } from "../db/schema.js";
 import {
+  commandTrustPattern,
   evaluateEdgeJobApproval,
   folderPatternFromJob,
-  normalizeCommandPattern,
   type EdgeTrustEffect,
   type EdgeTrustRule,
   type EdgeTrustScope,
@@ -68,8 +68,23 @@ async function upsertRule(
     .onConflictDoNothing();
 }
 
+/** Persist a directory grant (read + write) for an explicit folder path. */
+export async function grantEdgeFolder(
+  workspaceId: string,
+  ownerSubject: string,
+  createdBy: string,
+  folder: string,
+): Promise<string> {
+  const trimmed = folder.trim().replace(/\/+$/, "");
+  if (!trimmed || trimmed.length > 500) throw httpErr("That folder is not valid.", 400);
+  await upsertRule(workspaceId, ownerSubject, createdBy, "allow", "path_read", trimmed);
+  await upsertRule(workspaceId, ownerSubject, createdBy, "allow", "path_write", trimmed);
+  return trimmed;
+}
+
 /**
  * Persist Always-allow / Deny-always from the Edge Approve card, then the job can be approved or revoked.
+ * `folderOverride` — when granting a directory from the dock (common ancestor of several pending jobs).
  */
 export async function applyEdgeAlways(
   workspaceId: string,
@@ -78,17 +93,20 @@ export async function applyEdgeAlways(
   always: EdgeAlways,
   kind: EdgeJobKind,
   payload: Record<string, unknown>,
-): Promise<void> {
+  folderOverride?: string | null,
+): Promise<string | null> {
   if (always === "command" || always === "deny") {
     const cmd = typeof payload.command === "string" ? payload.command : "";
-    const pattern = normalizeCommandPattern(cmd);
-    if (!pattern) throw httpErr("Cannot remember that command — it is not a safe pattern.", 400);
+    // Family first (`docker`, `npm`) so Allow always covers later variants — not one fragile argv string.
+    const pattern = commandTrustPattern(cmd);
+    if (!pattern) throw httpErr("Cannot remember that command — name a tool like docker or npm.", 400);
     await upsertRule(workspaceId, ownerSubject, createdBy, always === "deny" ? "deny" : "allow", "command", pattern);
-    return;
+    return pattern;
   }
   if (always === "path_read") {
-    const folder = folderPatternFromJob(kind, payload);
+    const folder = (folderOverride?.trim() || folderPatternFromJob(kind, payload) || "").replace(/\/+$/, "");
     if (!folder) throw httpErr("Cannot remember a folder for this job — need a single safe path.", 400);
-    await upsertRule(workspaceId, ownerSubject, createdBy, "allow", "path_read", folder);
+    return grantEdgeFolder(workspaceId, ownerSubject, createdBy, folder);
   }
+  return null;
 }

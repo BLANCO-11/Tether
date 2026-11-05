@@ -600,7 +600,7 @@ piBuilderRouter.post(
   asyncHandler(async (req, res) => {
     // `scope`: where a SETTING change applies (the person, in every chat of theirs, or the workspace), chosen by the button the person pressed.
     // `choice`: on an ACCOUNT card, the connection the person picked for this chat.
-    const { decision, scope, choice, actionId, selected, always } = z
+    const { decision, scope, choice, actionId, selected, always, folder } = z
       .object({
         decision: z.enum(["run", "decline"]),
         scope: z.enum(["me", "workspace"]).optional(),
@@ -608,6 +608,8 @@ piBuilderRouter.post(
         actionId: z.string().max(64).optional(),
         selected: z.array(z.string().max(128)).max(50).optional(),
         always: z.enum(["command", "path_read", "deny"]).nullable().optional(),
+        /** Common directory from the chat dock — grants that tree and approves every pending job under it. */
+        folder: z.string().min(1).max(500).nullable().optional(),
       })
       .strict()
       .parse(req.body ?? {});
@@ -622,6 +624,7 @@ piBuilderRouter.post(
       choice,
       actionId || selected ? { actionId, selected } : undefined,
       always ?? null,
+      folder ?? null,
     );
     res.json({ proposal });
   }),

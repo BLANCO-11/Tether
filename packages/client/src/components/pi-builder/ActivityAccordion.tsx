@@ -46,6 +46,15 @@ export function activityStatusNote(activities: PiActivity[]): string | null {
   return STATUS_NOTE[a.kind] ?? "Working on it…";
 }
 
+/** Collapsed Actions header: latest one-liner + quiet count — e.g. `$ npm install · 3`. */
+export function activityHeaderLine(activities: PiActivity[]): string {
+  if (!activities.length) return "";
+  const last = activities[activities.length - 1]!;
+  const title = last.kind === "bash" && last.title !== "…" ? `$ ${last.title}` : last.title;
+  const n = activities.length;
+  return n === 1 ? title : `${title} · ${n}`;
+}
+
 /**
  * One expandable "Actions" block between chat lines — not an accordion per tool.
  */
@@ -56,7 +65,7 @@ export function ActivityStack({ activities }: { activities: PiActivity[] }) {
 
   if (!activities.length) return null;
 
-  const summary = `${activities.length} action${activities.length === 1 ? "" : "s"}`;
+  const summary = activityHeaderLine(activities);
 
   return (
     <div className="my-1.5">
@@ -79,7 +88,9 @@ export function ActivityStack({ activities }: { activities: PiActivity[] }) {
             aria-hidden
           />
           <span className="text-[11px] font-medium text-muted">What Forge did</span>
-          <span className="min-w-0 flex-1 truncate text-[11px] text-dim">{summary}</span>
+          <span className="min-w-0 flex-1 truncate text-[11px] text-dim" title={summary}>
+            {summary}
+          </span>
           <span className="shrink-0 text-[10px] text-muted" aria-hidden>
             {open ? "▾" : "▸"}
           </span>
