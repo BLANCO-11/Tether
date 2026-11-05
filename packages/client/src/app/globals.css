@@ -88,19 +88,38 @@
   --dim: #6f7573; /* faint labels / eyebrows (WCAG AA on --bg) */
   --muted-soft: rgba(154, 159, 157, 0.5); /* muted, as a hairline or a disabled fill */
 
-  /* Personal palette: chalk CTA (solid) — matte instrument, not blue→indigo gloss. */
-  --accent: #f2f0ef;
-  --grad: linear-gradient(180deg, #f2f0ef 0%, #f2f0ef 100%);
-  --accent-bg: rgba(242, 240, 239, 0.08); /* selected row, active tab */
-  --accent-bg-2: rgba(242, 240, 239, 0.14); /* its hover / pressed twin */
-  --accent-line: rgba(242, 240, 239, 0.22); /* accent as a border */
-  --accent-soft: rgba(242, 240, 239, 0.85); /* accent as secondary text */
-  --path: #7aada0; /* a condition's path on the canvas — sea glass; not status/selection */
-  --glow: rgba(242, 240, 239, 0); /* matte: no outer glow bloom */
-  /* ⚠ Text ON a solid --accent fill, and it FLIPS between the themes — dark's
-     chalk needs ink text; light's ink needs chalk text. A theme-dependent
-     foreground cannot be a Tailwind literal; it has to be a token. */
-  --on-accent: #0e1111;
+  /* ── Character set (theme-mock lock) — used as a SET across roles, not one hue.
+     Dark: chalk · horizon · ember · mauve · sea-glass.
+     Light remaps these to ink · slate · terracotta · sage · plum (same token names). */
+  --chalk: #f2f0ef;
+  --horizon: #6b9bd1;
+  --horizon-soft: #8eb4dc;
+  --ember: #e3925a;
+  --ember-soft: #efb089;
+  --mauve: #b895c4;
+  --sea: #7aada0;
+
+  /* Roles — each character has a job; do not collapse them into one accent. */
+  --cta-fill: var(--chalk); /* primary button / brand mark */
+  --cta-hover: #ffffff;
+  --on-cta: #0e1111;
+  --grad: linear-gradient(180deg, var(--cta-fill) 0%, var(--cta-fill) 100%);
+  --accent: var(--horizon); /* selection, links, focus, active rail */
+  --accent-bg: rgba(107, 155, 209, 0.12);
+  --accent-bg-2: rgba(107, 155, 209, 0.2);
+  --accent-line: rgba(107, 155, 209, 0.4);
+  --accent-soft: var(--horizon-soft);
+  --on-accent: #0e1111; /* text on solid horizon */
+  --path: var(--sea); /* condition paths / tool kind */
+  --indicator: var(--horizon); /* active rail inset */
+  --indicator-alt: var(--ember); /* attention badge twin */
+  --info: var(--horizon-soft);
+  --info-bg: rgba(107, 155, 209, 0.12);
+  --info-line: rgba(107, 155, 209, 0.4);
+  --badge-fg: var(--ember-soft);
+  --badge-bg: rgba(227, 146, 90, 0.12);
+  --badge-line: rgba(227, 146, 90, 0.35);
+  --glow: rgba(107, 155, 209, 0); /* matte: no outer glow bloom */
 
   /* Semantic colors + matching translucent pill backgrounds. */
   --ok: #3dba8c;
@@ -108,7 +127,7 @@
   --warn: #e0a84a;
   --warn-bg: rgba(224, 168, 74, 0.12);
   --warn-line: rgba(224, 168, 74, 0.35);
-  --orange: #e3925a; /* ember — "changes real data" */
+  --orange: var(--ember); /* "changes real data" — character ember */
   --orange-bg: rgba(227, 146, 90, 0.12);
   --danger: #e57373;
   --danger-bg: rgba(229, 115, 115, 0.12);
@@ -120,7 +139,7 @@
      notice means "this part of Foundry is unfinished". One hue for both makes a
      permanent product disclaimer and a live incident look identical — and since
      the disclaimer is on every page, it is the incident that stops being read. */
-  --alpha: #b895c4;
+  --alpha: var(--mauve); /* unfinished / pending — character mauve */
   --alpha-bg: rgba(184, 149, 196, 0.1);
   --alpha-line: rgba(184, 149, 196, 0.34);
 
@@ -133,17 +152,17 @@
      ⚠ Colour is never the only carrier — every node also states its kind in
      words, because a palette of six hues is exactly where colour-alone encoding
      stops working. */
-  --k-datasource: #6b9bd1; /* horizon */
+  --k-datasource: var(--horizon);
   --k-transform: #9a9f9d;
-  --k-code: #b895c4; /* mauve */
-  --k-tool: #7aada0; /* sea glass */
+  --k-code: var(--mauve);
+  --k-tool: var(--sea);
   --k-approval: #d4a0b8;
-  --k-agent: #e3925a; /* ember */
-  --k-llm: #e3925a;
-  --k-http: #efb089;
+  --k-agent: var(--ember);
+  --k-llm: var(--ember);
+  --k-http: var(--ember-soft);
   /* A loop (For each, its output, and the box around what repeats): a hue of its own, so the section that runs once per
      item reads apart from the steps that run once — the box is tinted with it, never only outlined. */
-  --k-loop: #8eb4dc;
+  --k-loop: var(--horizon-soft);
   /* An unknown kind: the engine ran a task Foundry holds no pointer for. Drawn,
      never hidden — a step the UI cannot classify is still a step that ran. */
   --k-unknown: #6f7573;
@@ -154,7 +173,12 @@
      Keep each in sync with its hex twin. */
   --bg-rgb: 14 17 17;
   --surface-rgb: 22 26 26;
-  --accent-rgb: 242 240 239;
+  --accent-rgb: 107 155 209;
+  --cta-fill-rgb: 242 240 239;
+  --horizon-rgb: 107 155 209;
+  --ember-rgb: 227 146 90;
+  --mauve-rgb: 184 149 196;
+  --sea-rgb: 122 173 160;
   --ok-rgb: 61 186 140;
   --warn-rgb: 224 168 74;
   --orange-rgb: 227 146 90;
@@ -206,15 +230,13 @@
      instance; this is the default and the only number. */
   --aside-w: 340px;
 
-  /* ══ LIGHT — Figma off-white #F2F0EF + ink CTA (personal palette lock) ══
+  /* ══ LIGHT — Figma off-white + character set remapped (theme-mock lock) ══
      Declared on :root so it is inert until one of the two rules below points a
      live token at it. Nothing reads `--l-*` directly; if something does, it has
      hardcoded the light theme.
 
-     Ground is off-white; primary is ink #0e1111 (mirror of dark chalk). Character
-     accents (slate · terracotta · sage · plum · fog) live mainly in kind/status
-     tokens. --l-grad stays a flat fill under its old name so .btn-grad keeps
-     working. --l-glow stays zeroed: matte instrument, no outer glow. */
+     Same TOKEN NAMES as dark (chalk/horizon/ember/mauve/sea), warmer values:
+     chalk→ink, horizon→slate, ember→terracotta, mauve→plum, sea→sage. */
   --l-bg: #f2f0ef;
   --l-surface: #f7f5f4;
   --l-surface-2: #fcfbfb;
@@ -237,40 +259,60 @@
   --l-dim: #7a746c;
   --l-muted-soft: rgba(92, 87, 78, 0.42);
 
-  --l-accent: #0e1111;
-  --l-grad: linear-gradient(180deg, #0e1111 0%, #0e1111 100%);
-  --l-accent-bg: rgba(14, 17, 17, 0.06);
-  --l-accent-bg-2: rgba(14, 17, 17, 0.1);
-  --l-accent-line: rgba(14, 17, 17, 0.18);
-  --l-accent-soft: rgba(14, 17, 17, 0.8);
-  --l-path: #6b8f7a; /* sage */
-  --l-glow: rgba(14, 17, 17, 0);
+  /* Character set — light paper values under the same names. */
+  --l-chalk: #0e1111; /* ink — CTA pigment on paper */
+  --l-horizon: #5a7a96; /* slate */
+  --l-horizon-soft: #7a96ae;
+  --l-ember: #c4785a; /* terracotta */
+  --l-ember-soft: #d49278;
+  --l-mauve: #9a7b8f; /* plum */
+  --l-sea: #6b8f7a; /* sage */
+
+  --l-cta-fill: var(--l-chalk);
+  --l-cta-hover: #2a2622;
+  --l-on-cta: #f2f0ef;
+  --l-grad: linear-gradient(180deg, var(--l-cta-fill) 0%, var(--l-cta-fill) 100%);
+  --l-accent: var(--l-horizon);
+  --l-accent-bg: rgba(90, 122, 150, 0.1);
+  --l-accent-bg-2: rgba(90, 122, 150, 0.16);
+  --l-accent-line: rgba(90, 122, 150, 0.35);
+  --l-accent-soft: var(--l-horizon-soft);
   --l-on-accent: #f2f0ef;
+  --l-path: var(--l-sea);
+  --l-indicator: var(--l-horizon);
+  --l-indicator-alt: var(--l-ember);
+  --l-info: var(--l-horizon-soft);
+  --l-info-bg: rgba(90, 122, 150, 0.1);
+  --l-info-line: rgba(90, 122, 150, 0.35);
+  --l-badge-fg: #9a5a3e;
+  --l-badge-bg: rgba(196, 120, 90, 0.12);
+  --l-badge-line: rgba(196, 120, 90, 0.4);
+  --l-glow: rgba(90, 122, 150, 0);
 
   --l-ok: #3d7a5c;
   --l-ok-bg: rgba(61, 122, 92, 0.1);
   --l-warn: #b45309;
   --l-warn-bg: rgba(180, 83, 9, 0.1);
   --l-warn-line: rgba(180, 83, 9, 0.35);
-  --l-orange: #c4785a; /* terracotta */
+  --l-orange: var(--l-ember);
   --l-orange-bg: rgba(196, 120, 90, 0.12);
   --l-danger: #b91c1c;
   --l-danger-bg: rgba(185, 28, 28, 0.1);
   --l-danger-soft: rgba(185, 28, 28, 0.8);
   --l-danger-line: rgba(185, 28, 28, 0.35);
 
-  --l-k-datasource: #5a7a96; /* slate */
-  --l-k-transform: #6b8f7a;
-  --l-k-code: #9a7b8f; /* plum */
-  --l-k-tool: #6b8f7a; /* sage */
+  --l-k-datasource: var(--l-horizon);
+  --l-k-transform: var(--l-sea);
+  --l-k-code: var(--l-mauve);
+  --l-k-tool: var(--l-sea);
   --l-k-approval: #9d174d;
-  --l-k-agent: #c4785a; /* terracotta */
-  --l-k-llm: #c4785a;
-  --l-k-http: #d49278;
-  --l-k-loop: #7a96ae;
+  --l-k-agent: var(--l-ember);
+  --l-k-llm: var(--l-ember);
+  --l-k-http: var(--l-ember-soft);
+  --l-k-loop: var(--l-horizon-soft);
   --l-k-unknown: #7a746c;
 
-  --l-alpha: #9a7b8f;
+  --l-alpha: var(--l-mauve);
   --l-alpha-bg: rgba(154, 123, 143, 0.1);
   --l-alpha-line: rgba(154, 123, 143, 0.34);
 
@@ -285,10 +327,15 @@
   --l-edge-light: rgba(255, 255, 255, 0.8);
 
   /* ⚠ The RGB triplets need light values too, or `bg-accent/80` silently keeps
-     the dark chalk — Tailwind composes alpha onto the triplet, not onto --accent. */
+     the dark horizon — Tailwind composes alpha onto the triplet, not onto --accent. */
   --l-bg-rgb: 242 240 239;
   --l-surface-rgb: 247 245 244;
-  --l-accent-rgb: 14 17 17;
+  --l-accent-rgb: 90 122 150;
+  --l-cta-fill-rgb: 14 17 17;
+  --l-horizon-rgb: 90 122 150;
+  --l-ember-rgb: 196 120 90;
+  --l-mauve-rgb: 154 123 143;
+  --l-sea-rgb: 107 143 122;
   --l-ok-rgb: 61 122 92;
   --l-warn-rgb: 180 83 9;
   --l-orange-rgb: 196 120 90;
@@ -313,6 +360,7 @@
    ⚠ The bodies below are byte-identical and `theme.test.ts` asserts it. If you
    add a token, add it to BOTH — or the theme is correct only for whoever chose
    it explicitly, which is the harder bug to notice. */
+/* ⚠ These two light bodies must stay byte-identical (theme.test.ts). */
 @media (prefers-color-scheme: light) {
   :root:not([data-theme="dark"]) {
     color-scheme: light;
@@ -325,10 +373,16 @@
     --elev-1: var(--l-elev-1); --elev-2: var(--l-elev-2); --elev-3: var(--l-elev-3); --elev-4: var(--l-elev-4);
     --edge-light: var(--l-edge-light);
     --muted-soft: var(--l-muted-soft);
+    --chalk: var(--l-chalk); --horizon: var(--l-horizon); --horizon-soft: var(--l-horizon-soft);
+    --ember: var(--l-ember); --ember-soft: var(--l-ember-soft); --mauve: var(--l-mauve); --sea: var(--l-sea);
+    --cta-fill: var(--l-cta-fill); --cta-hover: var(--l-cta-hover); --on-cta: var(--l-on-cta);
     --accent: var(--l-accent); --grad: var(--l-grad);
     --accent-bg: var(--l-accent-bg); --accent-bg-2: var(--l-accent-bg-2);
     --accent-line: var(--l-accent-line); --accent-soft: var(--l-accent-soft); --path: var(--l-path);
     --glow: var(--l-glow); --on-accent: var(--l-on-accent);
+    --indicator: var(--l-indicator); --indicator-alt: var(--l-indicator-alt);
+    --info: var(--l-info); --info-bg: var(--l-info-bg); --info-line: var(--l-info-line);
+    --badge-fg: var(--l-badge-fg); --badge-bg: var(--l-badge-bg); --badge-line: var(--l-badge-line);
     --ok: var(--l-ok); --ok-bg: var(--l-ok-bg);
     --warn: var(--l-warn); --warn-bg: var(--l-warn-bg); --warn-line: var(--l-warn-line);
     --orange: var(--l-orange); --orange-bg: var(--l-orange-bg);
@@ -341,6 +395,8 @@
     --k-unknown: var(--l-k-unknown);
     --alpha: var(--l-alpha); --alpha-bg: var(--l-alpha-bg); --alpha-line: var(--l-alpha-line);
     --bg-rgb: var(--l-bg-rgb); --surface-rgb: var(--l-surface-rgb); --accent-rgb: var(--l-accent-rgb);
+    --cta-fill-rgb: var(--l-cta-fill-rgb); --horizon-rgb: var(--l-horizon-rgb);
+    --ember-rgb: var(--l-ember-rgb); --mauve-rgb: var(--l-mauve-rgb); --sea-rgb: var(--l-sea-rgb);
     --ok-rgb: var(--l-ok-rgb); --warn-rgb: var(--l-warn-rgb);
     --orange-rgb: var(--l-orange-rgb); --danger-rgb: var(--l-danger-rgb);
     --card-bg: var(--l-card-bg); --card-border: var(--l-card-border); --card-shadow: var(--l-card-shadow);
@@ -357,13 +413,19 @@
   --dots: var(--l-dots); --dash: var(--l-dash); --shadow: var(--l-shadow);
   --scrim: var(--l-scrim); --mask: var(--l-mask);
   --text: var(--l-text); --muted: var(--l-muted); --dim: var(--l-dim);
-  --muted-soft: var(--l-muted-soft);
   --elev-1: var(--l-elev-1); --elev-2: var(--l-elev-2); --elev-3: var(--l-elev-3); --elev-4: var(--l-elev-4);
   --edge-light: var(--l-edge-light);
+  --muted-soft: var(--l-muted-soft);
+  --chalk: var(--l-chalk); --horizon: var(--l-horizon); --horizon-soft: var(--l-horizon-soft);
+  --ember: var(--l-ember); --ember-soft: var(--l-ember-soft); --mauve: var(--l-mauve); --sea: var(--l-sea);
+  --cta-fill: var(--l-cta-fill); --cta-hover: var(--l-cta-hover); --on-cta: var(--l-on-cta);
   --accent: var(--l-accent); --grad: var(--l-grad);
   --accent-bg: var(--l-accent-bg); --accent-bg-2: var(--l-accent-bg-2);
   --accent-line: var(--l-accent-line); --accent-soft: var(--l-accent-soft); --path: var(--l-path);
   --glow: var(--l-glow); --on-accent: var(--l-on-accent);
+  --indicator: var(--l-indicator); --indicator-alt: var(--l-indicator-alt);
+  --info: var(--l-info); --info-bg: var(--l-info-bg); --info-line: var(--l-info-line);
+  --badge-fg: var(--l-badge-fg); --badge-bg: var(--l-badge-bg); --badge-line: var(--l-badge-line);
   --ok: var(--l-ok); --ok-bg: var(--l-ok-bg);
   --warn: var(--l-warn); --warn-bg: var(--l-warn-bg); --warn-line: var(--l-warn-line);
   --orange: var(--l-orange); --orange-bg: var(--l-orange-bg);
@@ -371,16 +433,18 @@
   --danger-soft: var(--l-danger-soft); --danger-line: var(--l-danger-line);
   --k-datasource: var(--l-k-datasource); --k-transform: var(--l-k-transform);
   --k-code: var(--l-k-code); --k-tool: var(--l-k-tool);
-    --k-approval: var(--l-k-approval); --k-agent: var(--l-k-agent);
-    --k-llm: var(--l-k-llm); --k-http: var(--l-k-http); --k-loop: var(--l-k-loop);
+  --k-approval: var(--l-k-approval); --k-agent: var(--l-k-agent);
+  --k-llm: var(--l-k-llm); --k-http: var(--l-k-http); --k-loop: var(--l-k-loop);
   --k-unknown: var(--l-k-unknown);
   --alpha: var(--l-alpha); --alpha-bg: var(--l-alpha-bg); --alpha-line: var(--l-alpha-line);
   --bg-rgb: var(--l-bg-rgb); --surface-rgb: var(--l-surface-rgb); --accent-rgb: var(--l-accent-rgb);
+  --cta-fill-rgb: var(--l-cta-fill-rgb); --horizon-rgb: var(--l-horizon-rgb);
+  --ember-rgb: var(--l-ember-rgb); --mauve-rgb: var(--l-mauve-rgb); --sea-rgb: var(--l-sea-rgb);
   --ok-rgb: var(--l-ok-rgb); --warn-rgb: var(--l-warn-rgb);
   --orange-rgb: var(--l-orange-rgb); --danger-rgb: var(--l-danger-rgb);
   --card-bg: var(--l-card-bg); --card-border: var(--l-card-border); --card-shadow: var(--l-card-shadow);
-    --lift: var(--l-lift);
-    --frost: var(--l-frost); --frost-modal: var(--l-frost-modal);
+  --lift: var(--l-lift);
+  --frost: var(--l-frost); --frost-modal: var(--l-frost-modal);
 }
 
 /* ── ZONE 4's TWO-COLUMN SHAPE — see components/layout/MainAside.tsx ──────────
@@ -451,20 +515,23 @@ select optgroup {
 /* Primary action fill — gradient with glow in dark; flat --l-grad with zeroed
    --l-glow in light, so the same class renders a solid button with no glow. */
 .btn-grad {
-  background: var(--grad);
+  /* Brand / CTA pigment (chalk↔ink), not horizon — selection stays --accent. */
+  background: var(--cta-fill);
   box-shadow: 0 4px 20px -6px var(--glow);
 }
 
 /* The one card that "glows" (Home's primary door): gradient hairline border. */
 
-/* The one primary treatment: flat accent fill, on-accent text that flips with
-   the theme, and a whisper of lift — inset top light plus a short tinted drop.
-   Deliberately NOT a gradient and NOT a glow: depth reads from the edge light,
-   not from decoration. */
-.btn-primary {
-  background: var(--accent);
-  color: var(--on-accent);
+/* Primary CTA: chalk (dark) / ink (light). Selection & links stay --accent (horizon/slate). */
+.btn-primary,
+.btn-cta {
+  background: var(--cta-fill);
+  color: var(--on-cta);
   box-shadow: var(--lift);
+}
+.btn-primary:hover,
+.btn-cta:hover {
+  background: var(--cta-hover);
 }
 
 /* ── Frost: translucent panes, only where content passes beneath ─────────────
@@ -1160,26 +1227,61 @@ body.wb .builder-route .workbench { flex: 1 1 0; min-height: 0; height: 100%; }
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
-  gap: 10px;
+  justify-content: flex-start;
+  gap: 12px;
   height: 100%;
   width: 100%;
+  padding: 12px 0;
   border: 0;
-  background: var(--surface);
-  color: var(--muted);
+  border-left: 1px solid transparent;
+  background: color-mix(in srgb, var(--surface) 70%, transparent);
+  color: var(--dim);
   cursor: pointer;
   font-family: inherit;
   font-size: 11px;
   font-weight: 600;
-  transition: background var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
+  transition: background var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease),
+    border-color var(--dur-fast) var(--ease);
 }
-.pane-rail:hover { background: var(--surface-2); color: var(--text); }
-.pane-rail span {
+.pane-rail:hover {
+  background: var(--accent-bg);
+  color: var(--text);
+  border-left-color: var(--indicator);
+}
+.pane-rail > span:not(.pane-rail-ico):not(.pane-rail-meta) {
   writing-mode: vertical-rl;
   text-transform: uppercase;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.14em;
   font-size: 10px;
 }
+/* Icon-first collapsed canvas: glyph + count, no rotated word. */
+.pane-rail-icon {
+  gap: 14px;
+  padding-top: 14px;
+}
+.pane-rail-ico {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  background: var(--accent-bg);
+  color: var(--horizon);
+}
+.pane-rail:hover .pane-rail-ico {
+  background: var(--accent-bg-2);
+  color: var(--horizon-soft);
+}
+.pane-rail-meta {
+  writing-mode: horizontal-tb;
+  font-size: 10px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
+  color: var(--muted);
+  line-height: 1;
+}
+.pane-rail:hover .pane-rail-meta { color: var(--text); }
 
 @media (min-width: 720px) {
   /* ⚠ TWO TRACKS, not three. The inspector is an overlay inside the canvas
@@ -1634,6 +1736,80 @@ body.wb .page-enter {
 /* ── Forge's chat (2026-10-11): one continuous conversation on the page's own background, the composer floating
    over it with the messages fading out beneath — no band behind the input. */
 .pi-chat { background: var(--bg); }
+/* Prompt jump rail — one tick per prompt; hover flares like a music visualizer. */
+.pi-prompt-rail {
+  position: absolute;
+  left: 2px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 14px;
+  z-index: 6;
+  pointer-events: auto;
+  transition: width 120ms ease;
+}
+.pi-prompt-rail.is-hot {
+  width: 36px;
+}
+.pi-prompt-mark {
+  pointer-events: auto;
+  position: absolute;
+  left: 3px;
+  width: 8px;
+  height: 2px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 1px;
+  background: var(--line-2);
+  cursor: pointer;
+  transition: background 80ms ease, width 80ms ease;
+}
+.pi-prompt-mark:hover,
+.pi-prompt-mark:focus-visible {
+  outline: none;
+}
+.pi-prompt-mark.is-active {
+  background: var(--muted);
+}
+.pi-prompt-mark.is-hot {
+  background: var(--text);
+}
+.pi-prompt-peek {
+  position: absolute;
+  left: 36px;
+  z-index: 7;
+  width: max-content;
+  max-width: min(260px, 70vw);
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: color-mix(in srgb, var(--bg-2) 96%, transparent);
+  box-shadow:
+    0 1px 0 color-mix(in srgb, #fff 4%, transparent),
+    0 12px 28px color-mix(in srgb, #000 45%, transparent);
+  pointer-events: none;
+  white-space: normal;
+}
+.pi-prompt-peek-title {
+  font-size: 12px;
+  font-weight: 650;
+  letter-spacing: 0.01em;
+  color: var(--text);
+  margin-bottom: 4px;
+}
+.pi-prompt-peek-body {
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--muted);
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+@media (prefers-reduced-motion: reduce) {
+  .pi-prompt-rail,
+  .pi-prompt-mark { transition: none; }
+}
 .pi-dock {
   position: absolute; left: 0; right: 0; bottom: 0; z-index: 5;
   padding: 40px 16px 14px;
@@ -1653,8 +1829,10 @@ body.wb .page-enter {
 }
 .pi-mark {
   display: grid; place-items: center; flex: none; width: 22px; height: 22px; margin-top: 1px;
-  border-radius: 7px; background: linear-gradient(140deg, var(--accent), #8b5cf6);
-  color: #fff; font-size: 11px; font-weight: 600; user-select: none;
+  border-radius: 7px;
+  /* Character set in one chip: horizon → mauve → sea */
+  background: linear-gradient(140deg, var(--horizon), var(--mauve) 55%, var(--sea));
+  color: var(--on-cta); font-size: 11px; font-weight: 600; user-select: none;
 }
 
 /* ── Forge canvas: the hover flow (same as the compiled builder's) ──────────────────────────────────────────────
@@ -1711,15 +1889,16 @@ body.wb .page-enter {
 .rail-item:hover .rail-icon { opacity: 1; }
 .rail-item:active { transform: scale(0.985) translateY(0.5px); }
 .rail-item[aria-current="page"] {
-  background: color-mix(in srgb, var(--elev-4) 78%, transparent);
+  background: var(--accent-bg);
   -webkit-backdrop-filter: blur(14px) saturate(150%);
   backdrop-filter: blur(14px) saturate(150%);
-  border-color: color-mix(in srgb, var(--text) 9%, transparent);
-  box-shadow: inset 0 1px 0 color-mix(in srgb, #fff 7%, transparent), 0 3px 8px -4px var(--shadow);
+  border-color: var(--accent-line);
+  box-shadow: inset 3px 0 0 var(--indicator), inset 0 1px 0 color-mix(in srgb, #fff 7%, transparent),
+    0 3px 8px -4px var(--shadow);
   color: var(--text);
   font-weight: 500;
 }
-.rail-item[aria-current="page"] .rail-icon { opacity: 1; color: var(--accent); }
+.rail-item[aria-current="page"] .rail-icon { opacity: 1; color: var(--horizon); }
 /* Collapsed, a group heading's words fade and a hairline fades in through it while the heading shrinks to a thin
    divider row — on the rail's own 280ms curve, so the rows below glide up with the width rather than jump. */
 .rail-group-label {
@@ -1739,7 +1918,7 @@ body.wb .page-enter {
 .rail-sub[aria-current="page"] { background: color-mix(in srgb, var(--text) 7%, transparent); color: var(--text); font-weight: 500; }
 .rail-dot {
   position: absolute; top: -2px; right: -3px; width: 7px; height: 7px; border-radius: 999px;
-  background: var(--warn); box-shadow: 0 0 0 2px var(--bg);
+  background: var(--indicator-alt); box-shadow: 0 0 0 2px var(--bg);
 }
 @media (prefers-reduced-motion: reduce) {
   .rail-item, .rail-item .rail-icon, .rail-sub, .rail-group-label, .rail-group-label::after { transition: none; }

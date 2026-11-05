@@ -142,7 +142,7 @@ export function RoleEditor({
 
       <div className="flex gap-2">
         <button
-          className="rounded bg-accent px-3 py-1 text-sm text-white disabled:opacity-50"
+          className="rounded bg-accent px-3 py-1 text-sm text-on-accent disabled:opacity-50"
           disabled={busy || !name.trim() || chosen.size === 0}
           onClick={() =>
             onSave({ name: name.trim(), description, permissions: [...chosen] })

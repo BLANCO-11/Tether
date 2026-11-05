@@ -9,7 +9,7 @@ type Props = ButtonHTMLAttributes<HTMLButtonElement> & {
 };
 
 const looks: Record<string, string> = {
-  primary: "btn-primary hover:bg-accent/85",
+  primary: "btn-primary",
   ghost: "border border-line text-text hover:bg-surface-2",
   subtle: "bg-surface-2 text-text hover:bg-[color-mix(in_srgb,var(--text)_8%,var(--surface-2))]",
   danger: "bg-danger text-white hover:opacity-90",

@@ -10,7 +10,7 @@ services:
     build:
       context: ../packages/connector
     image: foundry/connector:dev
-    container_name: foundry-connector
+    container_name: foundry-personal-connector
     restart: unless-stopped
     cap_drop: [ALL]
     # SETUID/SETGID to start each worker as uid 30001; KILL to stop one — without it a timed-out worker of another
@@ -22,7 +22,7 @@ services:
       CONNECTOR_EGRESS_SECRET: ${PLUGINS_EGRESS_SECRET:-}
       CONNECTOR_EGRESS_URL: http://connector-egress:3128
     volumes:
-      - foundry_connector:/data
+      - personal_connector:/data
     networks:
       - connector-net
     depends_on:
@@ -35,7 +35,7 @@ services:
     build:
       context: ../packages/connector
     image: foundry/connector:dev
-    container_name: foundry-connector-egress
+    container_name: foundry-personal-connector-egress
     restart: unless-stopped
     command: ["node", "src/egress.mjs"]
     user: node
@@ -54,4 +54,4 @@ networks:
     internal: true
 
 volumes:
-  foundry_connector:
+  personal_connector:

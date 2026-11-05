@@ -383,7 +383,7 @@ function FilePick({
                 }`}
               >
                 {many ? (
-                  <span aria-hidden className={`flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded border text-[10px] ${on ? "border-accent bg-accent text-white" : "border-line"}`}>
+                  <span aria-hidden className={`flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded border text-[10px] ${on ? "border-accent bg-accent text-on-accent" : "border-line"}`}>
                     {on ? "✓" : ""}
                   </span>
                 ) : null}
@@ -485,7 +485,7 @@ function MultiPick({
                 onClick={() => toggle(o)}
                 className="flex w-full items-center gap-2.5 rounded-lg px-3 py-1.5 text-left text-muted transition-colors hover:bg-accent/10 hover:text-text"
               >
-                <span aria-hidden className={`flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded border text-[10px] ${on ? "border-accent bg-accent text-white" : "border-line"}`}>
+                <span aria-hidden className={`flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded border text-[10px] ${on ? "border-accent bg-accent text-on-accent" : "border-line"}`}>
                   {on ? "✓" : ""}
                 </span>
                 <span className="min-w-0 flex-1 truncate" title={o}>

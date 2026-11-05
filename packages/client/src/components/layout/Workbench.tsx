@@ -28,6 +28,7 @@ import type { CSSProperties, ReactNode } from "react";
 import type { WorkbenchVariant } from "@/lib/workbench";
 import { ChevronLeft, ChevronRight } from "@/components/ui/icons";
 
+
 /**
  * One pane. `label` names it for a screen reader — a grid of unlabelled regions
  * is a grid nobody can navigate — and `flush` turns the padding off for a pane
@@ -108,30 +109,51 @@ export function WorkbenchBody({ children, flush }: { children: ReactNode; flush?
 }
 
 /**
- * A pane's collapsed form (D-28): a slim vertical rail with the pane's name
- * and an expand button. The grid column shrinks to 36px via the workbench's
- * `-closed` classes; this is the only thing the pane renders while closed, so
- * there is always one affordance to bring it back.
+ * A pane's collapsed form (D-28): a slim vertical rail with an expand affordance.
+ * The grid column shrinks to 36px via the workbench's `-closed` classes.
+ *
+ * Default: rotated label (Chat). Icon mode (`icon`): glyph + optional meta
+ * (e.g. step count) instead of vertical type — quieter for Canvas.
  */
 export function WorkbenchRail({
   label,
   side,
   onExpand,
+  icon,
+  meta,
 }: {
   label: string;
   /** Which side the rail sits on — decides which chevron points back in. */
   side: "left" | "right";
   onExpand: () => void;
+  /** When set, the rail is icon-first (no rotated word); `label` stays the a11y name. */
+  icon?: ReactNode;
+  /** Short secondary signal under the icon — typically a count. */
+  meta?: string;
 }) {
   return (
     <button
       type="button"
       onClick={onExpand}
       aria-label={`Expand ${label}`}
-      className="pane-rail"
+      title={meta ? `${label} · ${meta}` : label}
+      className={`pane-rail${icon ? " pane-rail-icon" : ""}`}
     >
       {side === "left" ? <ChevronRight s={14} /> : <ChevronLeft s={14} />}
-      <span>{label}</span>
+      {icon ? (
+        <>
+          <span className="pane-rail-ico" aria-hidden>
+            {icon}
+          </span>
+          {meta ? (
+            <span className="pane-rail-meta" aria-hidden>
+              {meta}
+            </span>
+          ) : null}
+        </>
+      ) : (
+        <span>{label}</span>
+      )}
     </button>
   );
 }

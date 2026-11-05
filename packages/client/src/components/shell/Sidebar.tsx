@@ -336,7 +336,7 @@ export function Sidebar({
       >
         <div className="flex h-topbar shrink-0 items-center gap-2 overflow-hidden border-b border-line px-3.5">
           <Link href="/dashboard" onClick={onClose} className="flex min-w-0 items-center gap-2.5">
-            <span className="btn-grad flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-white">
+            <span className="btn-grad flex h-7 w-7 shrink-0 items-center justify-center rounded-lg" style={{ color: "var(--on-cta)" }}>
               <Cube s={16} />
             </span>
             <span className={`text-sm font-semibold ${hideWhenNarrow}`}>Foundry</span>
@@ -359,7 +359,7 @@ export function Sidebar({
             onClick={onClose}
             title={collapsed ? "New chat" : undefined}
             aria-label="New chat"
-            className="flex h-9 w-full items-center gap-2.5 overflow-hidden rounded-lg bg-accent pl-3 pr-3 text-body font-medium text-white transition-colors hover:bg-accent-strong focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+            className="btn-cta flex h-9 w-full items-center gap-2.5 overflow-hidden rounded-lg pl-3 pr-3 text-body font-medium transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
           >
             <span className="shrink-0"><Plus s={16} /></span>
             <span className={hideWhenNarrow}>New chat</span>

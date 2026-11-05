@@ -11,7 +11,7 @@ import Link from "next/link";
 import { useResolvedWorkspace } from "@/lib/workspace";
 import { getFlowExecution } from "@/lib/api";
 import type { FlowExecutionDetail } from "@/lib/types";
-import { ChatPlaceLine } from "@/components/workspace/ChatPlaceLine";
+import { PromptJumpRail } from "./PromptJumpRail";
 import {
   answerPiQuestions,
   decidePiTest,
@@ -56,7 +56,7 @@ import {
   WorkbenchBody,
   WorkbenchRail,
 } from "@/components/layout/Workbench";
-import { ChevronLeft, ChevronRight, Folder, Paperclip, Send } from "@/components/ui/icons";
+import { ChevronLeft, ChevronRight, Folder, Paperclip, Send, Workflow } from "@/components/ui/icons";
 import { AttachmentTray, DropOverlay, FileCards, SentAttachments, useChatAttachments } from "./ChatAttachments";
 import { ReferenceChips, ReferencePicker, useWorkflowReferences } from "./WorkflowReferences";
 import { mentionAt, withoutMention } from "@/lib/pi-builder";
@@ -198,7 +198,12 @@ function Workbench_({
   /** The AI service failed and Forge is retrying — said on the working line until it recovers or gives up. */
   const [retrying, setRetrying] = useState<{ attempt: number; maxAttempts?: number; title?: string } | null>(null);
   const [elapsed, setElapsed] = useState(0);
-  const scroller = useRef<HTMLDivElement>(null);
+  const scroller = useRef<HTMLDivElement | null>(null);
+  const [scrollerEl, setScrollerEl] = useState<HTMLDivElement | null>(null);
+  const bindScroller = useCallback((el: HTMLDivElement | null) => {
+    scroller.current = el;
+    setScrollerEl(el);
+  }, []);
   const composerRef = useRef<HTMLTextAreaElement>(null);
   // Workflow references: `@` opens the picker; picks become chips above the box (WorkflowReferences.tsx).
   const [refsTick, setRefsTick] = useState(0);
@@ -984,7 +989,7 @@ function Workbench_({
                     </div>
                   ) : null}
                   <div
-                    ref={scroller}
+                    ref={bindScroller}
                     className="pi-wide min-h-0 flex-1 space-y-8 overflow-y-auto scroll-smooth px-6 pb-48 pt-11"
                   >
 
@@ -1048,6 +1053,7 @@ function Workbench_({
                     })()}
 
                   </div>
+                  <PromptJumpRail scroller={scrollerEl} />
 
                   {/* The composer floats over the conversation — no band behind it; the messages fade out beneath. */}
                   <div className="pi-dock pi-wide" ref={dockRef}>
@@ -1084,7 +1090,6 @@ function Workbench_({
                       </div>
                     ) : null}
                     <OthersChatNotice othersChat={session?.othersChat ?? null} />
-                    <ChatPlaceLine place={session?.place ?? null} othersChat={!!session?.othersChat} />
                     <StorageNotice storage={storage} onOpenFiles={() => openFilesPane()} />
                     <ReferenceChips
                       refs={references.refs}
@@ -1249,7 +1254,7 @@ function Workbench_({
                               onClick={() => void send()}
                               disabled={files.uploading || (!input.trim() && !files.ready.length)}
                               title={files.uploading ? "Wait for the files to finish uploading" : undefined}
-                              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-accent text-white transition-all duration-150 ease-out hover:bg-accent/90 active:scale-[0.95] disabled:opacity-40 disabled:cursor-not-allowed"
+                              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-accent text-on-accent transition-all duration-150 ease-out hover:opacity-90 active:scale-[0.95] disabled:opacity-40 disabled:cursor-not-allowed"
                               aria-label="Send"
                             >
                               <Send s={14} />
@@ -1270,7 +1275,13 @@ function Workbench_({
           {!canvasOpen && explorerDocked ? (
             <div className="relative flex min-h-0 flex-1 flex-col">{sidePane(true)}</div>
           ) : !canvasOpen ? (
-            <WorkbenchRail label="Canvas" side="right" onExpand={() => setCanvasOpen(true)} />
+            <WorkbenchRail
+              label="Canvas"
+              side="right"
+              onExpand={() => setCanvasOpen(true)}
+              icon={<Workflow s={14} />}
+              meta={workflow.steps.length > 0 ? String(workflow.steps.length) : undefined}
+            />
           ) : (
           <>
           {banner ? (
@@ -1520,14 +1531,19 @@ function TurnCard({
   onRetry?: () => void;
   children?: ReactNode;
 }) {
+  const promptLabel = turn.user?.text?.replace(/\s+/g, " ").trim().slice(0, 72) || undefined;
   return (
-    <section className="space-y-4 animate-[chatIn_180ms_ease]">
+    <section
+      className="space-y-4 animate-[chatIn_180ms_ease]"
+      {...(turn.user
+        ? { "data-prompt-id": turn.user.id, "data-prompt-label": promptLabel ?? "Prompt" }
+        : {})}
+    >
       {turn.user ? (
         (() => {
           const answers = turn.user.answers?.length ? turn.user.answers : legacyAnswers(turn.user.text);
           return answers ? (
-            <AnsweredCard answers={answers} by={turn.user.by?.name ?? null} />
-          ) : (
+            <AnsweredCard answers={answers} by={turn.user.by?.name ?? null} />          ) : (
             <Asked by={turn.user.by?.name ?? null} attachments={turn.user.attachments} at={turn.user.at}>
               {turn.user.text}
             </Asked>

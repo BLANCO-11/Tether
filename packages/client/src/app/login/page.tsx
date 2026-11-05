@@ -53,7 +53,7 @@ export default async function LoginPage({ searchParams }: { searchParams?: Promi
 
       <div className="w-full max-w-sm rounded-lg border border-line bg-surface p-8">
         <div className="mb-8 flex flex-col items-center text-center">
-          <span className="btn-grad mb-4 flex h-12 w-12 items-center justify-center rounded-lg text-white">
+          <span className="btn-grad mb-4 flex h-12 w-12 items-center justify-center rounded-lg text-[color:var(--on-cta)]">
             <Cube s={24} />
           </span>
           <h1 className="text-lg font-semibold">Welcome to Foundry</h1>

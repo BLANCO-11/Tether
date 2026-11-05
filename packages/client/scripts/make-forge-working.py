@@ -16,8 +16,9 @@ MORPH = 23           # frames of a morph
 STAGGER = 0.45       # fraction of the morph spread across particles (the ripple)
 TRAIL = 3            # ghost frames behind each particle
 
-A = np.array([0x4C, 0x8D, 0xFF])   # accent (dark theme); reads on light too
-B = np.array([0x8B, 0x5C, 0xF6])   # violet, as in .pi-mark's gradient
+# Personal character set: horizon → mauve (sea/ember show elsewhere in chrome).
+A = np.array([0x6B, 0x9B, 0xD1])   # horizon
+B = np.array([0xB8, 0x95, 0xC4])   # mauve
 
 
 def resample(pts, n):
@@ -110,6 +111,8 @@ def main():
     OUT.mkdir(parents=True, exist_ok=True)
     ms = round(1000 / FPS)
     frames[0].save(OUT / "forge-working.webp", save_all=True, append_images=frames[1:], duration=ms, loop=0, lossless=False, quality=72, method=6)
+    # Still ring — used when not working / reduced motion (ThinkingBlock.tsx).
+    frames[0].save(OUT / "forge-working-still.png")
     # GIF: 1-bit transparency, so dots are cut at alpha 50% — fine on either theme at this size, but no soft glow.
     gif = []
     for f in frames:

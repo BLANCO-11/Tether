@@ -146,7 +146,7 @@ const ROUTES: Array<{ path: string; load: () => Promise<PageModule>; props?: Rec
   // compares it against this list, which is the check that caught the omission;
   // restating the number here only gives it somewhere else to be wrong.
   { path: "/dashboard", load: () => import("./(app)/dashboard/page") },
-  { path: "/reports", load: () => import("./(app)/reports/page") },
+  // Personal thin: /reports purged (redirect only).
   { path: "/chats", load: () => import("./(app)/chats/page") },
   // Sharing boundaries: a chat read, not opened.
   { path: "/chats/new", load: () => import("./(app)/chats/new/page") },
@@ -179,9 +179,7 @@ const ROUTES: Array<{ path: string; load: () => Promise<PageModule>; props?: Rec
   { path: "/keys", load: () => import("./(app)/keys/page") },
   { path: "/email-box", load: () => import("./(app)/email-box/page") },
   { path: "/ai-provider", load: () => import("./(app)/ai-provider/page") },
-  { path: "/organization", load: () => import("./(app)/organization/page") },
-  // `/organization/roles`, `/organization/platform-roles` and later `/admin/members` (People & access) are DELETED,
-  // not left unlinked. Custom roles and platform roles live on `/admin/roles` now (admin simplify, phase 6).
+  // Personal thin: /organization and /admin/* and /incidents/* purged (redirect only).
   // ⚠ RBAC: the page a refused person lands on. It must render for somebody who holds
   // NOTHING, so it is the one page whose smoke test is closest to its real audience.
   { path: "/no-access", load: () => import("./(app)/no-access/page") },
@@ -204,16 +202,6 @@ const ROUTES: Array<{ path: string; load: () => Promise<PageModule>; props?: Rec
     load: () => import("./(app)/data-sources/[id]/page"),
     props: { params: { id: "ds-1" } },
   },
-  { path: "/admin/audit", load: () => import("./(app)/admin/audit/page") },
-  { path: "/admin", load: () => import("./(app)/admin/page") },
-  { path: "/admin/gates", load: () => import("./(app)/admin/gates/page") },
-  { path: "/admin/people", load: () => import("./(app)/admin/people/page") },
-  { path: "/admin/roles", load: () => import("./(app)/admin/roles/page") },
-  { path: "/admin/people/[id]", load: () => import("./(app)/admin/people/[id]/page"), props: { params: { id: "oid-x" } } },
-  { path: "/admin/workspaces/[id]", load: () => import("./(app)/admin/workspaces/[id]/page"), props: { params: { id: "ws-1" } } },
-  { path: "/admin/incidents", load: () => import("./(app)/admin/incidents/page") },
-  { path: "/incidents", load: () => import("./(app)/incidents/page") },
-  { path: "/incidents/break-glass", load: () => import("./(app)/incidents/break-glass/page") },
 ];
 
 describe("every page renders", () => {

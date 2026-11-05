@@ -29,7 +29,7 @@ export function WizardSteps({ steps, current, className = "" }: Props) {
             aria-current={isActive ? "step" : undefined}
             className={`inline-flex items-center rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
               isActive
-                ? "border-accent bg-accent text-white"
+                ? "border-accent bg-accent text-on-accent"
                 : isCompleted
                   ? "border-transparent bg-surface-2 text-text"
                   : "border-line bg-transparent text-muted"

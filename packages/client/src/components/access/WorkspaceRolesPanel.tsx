@@ -142,7 +142,7 @@ export function WorkspaceRolesPanel({ workspaceId: given }: { workspaceId?: stri
           ) : (
             <PermissionGate permission="roles.write" action="compose a role">
               <button
-                className="rounded bg-accent px-3 py-1 text-sm text-white"
+                className="rounded bg-accent px-3 py-1 text-sm text-on-accent"
                 onClick={() => setCreating(true)}
                 disabled={!canWrite.allowed && !canWrite.unreadable}
               >

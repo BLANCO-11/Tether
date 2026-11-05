@@ -12,7 +12,7 @@
 services:
   llm-tunnel:
     image: node:22-slim
-    container_name: foundry-llm-tunnel
+    container_name: foundry-personal-llm-tunnel
     restart: unless-stopped
     command: ["node", "/tunnel/llm-tunnel.mjs"]
     volumes:

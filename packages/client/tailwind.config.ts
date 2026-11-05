@@ -58,6 +58,23 @@ const config: Config = {
         // Text on a solid accent fill. It FLIPS between the themes, so it can
         // never be `text-black` or `text-white` — see the token's own note.
         "on-accent": mix("--on-accent"),
+        // Character set (theme-mock): chalk · horizon · ember · mauve · sea
+        chalk: mix("--chalk"),
+        horizon: "rgb(var(--horizon-rgb) / <alpha-value>)",
+        "horizon-soft": mix("--horizon-soft"),
+        ember: "rgb(var(--ember-rgb) / <alpha-value>)",
+        "ember-soft": mix("--ember-soft"),
+        mauve: "rgb(var(--mauve-rgb) / <alpha-value>)",
+        sea: "rgb(var(--sea-rgb) / <alpha-value>)",
+        // CTA role (chalk↔ink) — separate from interactive --accent (horizon/slate)
+        cta: "rgb(var(--cta-fill-rgb) / <alpha-value>)",
+        "on-cta": mix("--on-cta"),
+        info: mix("--info"),
+        "info-bg": mix("--info-bg"),
+        "info-line": mix("--info-line"),
+        "badge-fg": mix("--badge-fg"),
+        "badge-bg": mix("--badge-bg"),
+        "badge-line": mix("--badge-line"),
         ok: "rgb(var(--ok-rgb) / <alpha-value>)",
         warn: "rgb(var(--warn-rgb) / <alpha-value>)",
         "warn-line": mix("--warn-line"),

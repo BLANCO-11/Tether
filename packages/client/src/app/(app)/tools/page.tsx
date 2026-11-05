@@ -1506,7 +1506,7 @@ function ToolFormModal({ tool, onClose, onSaved }: {
           </span>
           <div className="flex justify-end gap-2">
             <Button variant="ghost" onClick={onClose} className="rounded-full border border-line/60 bg-surface px-4 shadow-sm transition-colors duration-150">Cancel</Button>
-            <Button onClick={save} disabled={!endpointValid || findings.length > 0 || saving} className="rounded-full bg-accent text-white shadow-sm transition-colors duration-150 hover:bg-accent-strong disabled:opacity-40">
+            <Button onClick={save} disabled={!endpointValid || findings.length > 0 || saving} className="rounded-full bg-accent text-on-accent shadow-sm transition-colors duration-150 hover:opacity-90 disabled:opacity-40">
               {saving ? "Saving…" : tool ? "Save" : "Save tool"}
             </Button>
           </div>

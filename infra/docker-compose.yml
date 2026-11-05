@@ -49,7 +49,7 @@ include:
 services:
   postgres:
     image: postgres:16
-    container_name: foundry-parent-postgres
+    container_name: foundry-personal-postgres
     restart: unless-stopped
     environment:
       POSTGRES_USER: foundry
@@ -58,7 +58,7 @@ services:
     ports:
       - "5433:5432"
     volumes:
-      - foundry_pgdata:/var/lib/postgresql/data
+      - personal_pgdata:/var/lib/postgresql/data
     networks:
       - default
     healthcheck:
@@ -112,7 +112,7 @@ services:
       # leaves that image untrusted while its siblings work.
       args:
         CORP_CA_FILE: ${CORP_CA_FILE:-}
-    container_name: foundry-parent-migrate
+    container_name: foundry-personal-migrate
     command: ["node", "packages/server/dist/db/migrate.js"]
     # ⚠ D-05.4 gap fixed: the migrate script imports config that needs the
     # repo-root env (LLM_BASE_URL etc.). Without env_file, `docker compose up`
@@ -132,7 +132,7 @@ services:
       dockerfile: packages/server/Dockerfile
       args:
         CORP_CA_FILE: ${CORP_CA_FILE:-}
-    container_name: foundry-parent-server
+    container_name: foundry-personal-server
     restart: unless-stopped
     # Forge runs in the `forge` container now; `init` stays as a reaper for the verifier the server still runs.
     init: true
@@ -153,7 +153,7 @@ services:
       # in place (an orphan Compose ignores) — its files were merged here.
       - ../data/mocks:/repo/data/mocks
       # Pi builder session sandboxes (isolated per session; survives rebuild).
-      - foundry_pi_sandboxes:/repo/packages/server/.pi-sandboxes
+      - personal_pi_sandboxes:/repo/packages/server/.pi-sandboxes
     # Secrets (PARENT_API_KEY, CREDENTIAL_ENC_KEY) come from ../.env
     # via env_file — resolved relative to THIS compose file, so it works no matter
     # which directory you run `docker compose` from. Do NOT re-declare those secrets
@@ -243,7 +243,7 @@ services:
       dockerfile: packages/mcp-bridge/Dockerfile
       args:
         CORP_CA_FILE: ${CORP_CA_FILE:-}
-    container_name: foundry-parent-mcp-bridge
+    container_name: foundry-personal-mcp-bridge
     restart: unless-stopped
     ports:
       - "4003:4003"
@@ -267,7 +267,7 @@ services:
       dockerfile: packages/client/Dockerfile
       args:
         CORP_CA_FILE: ${CORP_CA_FILE:-}
-    container_name: foundry-parent-web
+    container_name: foundry-personal-web
     restart: unless-stopped
     ports:
       - "4002:4002"
@@ -341,7 +341,7 @@ services:
     build:
       context: ../packages/flow-runner
     image: foundry/flow-runner:dev
-    container_name: foundry-flow-runner
+    container_name: foundry-personal-flow-runner
     restart: unless-stopped
     # Run isolation (pi-runtime P5b): only the capabilities it needs; SYS_ADMIN is dropped by entrypoint.sh after
     # remounting /proc hidepid. A reaper at PID 1 for whatever a killed step leaves behind.
@@ -377,7 +377,7 @@ services:
       args:
         CORP_CA_FILE: ${CORP_CA_FILE:-}
     image: foundry/forge:dev
-    container_name: foundry-forge
+    container_name: foundry-personal-forge
     restart: unless-stopped
     cap_drop: [ALL]
     cap_add: [SETUID, SETGID, CHOWN, FOWNER, DAC_OVERRIDE, KILL, SYS_ADMIN, SETPCAP]
@@ -391,7 +391,7 @@ services:
       - path: ../.env
         required: true
     volumes:
-      - foundry_pi_sandboxes:/repo/packages/server/.pi-sandboxes
+      - personal_pi_sandboxes:/repo/packages/server/.pi-sandboxes
     networks:
       - forge-net
     depends_on:
@@ -401,7 +401,7 @@ services:
   # FORGE_EGRESS_ALLOW) and refuses everything else. Runs as nobody with no capabilities after start.
   forge-egress:
     image: foundry/forge:dev
-    container_name: foundry-forge-egress
+    container_name: foundry-personal-forge-egress
     restart: unless-stopped
     command: ["egress"]
     cap_drop: [ALL]
@@ -423,7 +423,7 @@ services:
       args:
         CORP_CA_FILE: ${CORP_CA_FILE:-}
     image: foundry/fragment-base:py3.12-pandas2.2.3
-    container_name: foundry-fragment-base-build
+    container_name: foundry-personal-fragment-base
     # Never "run" as a service: this exits 0 immediately; its only job is to make
     # the build a first-class part of `up`/`build`, ahead of flow-runner.
     command: ["python", "-c", "import pandas, numpy; print('fragment-base ok', pandas.__version__, numpy.__version__)"]
@@ -446,8 +446,8 @@ networks:
   # `connector-net` is defined in connector.compose.yml (included above); `server` joins it.
 
 volumes:
-  foundry_pgdata:
-  foundry_pi_sandboxes:
+  personal_pgdata:
+  personal_pi_sandboxes:
   # `foundry_mockdata` was here until I-229 moved mocks to a bind mount. Not
   # deleted: its files were merged into data/mocks, and a compose edit that
   # silently deletes a volume is the wrong default. Reclaim with
