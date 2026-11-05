@@ -74,18 +74,6 @@ describe("Sidebar — every static page is reachable, or exempt with a reason", 
     "/chats/new": "the rail's primary action, New chat",
     "/resources/new": "reached from the Resources list's own button",
     "/no-access": "redirected to from the app shell when the workspace list is empty",
-    // Personal fork: enterprise surfaces redirect to Home (next.config + lib/personal.ts).
-    "/admin": "personal fork — enterprise; redirects to /dashboard",
-    "/admin/people": "personal fork — enterprise; redirects to /dashboard",
-    "/admin/workspaces": "personal fork — enterprise; redirects to /dashboard",
-    "/admin/roles": "personal fork — enterprise; redirects to /dashboard",
-    "/admin/gates": "personal fork — enterprise; redirects to /dashboard",
-    "/admin/audit": "personal fork — enterprise; redirects to /dashboard",
-    "/admin/incidents": "personal fork — enterprise; redirects to /dashboard",
-    "/organization": "personal fork — enterprise; redirects to /dashboard",
-    "/incidents": "personal fork — enterprise; redirects to /dashboard",
-    "/incidents/break-glass": "personal fork — enterprise; redirects to /dashboard",
-    "/reports": "personal fork — thinned; redirects to /dashboard",
   };
 
   it("claims every page it does not exempt", async () => {

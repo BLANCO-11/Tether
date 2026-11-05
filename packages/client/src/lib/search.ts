@@ -165,12 +165,4 @@ export const STATIC_SEARCH_INDEX: SearchResult[] = [
     href: "/approvals",
     iconKey: "Shield",
   },
-  {
-    kind: "person",
-    id: "meera-iyer",
-    title: "Meera Iyer",
-    meta: "HR Operations Lead",
-    href: "/admin/people",
-    iconKey: "User",
-  },
 ];
