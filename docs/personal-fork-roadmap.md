@@ -35,10 +35,11 @@ One-sitting success: sign in → project → chat that uses a tool → turn it i
 | A | **Chat → schedule** | One control: successful chat/flow → “run this on a cadence” |
 | B | **Asks inbox** | One morning surface for Forge questions + gate approvals |
 | C | **Live long-run watch** | Pause / steer / kill / latest artifact for long jobs |
-| D | **Thin connectors (3)** | GitHub + calendar-or-mail + webhook — depth not marketplace |
+| D | **Demo recipe on existing plugins** | Not “build GitHub” — it already ships (`piece-github`). Prove schedule + Needs you on a real connection |
 | E | **Share a chat or run** | Link/invite to one artifact — not workspace RBAC |
 | F | **Edge agent** | Local process: command + path I/O after OTP pair |
 | G | **Project memory** | Ledger first; RAG later (see Memory section) |
+| H | **Next life connector (only if needed)** | Calendar/mail *if* missing or painful — do not rebuild GitHub |
 
 ---
 
@@ -59,10 +60,10 @@ One-sitting success: sign in → project → chat that uses a tool → turn it i
 - **Pushback:** Steering mid-run without a contract causes half-applied chaos.
 - **Response:** v1 = **run detail that always shows current step + last artifact + Stop**, using existing progress ticket/poll. Steer = send a follow-up only where the runtime already supports pause/question. No free-form “inject bash” until edge.
 
-### D — Thin connectors
-- **Pushback:** Three connectors still means OAuth hell, token refresh, and support load.
-- **Pushback:** Webhook-only is weaker than competitors’ galleries.
-- **Response:** Ship **webhook + one OAuth** first (GitHub). Calendar/mail second. Each connector must power a demo recipe (A). No marketplace page.
+### D — Demo recipe (existing plugins)
+- **Pushback (valid):** GitHub is already available (`@activepieces/piece-github`, OAuth path, Forge run-as). “Build a GitHub connector” was a mistaken roadmap item.
+- **Pushback:** A “recipe” without productizing it is just a blog post nobody runs.
+- **Response:** Phase 3 is **prove the loop**, not new plugin work: connect GitHub in the personal UI → chat or schedule does one real action → Needs you if approval is required. New connectors (calendar/mail) only if a recipe is blocked by a missing piece.
 
 ### E — Share a chat or run
 - **Pushback:** Accidental secret leakage in shared transcripts; enterprise redaction assumptions may be missing.
@@ -202,9 +203,9 @@ Copy into issues or a sprint board as needed:
 - [ ] **2.1** Live run watch panel (status / step / stop / artifact)  
 - [ ] **2.2** Progress via existing ticket + poll only  
 - [ ] **2.3** Optional done notification  
-- [ ] **3.1** GitHub connector thin path  
-- [ ] **3.2** One GitHub demo recipe  
-- [ ] **3.3** Inbound webhook recipe docs  
+- [ ] **3.1** GitHub (existing plugin) works on personal stack — friction only  
+- [ ] **3.2** One real recipe: schedule/chat → GitHub → Needs you  
+- [ ] **3.3** New connector only if a recipe is blocked (not GitHub)  
 - [ ] **4.1** Project memory schema + API  
 - [ ] **4.2** Remember + compact promotion  
 - [ ] **4.3** Capped inject into project chats  
