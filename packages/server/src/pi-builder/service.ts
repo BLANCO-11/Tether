@@ -783,6 +783,15 @@ function getOrThrow(workspaceId: string, sessionId: string): Session {
   return s;
 }
 
+/** A waiting draft test is only decideable from this session's card — cancel it when the session goes. */
+function cancelWaitingTest(s: Session): void {
+  const runId = s.lastRunId;
+  if (!runId || !s.lastTestRun?.waiting) return;
+  void flowRunnerService.cancel(runId).catch((e) => {
+    console.warn(`[pi-builder] could not cancel waiting test ${runId} for session ${s.id}: ${(e as Error).message}`);
+  });
+}
+
 function destroySession(s: Session): void {
   forgePool.release(s.id);
   if (s.abort) {
@@ -792,6 +801,7 @@ function destroySession(s: Session): void {
       /* ignore */
     }
   }
+  cancelWaitingTest(s);
   s.bus.removeAllListeners();
   sessions.delete(s.id);
   toolTokens.delete(s.toolToken);
@@ -1140,6 +1150,13 @@ async function verifyAndRun(
     const declared = (bundle.workflow.inputs ?? {}) as Record<string, unknown>;
     s.runInputs = Object.fromEntries(Object.entries(s.runInputs).filter(([k]) => k in declared));
     const runAs = await workflowAccounts(s, bundle, requester.subject ?? null, { kind: "test", opts });
+    // A prior waiting test on this session has nowhere else to be decided — cancel before starting another.
+    if (s.lastRunId && s.lastTestRun?.waiting) {
+      await flowRunnerService.cancel(s.lastRunId).catch((e) => {
+        console.warn(`[pi-builder] could not cancel prior waiting test ${s.lastRunId}: ${(e as Error).message}`);
+      });
+      s.lastTestRun = { ...s.lastTestRun, waiting: null };
+    }
     const { flowExecutionId } = await flowRunnerService.startDraftRun({
       workspaceId: s.workspaceId,
       flowId: s.flowId,

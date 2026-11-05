@@ -767,7 +767,12 @@ export function flowExecutionSummaryFromFA(e: FAFlowExecutionSummary): FlowExecu
  * on the page anyway for anyone who needs it.
  */
 export function runLabel(e: { flowName: string | null; flowNameSnapshot?: string | null }): string {
-  return e.flowNameSnapshot?.trim() || e.flowName?.trim() || "Unnamed run";
+  const snap = e.flowNameSnapshot?.trim();
+  if (snap) return snap;
+  const slug = e.flowName?.trim();
+  // Unsaved Forge draft runs use the engine slug `pi-adhoc` — Activity and history must not show that string.
+  if (slug === "pi-adhoc") return "Draft test";
+  return slug || "Unnamed run";
 }
 
 /**

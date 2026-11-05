@@ -32,6 +32,7 @@
 // unfalsifiable answer this codebase keeps refusing elsewhere.
 
 import type { FlowExecutionSummary, StepStatus } from "@/lib/types";
+import { runLabel } from "@/lib/adapters";
 
 /**
  * `generation` went with the generation job (compiled-builder phase 8, D-333):
@@ -121,10 +122,9 @@ export function workFromRuns(runs: readonly FlowExecutionSummary[]): WorkItem[] 
     return {
       key: `run:${r.id}`,
       kind: "run" as const,
-      // ⚠ `flowName`, never `flowId`. The id is a uuid and the name is the
-      // Kestra slug — I-23's whole point is that the two swapped once and only
-      // the label survived being wrong.
-      title: r.flowName ?? "An automation",
+      // Prefer the frozen display name (`flowNameSnapshot`); never the uuid.
+      // `runLabel` also maps the draft engine slug `pi-adhoc` to "Draft test".
+      title: runLabel(r),
       live: outcome === null,
       outcome,
       href: `/runs/${r.id}`,

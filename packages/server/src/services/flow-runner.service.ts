@@ -29,7 +29,7 @@ import { auditService } from "./audit.service.js";
 import { stepApprovalService } from "./step-approval.service.js";
 import { db } from "../db/index.js";
 import { flowExecutions, flowStepApprovals, flows } from "../db/schema.js";
-import { and, eq, gte, inArray, isNotNull, isNull, lt } from "drizzle-orm";
+import { and, eq, gte, inArray, isNotNull, isNull, like, lt } from "drizzle-orm";
 export { runInputsOf, RUN_INPUT_TYPES } from "./run-inputs.js";
 
 /** What Pi's sandbox produces and a revision will store (P3): `workflow.json` plus the step files it names. */
@@ -56,6 +56,12 @@ export const RUNNER_EXECUTION_PREFIX = "fr-";
 
 /** How long a run waits at an approval before it stops as `expired` (agreed 2026-10-10). */
 export const APPROVAL_WAIT_MS = Number(process.env.FLOW_APPROVAL_WAIT_MS ?? 7 * 86_400_000);
+
+/**
+ * Unsaved draft waits (`flow_id` null) never appear in Approvals — only Forge's in-session card can decide them.
+ * After this long with no decision, cancel rather than leave Activity showing "RUNNING NOW" forever.
+ */
+export const DRAFT_ORPHAN_WAIT_MS = Number(process.env.FLOW_DRAFT_ORPHAN_WAIT_MS ?? 2 * 3_600_000);
 
 type Decision = { decision: string; by: string; note: string | null; at: string };
 /** What a runner run is started from — stored on its execution row so a paused run can be started again (0088). */
@@ -243,11 +249,12 @@ async function start(input: StartInput): Promise<{ flowExecutionId: string; used
 
   const flowRow = input.flowId ? await flowRepo.get(input.workspaceId, input.flowId) : null;
   if (input.flowId && !flowRow) throw new FlowRunnerError("flow not found", 404);
+  const chatRow = !flowRow && input.chatId ? await piChatRepo.get(input.workspaceId, input.chatId) : null;
   // ⚠ Where it lives decides what it runs as (Q3): in My space, its owner's own accounts, whatever was stored. A draft
   // with no workflow yet lives where its chat does — My space unless the chat is in a project.
   const place = flowRow ?? {
     visibility: "private",
-    projectId: input.chatId ? ((await piChatRepo.get(input.workspaceId, input.chatId))?.projectId ?? null) : null,
+    projectId: chatRow?.projectId ?? null,
     ownerSubject: input.requester.subject ?? null,
   };
   input = { ...input, runAs: await effectiveAccounts(input.workspaceId, place, { workflow: input.bundle.workflow, files: input.bundle.files, accounts: input.runAs }) };
@@ -262,6 +269,15 @@ async function start(input: StartInput): Promise<{ flowExecutionId: string; used
     );
   }
 
+  // Display name for Activity / history: saved flow name, else the draft workflow's name,
+  // else the chat title, else a plain "Draft test" — never leave the engine slug as the label.
+  let nameSnap = flowRow?.name?.trim() || null;
+  if (!nameSnap) {
+    const wf = typeof input.bundle.workflow?.name === "string" ? input.bundle.workflow.name.trim() : "";
+    if (wf) nameSnap = wf;
+    else if (chatRow?.title?.trim()) nameSnap = chatRow.title.trim();
+    if (!nameSnap) nameSnap = input.autoTest ? "Automatic test" : "Draft test";
+  }
   const execution = await flowExecutionRepo.create({
     workspaceId: input.workspaceId,
     requestedBy: input.requester.actor,
@@ -270,7 +286,7 @@ async function start(input: StartInput): Promise<{ flowExecutionId: string; used
     actsAsSubject: actsAsSubjectOf(input.runAs, { live: !!input.live, requester: input.requester.subject ?? null, owner: flowRow?.ownerSubject ?? null }),
     flowId: flowRow?.id ?? null,
     flowRevision: input.live ? input.live.revision : (flowRow?.draftRevision ?? null),
-    flowNameSnapshot: flowRow?.name ?? null,
+    flowNameSnapshot: nameSnap.slice(0, 200),
     flowIdSnapshot: flowRow?.id ?? null,
     triggerFireId: input.live?.triggerFireId ?? null,
     kestraNamespace: namespace,
@@ -546,10 +562,44 @@ export const flowRunnerService = {
     return started;
   },
 
-  /** Approvals nobody decided within the wait limit: the run is resumed as `expired` and stops there. */
+  /**
+   * Cancel waiting unsaved draft tests (`flow_id` null). Approvals hides them, and Forge sessions die with
+   * this process — a leftover waiting row can only rot in Activity. Same boot-time claim as
+   * `reconcileAbandonedBuilds` / `removeOrphanedSessionTrees`.
+   */
+  async reconcileOrphanedDraftWaits(): Promise<number> {
+    const rows = await db
+      .select({ id: flowExecutions.id })
+      .from(flowExecutions)
+      .where(
+        and(
+          eq(flowExecutions.status, "waiting"),
+          isNull(flowExecutions.flowId),
+          like(flowExecutions.kestraExecutionId, `${RUNNER_EXECUTION_PREFIX}%`),
+        ),
+      );
+    let n = 0;
+    for (const r of rows) {
+      try {
+        const out = await this.cancel(r.id);
+        if (out.cancelled) n++;
+      } catch (e) {
+        console.warn(`[flow-runner] could not cancel orphaned draft wait ${r.id}: ${(e as Error).message}`);
+      }
+    }
+    if (n) console.log(`[flow-runner] cancelled ${n} orphaned unsaved draft wait(s) left by a prior process`);
+    return n;
+  },
+
+  /**
+   * Approvals nobody decided within the wait limit.
+   * · Saved-flow waits (in the Approvals inbox): resume as `expired`.
+   * · Unsaved draft waits (hidden from Approvals): cancel — nothing can decide them once Forge's card is gone.
+   */
   async expireStaleApprovals(now = new Date()): Promise<number> {
-    const cutoff = new Date(now.getTime() - APPROVAL_WAIT_MS);
-    const stale = await db
+    const liveCutoff = new Date(now.getTime() - APPROVAL_WAIT_MS);
+    const orphanCutoff = new Date(now.getTime() - DRAFT_ORPHAN_WAIT_MS);
+    const pending = await db
       .select({ a: flowStepApprovals, e: flowExecutions })
       .from(flowStepApprovals)
       .innerJoin(flowExecutions, eq(flowStepApprovals.flowExecutionId, flowExecutions.id))
@@ -558,18 +608,32 @@ export const flowRunnerService = {
           eq(flowExecutions.status, "waiting"),
           isNull(flowStepApprovals.decidedAt),
           isNull(flowStepApprovals.expiredAt),
-          lt(flowStepApprovals.createdAt, cutoff),
         ),
       );
     const days = Math.round(APPROVAL_WAIT_MS / 86_400_000);
-    for (const { a, e } of stale) {
+    let n = 0;
+    for (const { a, e } of pending) {
+      const created = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+      const orphan = e.flowId == null;
+      if (orphan) {
+        if (created >= orphanCutoff.getTime()) continue;
+        try {
+          await this.cancel(e.id);
+          n++;
+        } catch (err) {
+          console.warn(`[flow-runner] could not cancel orphaned draft wait ${e.id}: ${(err as Error).message}`);
+        }
+        continue;
+      }
+      if (created >= liveCutoff.getTime()) continue;
       const note = `No decision within ${days} days`;
       await stepApprovalService.expire(e.id, a.stepId, note);
       await this.resume(e.id, { stepId: a.stepId, decision: "expired", by: "system", note }).catch((err) => {
         console.warn(`[flow-runner] could not expire run ${e.id}: ${(err as Error).message}`);
       });
+      n++;
     }
-    return stale.length;
+    return n;
   },
 
   /**

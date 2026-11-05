@@ -72,6 +72,12 @@ async function main() {
   void reconcileAbandonedBuilds().catch((e) => {
     console.warn("[sandbox:auto] could not reconcile abandoned builds:", (e as Error).message);
   });
+
+  // Unsaved draft tests waiting at a gate have no Approvals inbox entry (flow_id null). Forge sessions
+  // from the last process are gone, so those waits can only rot in Activity — cancel them here.
+  void flowRunnerService.reconcileOrphanedDraftWaits().catch((e) => {
+    console.warn("[flow-runner] could not reconcile orphaned draft waits:", (e as Error).message);
+  });
 }
 
 /**

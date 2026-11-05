@@ -73,6 +73,13 @@ describe("workFromRuns", () => {
       "finance-invoice-chase",
     );
   });
+
+  it("prefers flowNameSnapshot, and maps the draft slug pi-adhoc to Draft test", () => {
+    const withSnap = run("r1", "running", "pi-adhoc");
+    withSnap.flowNameSnapshot = "Monthly hours";
+    expect(workFromRuns([withSnap])[0]!.title).toBe("Monthly hours");
+    expect(workFromRuns([run("r2", "running", "pi-adhoc")])[0]!.title).toBe("Draft test");
+  });
 });
 
 describe("diffWork", () => {
