@@ -1881,6 +1881,40 @@ export const edgeTrustRules = pgTable(
 );
 
 /**
+ * Device → Foundry → plugin relay (0146): paired edge asks Foundry to run a connected-plugin action
+ * using the owner's workspace/personal connection. Writes wait for the same Approve card as Forge Agent.
+ */
+export const edgeRelayRequests = pgTable(
+  "edge_relay_requests",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    deviceId: uuid("device_id")
+      .notNull()
+      .references(() => edgeDevices.id, { onDelete: "cascade" }),
+    ownerSubject: text("owner_subject").notNull(),
+    tool: text("tool").notNull(),
+    params: jsonb("params").$type<Record<string, unknown> | Array<Record<string, unknown>>>().notNull().default({}),
+    summary: text("summary").notNull(),
+    status: varchar("status", { length: 32 }).notNull().default("pending"),
+    proposalId: text("proposal_id"),
+    sessionId: text("session_id"),
+    chatId: uuid("chat_id"),
+    result: text("result"),
+    resultJson: jsonb("result_json").$type<Record<string, unknown> | null>(),
+    error: text("error"),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    finishedAt: timestamp("finished_at", { withTimezone: true }),
+  },
+  (t) => ({
+    byDevice: index("ix_edge_relay_device").on(t.deviceId, t.status),
+    byOwner: index("ix_edge_relay_owner").on(t.workspaceId, t.ownerSubject, t.status),
+  }),
+);
+
+/**
  * Project memory ledger (personal thin product Phase 4) — curated facts a project's chats start with.
  * Not vectors: each row is an accepted decision / preference / open loop / note. Active rows inject into
  * `projectService.contextOf`; superseded/discarded stay for history. Deleted with the project.

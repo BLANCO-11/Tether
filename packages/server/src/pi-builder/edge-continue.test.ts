@@ -45,7 +45,7 @@ describe("edge background settle continues Forge instead of dumping chat", () =>
 
   it("continue prompt asks for one short summary; Actions hold the per-job list", () => {
     const batch = src.slice(src.indexOf("function edgeContinueToldBatch"), src.indexOf("function queueOrContinueAfterEdge"));
-    expect(batch).toMatch(/ONE short summary/);
+    expect(batch).toMatch(/ONE short line/);
     expect(batch).toMatch(/What Forge did/);
     expect(batch).toMatch(/do not narrate every file/);
   });
@@ -67,9 +67,10 @@ describe("edge background settle continues Forge instead of dumping chat", () =>
 
   it("decideProposal skips the asker rule for edge cards (null-subject continue must not 403 Approve)", () => {
     const body = src.slice(src.indexOf("async function decideProposal"));
-    expect(body).toMatch(/if \(p\.kind !== "edge"\)/);
+    // Edge and plugin-relay cards skip the asker rule (relay added beside edge).
+    expect(body).toMatch(/if \(p\.kind !== "edge" && !p\.relay\)/);
     expect(body).toMatch(/m\.by\?\.subject/);
-    expect(body).toMatch(/device ownership is checked in approveJob/);
+    expect(body).toMatch(/device ownership is checked in approveJob|Edge \/ plugin-relay cards/);
   });
 
   it("Approve watches the job on this session and settle can find a reopened chat", () => {

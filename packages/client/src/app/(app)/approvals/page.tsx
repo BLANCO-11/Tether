@@ -48,9 +48,11 @@ import { RiskWord } from "@/components/approval/RiskWord";
 import { PERSONAL_PRODUCT } from "@/lib/personal";
 import {
   approveEdgeConnect,
+  decideEdgeRelay,
   denyEdgeConnect,
   listEdgePending,
   type EdgeDevice,
+  type EdgeRelayPending,
 } from "@/lib/edge";
 import { useToast } from "@/lib/toast";
 
@@ -78,7 +80,10 @@ function ApprovalsPageContent() {
   const toast = useToast();
   const { data: approvals, loading, error, reload } = useAsync(() => listPendingApprovals(), [epoch]);
   const edgePending = useAsync(
-    () => (PERSONAL_PRODUCT ? listEdgePending() : Promise.resolve({ jobs: [], connects: [] as EdgeDevice[] })),
+    () =>
+      PERSONAL_PRODUCT
+        ? listEdgePending()
+        : Promise.resolve({ jobs: [], connects: [] as EdgeDevice[], relays: [] as EdgeRelayPending[] }),
     [epoch],
   );
   const [open, setOpen] = useState<FAStepApproval | null>(null);
@@ -90,7 +95,8 @@ function ApprovalsPageContent() {
 
   const list = approvals ?? [];
   const edgeConnects = edgePending.data?.connects ?? [];
-  const pendingCount = list.length + edgeConnects.length;
+  const edgeRelays = edgePending.data?.relays ?? [];
+  const pendingCount = list.length + edgeConnects.length + edgeRelays.length;
 
   const onTabChange = (key: string) => {
     const params = new URLSearchParams(searchParams.toString());
@@ -176,7 +182,7 @@ function ApprovalsPageContent() {
 
       {!error && (
         <Zone name="content">
-          {PERSONAL_PRODUCT && activeTab === "pending-me" && edgeConnects.length > 0 ? (
+          {PERSONAL_PRODUCT && activeTab === "pending-me" && (edgeConnects.length > 0 || edgeRelays.length > 0) ? (
             <div className="mb-4 space-y-2 rounded-lg border border-line bg-surface p-4">
               <div className="flex items-center justify-between gap-2">
                 <h2 className="text-body font-semibold">This computer</h2>
@@ -223,13 +229,51 @@ function ApprovalsPageContent() {
                     </div>
                   </li>
                 ))}
+                {edgeRelays.map((r) => (
+                  <li key={r.id} className="flex items-start justify-between gap-3 rounded-md border border-line px-3 py-2">
+                    <div className="min-w-0">
+                      <p className="text-caption font-medium uppercase text-muted">Plugin · {r.deviceName}</p>
+                      <p className="text-body font-medium">{r.summary}</p>
+                      <p className="text-caption text-muted">{r.tool}</p>
+                    </div>
+                    <div className="flex shrink-0 gap-2">
+                      <Button
+                        size="sm"
+                        onClick={() =>
+                          void decideEdgeRelay(r.id, "run")
+                            .then(() => {
+                              toast.success("Approved — Foundry will run it with your connection.");
+                              edgePending.reload();
+                            })
+                            .catch((e) => toast.error(e instanceof Error ? e.message : String(e)))
+                        }
+                      >
+                        Do it
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() =>
+                          void decideEdgeRelay(r.id, "decline")
+                            .then(() => {
+                              toast.success("Cancelled.");
+                              edgePending.reload();
+                            })
+                            .catch((e) => toast.error(e instanceof Error ? e.message : String(e)))
+                        }
+                      >
+                        Cancel
+                      </Button>
+                    </div>
+                  </li>
+                ))}
               </ul>
             </div>
           ) : null}
           {loading ? (
             <Skeleton rows={3} />
           ) : visible.length === 0 &&
-            !(PERSONAL_PRODUCT && activeTab === "pending-me" && edgeConnects.length > 0) ? (
+            !(PERSONAL_PRODUCT && activeTab === "pending-me" && (edgeConnects.length > 0 || edgeRelays.length > 0)) ? (
             activeTab === "pending-me" ? (
               <EmptyState
                 icon={<Check s={16} />}

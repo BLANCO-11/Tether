@@ -140,7 +140,8 @@ describe("the exemptions, each for its own stated reason", () => {
     // reading a public address while building, behind its per-conversation key like the other Forge tools.
     // 30–36: public edge setup / pair / claim / complete / agent.mjs (personal thin; setup token or device Bearer).
     // 37–39: Forge edge devices / enqueue / job (personal thin; per-conversation tool key).
-    expect(EXEMPT.size).toBe(39);
+    // 41–42: edge plugin relay POST/GET (device Bearer).
+    expect(EXEMPT.size).toBe(42);
     expect(EXEMPT.get("POST /api/llm/complete")?.reason).toBe("requireLlmKey");
     expect(EXEMPT.get("POST /api/web/fetch")?.reason).toBe("requireWebKey");
     for (const path of [

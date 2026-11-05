@@ -548,6 +548,7 @@ function ActionCard({ p, onDecide }: { p: PiProposal; onDecide: Decide | null })
     <section aria-label={`Proposed change: ${p.summary}`} className="pc-card">
       <div className="flex flex-wrap items-center gap-2">
         <span className="pc-eyebrow">
+          {p.relay ? `${p.relay.deviceName} · ` : ""}
           {p.connector} · {p.action}
         </span>
         <span className="ml-auto">
@@ -555,6 +556,9 @@ function ActionCard({ p, onDecide }: { p: PiProposal; onDecide: Decide | null })
         </span>
       </div>
       <p className="text-body font-medium leading-snug text-text">{p.summary}</p>
+      {p.relay && p.status === "pending" ? (
+        <p className="text-caption text-dim">Requested from {p.relay.deviceName} through Foundry (plugin relay).</p>
+      ) : null}
       {entries.length > 0 && (
         <dl className="pc-values" aria-label="The exact values">
           {entries.map(([k, v]) => (

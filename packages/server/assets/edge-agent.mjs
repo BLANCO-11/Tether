@@ -8,11 +8,20 @@
  *   node scripts/edge-agent.mjs run [--url http://localhost:4000]
  *   node scripts/edge-agent.mjs pair --code 123456 […]
  *
+ *   node …/edge-agent.mjs relay --tool <name> --summary "…" [--params '{}'] [--url …]
+ *   node …/edge-agent.mjs relay --tool <name> --summary "…" --params @params.json
+ *   node …/edge-agent.mjs relay --tool <name> --summary "…" --params-file params.json
+ *     Ask Foundry to run a connected-plugin action (Slack/ADO/GitHub/…) with the owner's
+ *     configured connection. Reads finish immediately; writes wait for Approve in chat.
+ *     Large file content: put params in a JSON file (base64 the bytes under the field the
+ *     action expects, e.g. content) and pass @file / --params-file — argv cannot hold megabytes.
+ *
  * Token: ~/.foundry-edge/credentials.json
+ * Plugins: go through Foundry relay — do not curl third-party APIs when a connection exists.
  */
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { homedir, platform as osPlatform } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { spawn } from "node:child_process";
 
 const HOME = join(homedir(), ".foundry-edge");
@@ -181,6 +190,86 @@ async function handleJob(job) {
   }
 }
 
+/** Params from --params / --params-file / @path (same idea as Forge propose-change.mjs). */
+async function loadRelayParams() {
+  const fromFile = arg("--params-file");
+  const raw = arg("--params");
+  if (fromFile && raw) {
+    console.error("Pass either --params or --params-file, not both.");
+    process.exit(1);
+  }
+  if (!fromFile && !raw) return {};
+  let text;
+  try {
+    if (fromFile) {
+      text = await readFile(resolve(fromFile), "utf8");
+    } else if (raw.startsWith("@")) {
+      text = await readFile(resolve(raw.slice(1)), "utf8");
+    } else {
+      text = raw;
+    }
+  } catch (e) {
+    console.error(`Could not read params file: ${e instanceof Error ? e.message : e}`);
+    process.exit(1);
+  }
+  try {
+    return JSON.parse(text);
+  } catch {
+    console.error("Params must be one JSON object (or a list of them for a batch).");
+    process.exit(1);
+  }
+}
+
+async function relayOnce() {
+  const creds = await loadCreds();
+  if (!creds?.token) {
+    console.error("Not connected. Run: edge-agent.mjs setup --token esetup_…");
+    process.exit(1);
+  }
+  const tool = arg("--tool");
+  const summary = arg("--summary");
+  if (!tool || !summary) {
+    console.error(
+      `Usage: edge-agent.mjs relay --tool <plugin_tool_name> --summary "one line" [--params '{}'|@file.json|--params-file file.json] [--url …]`,
+    );
+    process.exit(1);
+  }
+  const params = await loadRelayParams();
+  const url = (arg("--url") || creds.url || "http://localhost:4000").replace(/\/$/, "");
+  const sessionId = arg("--session") || undefined;
+  const chatId = arg("--chat") || undefined;
+  const post = await fetch(`${url}/api/edge/relay`, {
+    method: "POST",
+    headers: { authorization: `Bearer ${creds.token}`, "content-type": "application/json" },
+    body: JSON.stringify({ tool, params, summary, sessionId, chatId }),
+  });
+  const body = await post.json().catch(() => ({}));
+  if (!post.ok) {
+    console.error(body.message || body.error || post.status);
+    process.exit(1);
+  }
+  let relay = body.relay;
+  console.log(`Relay ${relay.id} → ${relay.status}${relay.message ? `: ${body.message}` : ""}`);
+  const terminal = new Set(["done", "failed", "declined"]);
+  while (!terminal.has(relay.status)) {
+    await sleep(2000);
+    const get = await fetch(`${url}/api/edge/relay/${relay.id}`, {
+      headers: { authorization: `Bearer ${creds.token}` },
+    });
+    const next = await get.json().catch(() => ({}));
+    if (!get.ok) {
+      console.error(next.message || next.error || get.status);
+      process.exit(1);
+    }
+    relay = next.relay;
+    process.stdout.write(`\r  status: ${relay.status}   `);
+  }
+  console.log("");
+  if (relay.result) console.log(relay.result);
+  if (relay.error && relay.status !== "done") console.error(relay.error);
+  process.exit(relay.status === "done" ? 0 : 1);
+}
+
 async function runLoop() {
   const creds = await loadCreds();
   if (!creds?.token) {
@@ -228,10 +317,12 @@ const cmd = process.argv[2];
 if (cmd === "setup") await setup();
 else if (cmd === "pair") await pair();
 else if (cmd === "run") await runLoop();
+else if (cmd === "relay") await relayOnce();
 else {
   console.log(`Usage:
   node scripts/edge-agent.mjs setup --token esetup_… [--name Host] [--url http://localhost:4000]
   node scripts/edge-agent.mjs run [--url http://localhost:4000]
+  node scripts/edge-agent.mjs relay --tool <name> --summary "…" [--params '{}'|@file.json|--params-file f.json] [--url …]
   node scripts/edge-agent.mjs pair --code 123456 [--name Host] [--url http://localhost:4000]   # legacy`);
   process.exit(cmd ? 1 : 0);
 }

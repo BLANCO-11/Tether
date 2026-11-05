@@ -51,7 +51,9 @@ vi.mock("@/lib/pi-builder", async (orig) => ({
 
 // jsdom performs no layout and has no scrollTo; the chat auto-scroll calls it.
 Element.prototype.scrollTo = function scrollTo() {} as typeof Element.prototype.scrollTo;
-const { PiBuilderWorkbench, chatItems, runStatePill, RUN_STATE_LABELS } = await import("./PiBuilderWorkbench");
+const { PiBuilderWorkbench, chatItems, coalesceContinueTurns, runStatePill, RUN_STATE_LABELS } = await import(
+  "./PiBuilderWorkbench",
+);
 const { PageHeaderProvider, usePageHeaderSlot } = await import("@/lib/page-header");
 
 /** The shell's half: the builder's title and actions render in the ONE top bar, which this stands in for. */
@@ -157,6 +159,74 @@ describe("one header, and the chat as turns (2026-10-10)", () => {
     expect(turn.kind).toBe("turn");
     expect(turn.user).toBeNull();
     expect(turn.replies.map((r) => r.id)).toEqual(["a1"]);
+  });
+
+  it("coalesceContinueTurns merges consecutive silent edge continues into one Actions + latest text", () => {
+    const act = (id: string, title: string) => ({
+      id,
+      tool: "edge-run",
+      kind: "bash" as const,
+      title,
+      detail: "",
+      status: "done" as const,
+      startedAt: "",
+    });
+    const m = (id: string, role: "user" | "assistant", extra: Record<string, unknown> = {}) => ({
+      id,
+      role,
+      text: id,
+      at: "",
+      ...extra,
+    });
+    const raw = chatItems([
+      m("c1", "user", { silent: true, text: "(work on your computer finished)" }),
+      m("a1", "assistant", { text: "Started the build.", activities: [act("edge-j1", "docker build")] }),
+      m("c2", "user", { silent: true, text: "(work on your computer finished)" }),
+      m("a2", "assistant", { text: "Image rebuilt.", activities: [act("edge-j2", "docker ps")] }),
+      m("c3", "user", { silent: true, text: "(work on your computer finished)" }),
+      m("a3", "assistant", { text: "App is up at localhost:3343.", activities: [act("edge-j3", "curl")] }),
+    ] as never);
+    expect(raw).toHaveLength(3);
+    const merged = coalesceContinueTurns(raw);
+    expect(merged).toHaveLength(1);
+    const turn = merged[0] as {
+      kind: "turn";
+      replies: Array<{ text: string; activities?: Array<{ id: string }> }>;
+    };
+    expect(turn.replies).toHaveLength(1);
+    expect(turn.replies[0]!.text).toBe("App is up at localhost:3343.");
+    expect(turn.replies[0]!.activities?.map((a) => a.id)).toEqual(["edge-j1", "edge-j2", "edge-j3"]);
+  });
+
+  it("coalesceContinueTurns does not merge across a real person message", () => {
+    const act = (id: string) => ({
+      id,
+      tool: "edge-run",
+      kind: "bash" as const,
+      title: "x",
+      detail: "",
+      status: "done" as const,
+      startedAt: "",
+    });
+    const m = (id: string, role: "user" | "assistant", extra: Record<string, unknown> = {}) => ({
+      id,
+      role,
+      text: id,
+      at: "",
+      ...extra,
+    });
+    const raw = chatItems([
+      m("c1", "user", { silent: true, text: "(work on your computer finished)" }),
+      m("a1", "assistant", { text: "First.", activities: [act("edge-1")] }),
+      m("human", "user", { text: "also check logs" }),
+      m("a2", "assistant", { text: "Ok." }),
+      m("c2", "user", { silent: true, text: "(work on your computer finished)" }),
+      m("a3", "assistant", { text: "Second.", activities: [act("edge-2")] }),
+    ] as never);
+    const merged = coalesceContinueTurns(raw);
+    expect(merged).toHaveLength(3);
+    expect((merged[0] as { replies: Array<{ text: string }> }).replies[0]!.text).toBe("First.");
+    expect((merged[2] as { replies: Array<{ text: string }> }).replies[0]!.text).toBe("Second.");
   });
 });
 

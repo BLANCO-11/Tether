@@ -312,12 +312,17 @@ export function Sidebar({
   const epoch = useActivityEpoch();
   const { data: pendingApprovals, error: approvalsError } = useAsync(listPendingApprovals, [workspaceId, epoch]);
   const edgePending = useAsync(
-    () => (PERSONAL_PRODUCT && workspaceId ? listEdgePending() : Promise.resolve({ jobs: [], connects: [] })),
+    () =>
+      PERSONAL_PRODUCT && workspaceId
+        ? listEdgePending()
+        : Promise.resolve({ jobs: [], connects: [], relays: [] }),
     [workspaceId, epoch],
   );
-  // Edge *jobs* approve in chat; Needs you only counts connect requests (+ flow approvals).
+  // Edge *jobs* approve in chat; Needs you counts connect + plugin-relay (+ flow approvals).
   const pendingCount =
-    (!approvalsError ? (pendingApprovals?.length ?? 0) : 0) + (edgePending.data?.connects.length ?? 0);
+    (!approvalsError ? (pendingApprovals?.length ?? 0) : 0) +
+    (edgePending.data?.connects.length ?? 0) +
+    (edgePending.data?.relays.length ?? 0);
 
   /* ⚠ An unreadable access check leaves the Admin row HIDDEN — see the comment at the group filter below. */
   const isVisible = (i: NavItem) =>

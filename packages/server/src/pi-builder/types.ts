@@ -200,6 +200,11 @@ export type PiProposal = {
   choice?: PiAccountQuestion;
   /** `edge`: a job on the person's paired computer that needs Approve before the agent runs it. */
   edge?: PiEdgeJob;
+  /**
+   * Connector action proposed by a paired device via Foundry plugin relay (device → Foundry → plugin).
+   * Same Do it / Cancel as a Forge propose-change card; settle writes back to edge_relay_requests.
+   */
+  relay?: { requestId: string; deviceId: string; deviceName: string };
   /** `surface`: Forge-authored info/ask card (list or choice) — see surface-card.ts. */
   surface?: PiSurface;
   /** Where the person applied a setting change. */

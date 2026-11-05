@@ -1341,7 +1341,7 @@ function Workbench_({
                         workspace (pi-builder/welcome.ts). The screen draws none of its own — it did, and every
                         conversation opened with two. */}
                     {(() => {
-                      const items = chatItems(messages);
+                      const items = coalesceContinueTurns(chatItems(messages));
                       const liveOn = busy || liveActivities.length > 0 || !!draftDelta || !!draftThinking;
                       // Readable thinking is its own block, streaming while the model thinks; while it is the newest
                       // thing on screen, its header is the working line and a second one would say the same.
@@ -2073,6 +2073,61 @@ export function chatItems(messages: PiChatMessage[]): ChatItem[] {
   return out;
 }
 
+/** Edge settle continue: no Asked bubble, and at least one edge Actions row. */
+export function isEdgeContinueTurn(item: ChatItem): item is Extract<ChatItem, { kind: "turn" }> {
+  if (item.kind !== "turn" || item.user !== null) return false;
+  return item.replies.some((r) =>
+    (r.activities ?? []).some((a) => a.tool === "edge-run" || a.id.startsWith("edge-")),
+  );
+}
+
+/**
+ * Consecutive silent edge-continue turns → one visual turn: single What Forge did + latest summary.
+ * Render-only; stored messages stay one settle each.
+ */
+export function coalesceContinueTurns(items: ChatItem[]): ChatItem[] {
+  const out: ChatItem[] = [];
+  for (const item of items) {
+    const prev = out[out.length - 1];
+    if (item.kind === "turn" && prev?.kind === "turn" && isEdgeContinueTurn(item) && isEdgeContinueTurn(prev)) {
+      const replies = [...prev.replies, ...item.replies];
+      const activities = replies.flatMap((r) => r.activities ?? []);
+      const proposals = replies.flatMap((r) => r.proposals ?? []);
+      const files = replies.flatMap((r) => r.files ?? []);
+      const seenA = new Set<string>();
+      const uniqueActs = activities.filter((a) => {
+        if (seenA.has(a.id)) return false;
+        seenA.add(a.id);
+        return true;
+      });
+      const seenP = new Set<string>();
+      const uniqueProposals = proposals.filter((p) => {
+        if (seenP.has(p.id)) return false;
+        seenP.add(p.id);
+        return true;
+      });
+      const latest =
+        [...replies].reverse().find((r) => r.role === "assistant" && (!!r.text?.trim() || !!r.error)) ??
+        replies[replies.length - 1]!;
+      out[out.length - 1] = {
+        kind: "turn",
+        user: null,
+        replies: [
+          {
+            ...latest,
+            activities: uniqueActs.length ? uniqueActs : undefined,
+            proposals: uniqueProposals.length ? uniqueProposals : undefined,
+            files: files.length ? files : latest.files,
+          },
+        ],
+      };
+    } else {
+      out.push(item);
+    }
+  }
+  return out;
+}
+
 /**
  * A conversation saved before answers were recorded (2026-10-10) holds the agent's instruction as the person's words:
  * `Answers are in answers.json: {"q1": "…"}. …`. Its prompts were never stored, so each answer is labelled by number.
@@ -2151,7 +2206,7 @@ function TurnCard({
  * no retry, no proposal cards. For a member reading a chat somebody shared with the workspace.
  */
 export function ReadOnlyConversation({ messages }: { messages: PiChatMessage[] }) {
-  const items = chatItems(messages);
+  const items = coalesceContinueTurns(chatItems(messages));
   if (!items.length) return <p className="text-caption text-muted">Nothing has been said in this chat yet.</p>;
   return (
     <div className="space-y-6">

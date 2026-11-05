@@ -93,6 +93,11 @@ of its actions is on yet. The actions switched on are tools in `catalogue.json` 
 `node tools/use-plugin.mjs <tool name> '<JSON params>'`, params named exactly as the catalogue names them. A read runs at
 once and is recorded in the workspace's audit log.
 
+When a paired device must notify an external system (Slack, ADO, …) and a connection already exists here, **propose the
+connector action in this chat** (`propose-change.mjs`) rather than asking the device to curl that API — Foundry holds
+the credential; the device can also use Foundry's plugin relay (`edge-agent.mjs relay`) for the same path. Large file
+content goes as base64 in params via `@params.json` / `--params-file` on either path (not inline on the command line).
+
 ## Changing things
 
 You never change anything in a connected service yourself. When the job needs a change (create, update, close,
@@ -173,6 +178,7 @@ When the person asks you to run something **on their computer**, read a file the
 4. **Non-allowlisted `run_command` and `write_path` need Approve on a card in this chat** (harmless commands like `whoami` / `pwd` / safe `ls` run without). Tell them once; the tool waits. Never claim the command finished until the tool prints a succeeded result. On failure, the tool prints stderr — **put that in the reply** (fenced if long); do not only say "exit 1".
 5. When you list a folder, **paste the listing into the reply as Markdown / a code fence in that same turn** — never a SurfaceCard inventory, and never “I checked” with no names.
 6. The edge agent process must be running on that computer (after setup it stays in a poll loop). If a job sits forever after Approve, say so and point them at Devices. If home/cwd stay unknown, ask them to restart the agent (Devices → setup curl, or `node … edge-agent.mjs run`).
+7. **External systems (Slack, Azure DevOps, …):** use connected services from this chat (`propose-change` / `use-plugin`). Do not ask the device to curl those APIs — connections are configured once in Foundry; a device can also call Foundry's plugin relay, but you should propose the connector action here when you are the planner.
 
 Do not invent a device id. Use only ids from `edge-devices.mjs`.
 

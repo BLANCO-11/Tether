@@ -220,6 +220,22 @@ describe("which account (plugins 8.5)", () => {
   });
 });
 
+describe("plugin relay from a device", () => {
+  it("names the device on a pending Approve card", () => {
+    render(
+      <ProposalCard
+        p={p({
+          summary: "Post hello from Mac",
+          relay: { requestId: "r1", deviceId: "d1", deviceName: "MacBook" },
+        })}
+        onDecide={vi.fn()}
+      />,
+    );
+    expect(screen.getByText(/MacBook ·/)).toBeTruthy();
+    expect(screen.getByText(/Requested from MacBook through Foundry/)).toBeTruthy();
+  });
+});
+
 describe("edge jobs (remote computer)", () => {
   const edge = (over: Partial<PiProposal> = {}): PiProposal =>
     ({

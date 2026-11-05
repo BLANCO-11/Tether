@@ -141,6 +141,14 @@ export function createApp() {
   );
 
   /**
+   * Large connector params (file content as base64): parse BEFORE the process-wide 2 MB cap,
+   * or a 3–16 MB body 413s and never reaches the route. Auth still happens on each router.
+   * Forge propose already declared 4mb on the route; that was ineffective under the global 2mb.
+   */
+  app.use("/api/edge/relay", express.json({ limit: "16mb" }));
+  app.use("/api/forge/propose", express.json({ limit: "16mb" }));
+
+  /**
    * The process-wide parser, for everything that is NOT a Kestra callback.
    *
    * ⚠ Mounted HERE rather than at the top, and it stays at 2 MB. Raising this

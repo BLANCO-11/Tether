@@ -104,6 +104,7 @@ import { usageService } from "../services/usage.service.js";
 import { edgeDeviceService, type EdgeJobKind } from "../services/edge-device.service.js";
 import { applyEdgeAlways, edgeJobNeedsApprovalForOwner, type EdgeAlways } from "../services/edge-trust.service.js";
 import { edgeJobUnderFolder, folderPatternFromJob } from "../services/edge-command-allowlist.js";
+import { edgeRelayService, registerRelayCardAttacher } from "../services/edge-relay.service.js";
 import { PERSONAL_PRODUCT } from "../personal.js";
 import type { RunRequester } from "../services/run-requester.js";
 import type { RevisionAuthor } from "../services/revision-author.js";
@@ -2013,6 +2014,7 @@ export type CreatePiSessionOpts = {
 
 export const piBuilderService = {
   decideProposal,
+  decideRelayInbox,
   clearAccount,
   async create(workspaceId: string, opts: CreatePiSessionOpts | string = {}): Promise<PiSessionPublic> {
     // Back-compat: create(ws, goalString)
@@ -3424,8 +3426,10 @@ function edgeContinueToldBatch(
         jobs.map((j, i) => `${i + 1}. ${edgeContinueJobBlock(j)}`).join("\n\n");
   return (
     `${body}\n\n` +
-    `Continue their request with these results. Reply with ONE short summary of where things stand (a few sentences). ` +
-    `Each job already appears under What Forge did — do not narrate every file or command in the chat. ` +
+    `Continue their request with these results. Reply with ONE short line (or at most two) on where things stand — ` +
+    `the chat stacks these continues visually, so a paragraph each time is noise. ` +
+    `Each job already appears under What Forge did — do not narrate every file or command. ` +
+    `If you will enqueue more edge work next, prefer a half-line like "Rebuild done; starting the container." ` +
     `Do not ask them to approve again, and do not ask them to say "okay" — proceed.`
   );
 }
@@ -4283,9 +4287,9 @@ async function decideProposal(
   if (at < 0) throw httpErr("There is no such proposed change in this chat.", 404);
   const p = s.messages[at]!.proposals!.find((x) => x.id === proposalId)!;
   if (p.status !== "pending") throw httpErr(`This change was already ${p.status === "running" ? "started" : p.status}.`, 409);
-  // Edge cards: device ownership is checked in approveJob/rejectJob. Do NOT use the "asker" rule —
+  // Edge / plugin-relay cards: device or relay owner is the audience. Do NOT use the "asker" rule —
   // a Foundry auto-continue lands as a user row with `by.subject: null` and used to 403 the real person ("bruh").
-  if (p.kind !== "edge") {
+  if (p.kind !== "edge" && !p.relay) {
     const asker = s.messages.slice(0, at).reverse().find((m) => m.role === "user" && m.by?.subject)?.by;
     if (!asker?.subject || asker.subject !== person.subject) {
       throw httpErr("Only the person Forge proposed this change to can confirm or cancel it.", 403);
@@ -4316,6 +4320,9 @@ async function decideProposal(
     }
     update({ status: "declined", decidedBy: label, decidedAt: new Date().toISOString() });
     s.proposalOutcomes.push(outcomeLine(p));
+    if (p.relay) {
+      void edgeRelayService.settleFromProposal(p, { status: "declined", result: "Declined." });
+    }
     if (p.kind === "surface" && p.surface?.mode === "ask") maybeResumeAfterAskSurface(s, label);
     else if (p.kind === "edge") {
       // Same as settle: do not leave them saying "okay" after they declined.
@@ -4424,9 +4431,19 @@ async function decideProposal(
     await ownOnly(workspaceId, tool, use.secretName, person.subject);
     const out = await performConfirmed(workspaceId, p, { subject: person.subject, label }, { chatId: s.chatId }, chatTools, { secretName: use.secretName, personal: use.personal, label: use.label });
     update(out);
+    if (p.relay) {
+      void edgeRelayService.settleFromProposal(p, {
+        status: out.status === "partial" ? "partial" : out.status === "failed" ? "failed" : "done",
+        result: out.result,
+        results: out.results,
+      });
+    }
   } catch (e) {
     // A rule that no longer holds (the setting was turned off, the action switched off): nothing was done.
     update({ status: "failed", result: (e as Error).message });
+    if (p.relay) {
+      void edgeRelayService.settleFromProposal(p, { status: "failed", result: (e as Error).message });
+    }
   }
   s.proposalOutcomes.push(outcomeLine(p));
   return p;
@@ -4468,6 +4485,105 @@ export async function importLegacyAttachments(root = SANDBOXES_ROOT): Promise<{ 
   for (const [ws, ok] of done) if (ok) removeLegacyAttachmentRoot(root, ws);
   return { moved, left };
 }
+
+/**
+ * Needs you: Approve/decline a device plugin relay. Prefer the live chat card when present;
+ * otherwise run performConfirmed through edgeRelayService.decideStandalone.
+ */
+async function decideRelayInbox(
+  workspaceId: string,
+  relayId: string,
+  decision: "run" | "decline",
+  person: { subject: string; email?: string | null; name?: string | null; identity?: Identity },
+): Promise<{ relay: Awaited<ReturnType<typeof edgeRelayService.getForOwner>>; via: "session" | "inbox" }> {
+  const pending = (await edgeRelayService.listPending(workspaceId, person.subject)).find((r) => r.id === relayId);
+  if (pending?.proposalId) {
+    for (const s of sessions.values()) {
+      if (s.workspaceId !== workspaceId) continue;
+      if (!s.messages.some((m) => m.proposals?.some((p) => p.id === pending.proposalId && p.status === "pending"))) continue;
+      await decideProposal(workspaceId, s.id, pending.proposalId, decision, person);
+      const relay = await edgeRelayService.getForOwner(workspaceId, person.subject, relayId);
+      return { relay, via: "session" };
+    }
+  }
+  const relay = await edgeRelayService.decideStandalone(
+    workspaceId,
+    relayId,
+    { subject: person.subject, label: person.email || person.name || person.subject },
+    decision,
+  );
+  return { relay, via: "inbox" };
+}
+
+/**
+ * Put a plugin-relay Approve card on a live Forge session (or the owner's latest saved chat).
+ * Used by edgeRelayService when a device requests a write through Foundry.
+ */
+async function attachRelayProposalCard(args: {
+  workspaceId: string;
+  ownerSubject: string;
+  sessionId?: string | null;
+  chatId?: string | null;
+  proposal: PiProposal;
+}): Promise<{ sessionId: string | null; chatId: string | null }> {
+  const { workspaceId, ownerSubject, proposal } = args;
+  let s: Session | undefined = args.sessionId ? sessions.get(args.sessionId) : undefined;
+  if (s && s.workspaceId !== workspaceId) s = undefined;
+  if (!s && args.chatId) {
+    for (const cand of sessions.values()) {
+      if (cand.workspaceId === workspaceId && cand.chatId === args.chatId) {
+        s = cand;
+        break;
+      }
+    }
+  }
+  if (!s) {
+    for (const cand of sessions.values()) {
+      if (cand.workspaceId !== workspaceId) continue;
+      const who = talker(cand)?.subject ?? cand.requester?.subject;
+      if (who === ownerSubject) {
+        s = cand;
+        break;
+      }
+    }
+  }
+  const deviceBit = proposal.relay?.deviceName ? ` via ${proposal.relay.deviceName}` : "";
+  const text = `Needs your approval${deviceBit}: ${proposal.summary}`;
+  if (s) {
+    const msg = {
+      id: randomUUID(),
+      role: "assistant" as const,
+      text,
+      at: proposal.at,
+      mode: s.mode,
+      proposals: [proposal],
+    };
+    s.messages.push(msg);
+    emit(s, { type: "message", message: msg });
+    setStatus(s, s.status === "running" ? s.status : "awaiting_answers");
+    persistChat(s);
+    return { sessionId: s.id, chatId: s.chatId };
+  }
+  // No live session: park on the owner's most recently updated chat so Approve appears when they reopen.
+  const chats = await piChatRepo.list(workspaceId);
+  const mine = chats.find((c) => c.createdBy.subject === ownerSubject) ?? chats[0];
+  if (!mine) return { sessionId: null, chatId: null };
+  const row = await piChatRepo.get(workspaceId, mine.id);
+  if (!row) return { sessionId: null, chatId: null };
+  const prev = Array.isArray(row.messages) ? (row.messages as PiChatMessage[]) : [];
+  const msg: PiChatMessage = {
+    id: randomUUID(),
+    role: "assistant",
+    text,
+    at: proposal.at,
+    mode: row.mode === "agent" ? "agent" : "workflow",
+    proposals: [proposal],
+  };
+  await piChatRepo.update(mine.id, { messages: [...prev, msg] });
+  return { sessionId: null, chatId: mine.id };
+}
+
+registerRelayCardAttacher(attachRelayProposalCard);
 
 /** Tests only: the open conversations and their tool keys, to set up a session without a live Forge. */
 export const __sessionsForTests = { sessions: sessions as Map<string, unknown>, toolTokens };

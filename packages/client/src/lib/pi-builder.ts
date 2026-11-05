@@ -206,6 +206,8 @@ export type PiProposal = {
   scope?: GrantScope | "chat" | null;
   choice?: PiAccountQuestion;
   edge?: PiEdgeJob;
+  /** Device asked Foundry to run this connector action (plugin relay). */
+  relay?: { requestId: string; deviceId: string; deviceName: string };
   surface?: PiSurface;
 };
 

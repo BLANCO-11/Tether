@@ -148,11 +148,40 @@ export async function rejectEdgeJob(jobId: string): Promise<EdgeJob> {
   return ((await res.json()) as { job: EdgeJob }).job;
 }
 
-export async function listEdgePending(): Promise<{ jobs: EdgeJob[]; connects: EdgeDevice[] }> {
+export type EdgeRelayPending = {
+  id: string;
+  proposalId: string | null;
+  tool: string;
+  summary: string;
+  deviceId: string;
+  deviceName: string;
+  createdAt: string;
+  sessionId: string | null;
+  chatId: string | null;
+};
+
+export async function listEdgePending(): Promise<{
+  jobs: EdgeJob[];
+  connects: EdgeDevice[];
+  relays: EdgeRelayPending[];
+}> {
   const res = await fetch(`${await base()}/pending`, { cache: "no-store" });
   if (!res.ok) throw new Error(await said(res));
-  const body = (await res.json()) as { jobs?: EdgeJob[]; connects?: EdgeDevice[] };
-  return { jobs: body.jobs ?? [], connects: body.connects ?? [] };
+  const body = (await res.json()) as {
+    jobs?: EdgeJob[];
+    connects?: EdgeDevice[];
+    relays?: EdgeRelayPending[];
+  };
+  return { jobs: body.jobs ?? [], connects: body.connects ?? [], relays: body.relays ?? [] };
+}
+
+export async function decideEdgeRelay(id: string, decision: "run" | "decline"): Promise<void> {
+  const res = await fetch(`${await base()}/relay/${id}/decide`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ decision }),
+  });
+  if (!res.ok) throw new Error(await said(res));
 }
 
 /** Jobs awaiting approval (Needs you badge / Devices). */

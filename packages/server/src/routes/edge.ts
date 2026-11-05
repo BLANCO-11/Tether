@@ -11,6 +11,9 @@ import { asyncHandler } from "../middleware/error.middleware.js";
 import { requireIdentity } from "../middleware/identity.middleware.js";
 import { contentVisibility } from "../services/content-visibility.service.js";
 import { edgeDeviceService } from "../services/edge-device.service.js";
+import { edgeRelayService } from "../services/edge-relay.service.js";
+// Also registers the plugin-relay Approve-card attacher (side effect).
+import { piBuilderService } from "../pi-builder/service.js";
 
 export const edgeRouter = Router({ mergeParams: true });
 export const edgePublicRouter = Router();
@@ -168,11 +171,28 @@ edgeRouter.get(
   "/pending",
   requireIdentity,
   asyncHandler(async (req, res) => {
-    const [jobs, connects] = await Promise.all([
+    const [jobs, connects, relays] = await Promise.all([
       edgeDeviceService.pendingApprovals(req.params.workspaceId!, req.user!.subject),
       edgeDeviceService.pendingConnects(req.params.workspaceId!, req.user!.subject),
+      edgeRelayService.listPending(req.params.workspaceId!, req.user!.subject),
     ]);
-    res.json({ jobs, connects });
+    res.json({ jobs, connects, relays });
+  }),
+);
+
+/** Needs you: Approve or decline a device → Foundry plugin relay (when no live chat card, or from the inbox). */
+edgeRouter.post(
+  "/relay/:id/decide",
+  requireIdentity,
+  asyncHandler(async (req, res) => {
+    const body = z.object({ decision: z.enum(["run", "decline"]) }).strict().parse(req.body ?? {});
+    const out = await piBuilderService.decideRelayInbox(req.params.workspaceId!, req.params.id!, body.decision, {
+      subject: req.user!.subject,
+      email: req.user!.email,
+      name: req.user!.name,
+      identity: req.user!,
+    });
+    res.json(out);
   }),
 );
 
@@ -306,5 +326,37 @@ edgePublicRouter.post(
       .parse(req.body ?? {});
     const job = await edgeDeviceService.completeJob(device, req.params.jobId!, body);
     res.json({ job });
+  }),
+);
+
+/**
+ * Device → Foundry → plugin relay: run a connected-plugin action with the owner's configured connection.
+ * Reads finish immediately; writes become an Approve card (poll GET until done/declined).
+ */
+edgePublicRouter.post(
+  "/relay",
+  asyncHandler(async (req, res) => {
+    const device = await deviceAuth(req);
+    const body = z
+      .object({
+        tool: z.string().min(1).max(200),
+        params: z.union([z.record(z.unknown()), z.array(z.record(z.unknown()))]).optional(),
+        summary: z.string().min(5).max(500),
+        sessionId: z.string().max(80).nullable().optional(),
+        chatId: z.string().uuid().nullable().optional(),
+      })
+      .strict()
+      .parse(req.body ?? {});
+    const out = await edgeRelayService.create(device, body);
+    res.status(out.status === "awaiting_approval" ? 202 : out.status === "done" ? 200 : 200).json({ relay: out, message: out.message });
+  }),
+);
+
+edgePublicRouter.get(
+  "/relay/:id",
+  asyncHandler(async (req, res) => {
+    const device = await deviceAuth(req);
+    const relay = await edgeRelayService.get(device, req.params.id!);
+    res.json({ relay });
   }),
 );

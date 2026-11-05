@@ -65,7 +65,8 @@ forgeToolsRouter.post(
 forgeToolsRouter.post(
   "/propose",
   // A file committed to a repository travels here as base64 (a batch of up to 25 of them).
-  express.json({ limit: "4mb" }),
+  // Cap is also set on `/api/forge/propose` in app.ts (before the process-wide 2mb).
+  express.json({ limit: "16mb" }),
   asyncHandler(async (req, res) => {
     const token = req.header("x-forge-token") ?? "";
     const body = z
