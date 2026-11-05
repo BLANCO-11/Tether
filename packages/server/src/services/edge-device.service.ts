@@ -393,6 +393,7 @@ Same behaviour (auto-starts the poll loop after Approve). Use \`--setup-only\` o
     createdBy: string,
     kind: EdgeJobKind,
     payload: Record<string, unknown>,
+    sessionId?: string | null,
   ): Promise<EdgeJob> {
     const [dev] = await db
       .select()
@@ -409,6 +410,7 @@ Same behaviour (auto-starts the poll loop after Approve). Use \`--setup-only\` o
         payload,
         status: needsApproval ? "awaiting_approval" : "approved",
         createdBy,
+        sessionId: sessionId ?? null,
       })
       .returning();
     return job!;
@@ -435,6 +437,7 @@ Same behaviour (auto-starts the poll loop after Approve). Use \`--setup-only\` o
       .set({ status: "revoked", error: "Declined.", finishedAt: new Date() })
       .where(eq(edgeJobs.id, jobId))
       .returning();
+    notifyEdgeJobSettled(updated!);
     return updated!;
   },
 
@@ -480,7 +483,47 @@ Same behaviour (auto-starts the poll loop after Approve). Use \`--setup-only\` o
       .where(eq(edgeJobs.id, jobId))
       .returning();
     await this.touch(device.id);
+    notifyEdgeJobSettled(updated!);
     return updated!;
+  },
+
+  /** Stop a job that has not finished — awaiting approval, queued, or running on the agent. */
+  async cancelJob(workspaceId: string, jobId: string, ownerSubject: string, asAdmin: boolean): Promise<EdgeJob> {
+    const [row] = await db
+      .select({ job: edgeJobs, device: edgeDevices })
+      .from(edgeJobs)
+      .innerJoin(edgeDevices, eq(edgeJobs.deviceId, edgeDevices.id))
+      .where(and(eq(edgeJobs.id, jobId), eq(edgeJobs.workspaceId, workspaceId)))
+      .limit(1);
+    if (!row) throw httpErr("No such job.", 404);
+    if (!asAdmin && row.device.ownerSubject !== ownerSubject) throw httpErr("No such job.", 404);
+    const stoppable = new Set(["awaiting_approval", "approved", "running"]);
+    if (!stoppable.has(row.job.status)) throw httpErr("That job has already finished.", 409);
+    const [updated] = await db
+      .update(edgeJobs)
+      .set({ status: "revoked", error: "Stopped.", finishedAt: new Date() })
+      .where(eq(edgeJobs.id, jobId))
+      .returning();
+    notifyEdgeJobSettled(updated!);
+    return updated!;
+  },
+
+  /** Open (or recent) jobs started from a Forge chat — Background watcher. */
+  async listSessionJobs(workspaceId: string, sessionId: string, ownerSubject: string): Promise<Array<EdgeJob & { deviceName: string | null }>> {
+    const rows = await db
+      .select({ job: edgeJobs, device: edgeDevices })
+      .from(edgeJobs)
+      .innerJoin(edgeDevices, eq(edgeJobs.deviceId, edgeDevices.id))
+      .where(
+        and(
+          eq(edgeJobs.workspaceId, workspaceId),
+          eq(edgeJobs.sessionId, sessionId),
+          eq(edgeDevices.ownerSubject, ownerSubject),
+        ),
+      )
+      .orderBy(desc(edgeJobs.createdAt))
+      .limit(30);
+    return rows.map((r) => ({ ...r.job, deviceName: r.device.name }));
   },
 
   async listJobs(workspaceId: string, deviceId: string, ownerSubject: string, asAdmin: boolean): Promise<EdgeJob[]> {
@@ -563,3 +606,11 @@ Same behaviour (auto-starts the poll loop after Approve). Use \`--setup-only\` o
     }
   },
 };
+
+/** Best-effort: post the result into the Forge chat that started the job (no circular import at load). */
+function notifyEdgeJobSettled(job: EdgeJob): void {
+  if (!job.sessionId) return;
+  void import("../pi-builder/service.js")
+    .then((m) => m.piBuilderService.onEdgeJobSettled?.(job))
+    .catch(() => undefined);
+}

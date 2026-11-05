@@ -1846,12 +1846,15 @@ export const edgeJobs = pgTable(
     result: jsonb("result").$type<Record<string, unknown> | null>(),
     error: text("error"),
     createdBy: text("created_by").notNull(),
+    /** Forge chat session that enqueued this job (Background watcher / result post-back). */
+    sessionId: text("session_id"),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
     startedAt: timestamp("started_at", { withTimezone: true }),
     finishedAt: timestamp("finished_at", { withTimezone: true }),
   },
   (t) => ({
     byDevice: index("ix_edge_jobs_device_status").on(t.deviceId, t.status),
+    bySession: index("ix_edge_jobs_session").on(t.workspaceId, t.sessionId),
   }),
 );
 

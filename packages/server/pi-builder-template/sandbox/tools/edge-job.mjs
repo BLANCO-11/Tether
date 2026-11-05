@@ -11,7 +11,8 @@ if (!jobId) {
   console.error("Usage: node tools/edge-job.mjs <jobId> [waitMs]");
   process.exit(2);
 }
-const waitMs = waitRaw != null ? Number(waitRaw) : 45_000;
+// Default 0: status peek only. Long waits block the chat turn — Background owns watching.
+const waitMs = waitRaw != null ? Number(waitRaw) : 0;
 
 let cfg;
 try {
@@ -24,7 +25,7 @@ try {
 const res = await fetch(`${cfg.url}/edge/job`, {
   method: "POST",
   headers: { "content-type": "application/json", "x-forge-token": cfg.token },
-  body: JSON.stringify({ jobId, waitMs: Number.isFinite(waitMs) ? waitMs : 45_000 }),
+  body: JSON.stringify({ jobId, waitMs: Number.isFinite(waitMs) ? waitMs : 0 }),
 });
 const text = await res.text();
 let body;

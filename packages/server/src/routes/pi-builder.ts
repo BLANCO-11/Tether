@@ -526,6 +526,32 @@ piBuilderRouter.post(
   }),
 );
 
+/** Edge jobs this chat started — Background watcher (live long-run). */
+piBuilderRouter.get(
+  "/sessions/:sessionId/background",
+  requireIdentity,
+  asyncHandler(async (req, res) => {
+    const subject = req.user!.subject;
+    const body = await piBuilderService.listBackground(req.params.workspaceId, req.params.sessionId, subject);
+    res.json(body);
+  }),
+);
+
+piBuilderRouter.post(
+  "/sessions/:sessionId/background/:jobId/cancel",
+  requireIdentity,
+  asyncHandler(async (req, res) => {
+    const subject = req.user!.subject;
+    const body = await piBuilderService.cancelBackgroundJob(
+      req.params.workspaceId,
+      req.params.sessionId,
+      req.params.jobId,
+      subject,
+    );
+    res.json(body);
+  }),
+);
+
 /** Remove a file from the chat (its folder and the saved chat); its cards stay, marked removed. */
 piBuilderRouter.delete(
   "/sessions/:sessionId/files/:name",

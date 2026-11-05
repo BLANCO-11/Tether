@@ -116,6 +116,7 @@ Ordered by **usefulness ÷ risk** for the thin fork. Each phase has a kill/skip 
 | 2.1 | Run/chat live panel: engine status, current step, Stop, link to artifacts |
 | 2.2 | Reuse flow-progress ticket + poll fallback; no new unauthenticated socket |
 | 2.3 | Optional: “notify when done” using existing mail/tool if already configured |
+| 2.4 | **Background watcher (2026-11-05):** edge jobs detach from the Forge turn; Activity toggle beside Tools + in-chat chip; Stop cancels; result posts into chat when done |
 
 **Done when:** A multi-minute run can be left and resumed from one screen without digging logs.  
 **Kill if:** Progress APIs can’t expose step/artifact reliably — fix visibility before UI chrome.

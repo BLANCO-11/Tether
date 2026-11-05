@@ -3013,7 +3013,7 @@ export const piBuilderService = {
   ): Promise<{ job: { id: string; status: string; kind: string; needsApproval: boolean }; message: string }> {
     const { workspaceId, subject, session: s } = forgeEdgeCaller(token);
     const payload = body.payload ?? {};
-    const job = await edgeDeviceService.enqueue(workspaceId, body.deviceId, subject, body.kind, payload);
+    const job = await edgeDeviceService.enqueue(workspaceId, body.deviceId, subject, body.kind, payload, s.id);
     // Re-read after enqueue: getJob may auto-release allowlisted jobs that were awaiting.
     const detail = await edgeDeviceService.getJob(workspaceId, job.id, subject, false);
     const needsApproval = detail.needsApproval;
@@ -3029,8 +3029,8 @@ export const piBuilderService = {
     return {
       job: { id: detail.id, status: detail.status, kind: detail.kind, needsApproval },
       message: needsApproval
-        ? "Queued. An Approve card is already in this chat — wait until the person Approves it, then keep polling with edge-job. The edge agent on that computer must be running."
-        : "Queued and approved (harmless command, or read). Poll with edge-job until it finishes. The edge agent on that computer must be running.",
+        ? "Queued in the background. An Approve card is in this chat — once they Approve, the edge agent runs it. Do NOT poll edge-job in a loop; keep talking. The Background panel and this chat will show the result."
+        : "Queued in the background (job " + detail.id + "). Do NOT poll edge-job in a loop — finish your reply. The Background panel watches it; the result will appear in this chat when done. The edge agent on that computer must be running.",
     };
   },
 
@@ -3051,7 +3051,8 @@ export const piBuilderService = {
     message: string;
   }> {
     const { workspaceId, subject, session: s } = forgeEdgeCaller(token);
-    const waitMs = body.waitMs ?? 45_000;
+    // Default 0: status peek. Long waits block the chat turn — Background owns watching.
+    const waitMs = body.waitMs ?? 0;
     // Show the card before waiting so the person can Approve while we poll.
     {
       const snap = await edgeDeviceService.getJob(workspaceId, body.jobId, subject, false);
@@ -3104,6 +3105,92 @@ export const piBuilderService = {
       },
       message,
     };
+  },
+
+  /**
+   * Background watcher: jobs this chat started on edge (and still open, or just finished).
+   * Does not require an active Forge turn.
+   */
+  async listBackground(
+    workspaceId: string,
+    sessionId: string,
+    subject: string,
+  ): Promise<{
+    jobs: Array<{
+      id: string;
+      kind: string;
+      status: string;
+      deviceName: string | null;
+      summary: string;
+      error: string | null;
+      createdAt: string;
+      startedAt: string | null;
+      finishedAt: string | null;
+      open: boolean;
+    }>;
+  }> {
+    const s = sessions.get(sessionId);
+    if (!s || s.workspaceId !== workspaceId) throw httpErr("No such conversation.", 404);
+    const rows = await edgeDeviceService.listSessionJobs(workspaceId, sessionId, subject);
+    const openStatuses = new Set(["awaiting_approval", "approved", "running"]);
+    return {
+      jobs: rows.map((j) => ({
+        id: j.id,
+        kind: j.kind,
+        status: j.status,
+        deviceName: j.deviceName,
+        summary: edgeJobSummary(j.kind as EdgeJobKind, (j.payload ?? {}) as Record<string, unknown>, j.deviceName ?? "device"),
+        error: j.error,
+        createdAt: j.createdAt.toISOString(),
+        startedAt: j.startedAt ? j.startedAt.toISOString() : null,
+        finishedAt: j.finishedAt ? j.finishedAt.toISOString() : null,
+        open: openStatuses.has(j.status),
+      })),
+    };
+  },
+
+  async cancelBackgroundJob(workspaceId: string, sessionId: string, jobId: string, subject: string): Promise<{ job: { id: string; status: string } }> {
+    const s = sessions.get(sessionId);
+    if (!s || s.workspaceId !== workspaceId) throw httpErr("No such conversation.", 404);
+    const existing = await edgeDeviceService.getJob(workspaceId, jobId, subject, false);
+    if (existing.sessionId && existing.sessionId !== sessionId) throw httpErr("That job is not from this chat.", 404);
+    const job = await edgeDeviceService.cancelJob(workspaceId, jobId, subject, false);
+    return { job: { id: job.id, status: job.status } };
+  },
+
+  /** Edge agent finished (or was stopped) — settle the card and say so in chat without blocking a turn. */
+  onEdgeJobSettled(job: { id: string; sessionId: string | null; status: string; error: string | null; result: Record<string, unknown> | null; kind: string; payload: Record<string, unknown> }): void {
+    if (!job.sessionId) return;
+    const s = sessions.get(job.sessionId);
+    if (!s) return;
+    settleEdgeProposalCard(s, { id: job.id, status: job.status, error: job.error, result: job.result });
+    if (job.status !== "succeeded" && job.status !== "failed" && job.status !== "revoked") return;
+    const tag = `bg-job:${job.id}`;
+    const already = s.messages.some((m) => m.role === "assistant" && typeof m.text === "string" && m.text.includes(tag));
+    const notice = edgeJobOutcomeText(job);
+    const headline =
+      job.status === "succeeded"
+        ? `Background job finished on your computer.`
+        : job.status === "revoked"
+          ? `Background job stopped.`
+          : `Background job failed.`;
+    if (!already) {
+      const msg = {
+        id: randomUUID(),
+        role: "assistant" as const,
+        text: `${headline}
+
+${notice}
+
+_${tag}_`,
+        at: new Date().toISOString(),
+        mode: s.mode,
+      };
+      s.messages.push(msg);
+      emit(s, { type: "message", message: msg });
+      persistChat(s);
+    }
+    emit(s, { type: "background", jobId: job.id, status: job.status } as never);
   },
 };
 

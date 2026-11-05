@@ -1016,6 +1016,13 @@
       "when": 1797600000000,
       "tag": "0144_project_memory_enabled",
       "breakpoints": true
+    },
+    {
+      "idx": 145,
+      "version": "7",
+      "when": 1762280000000,
+      "tag": "0145_edge_job_session",
+      "breakpoints": true
     }
   ]
 }

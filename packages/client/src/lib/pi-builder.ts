@@ -809,6 +809,31 @@ export function stopPiSession(wsId: string, sessionId: string) {
   ).then((r) => r.session);
 }
 
+export type PiBackgroundJob = {
+  id: string;
+  kind: string;
+  status: string;
+  deviceName: string | null;
+  summary: string;
+  error: string | null;
+  createdAt: string;
+  startedAt: string | null;
+  finishedAt: string | null;
+  open: boolean;
+};
+
+/** Edge jobs this chat started — Background watcher. */
+export function listPiBackground(wsId: string, sessionId: string) {
+  return req<{ jobs: PiBackgroundJob[] }>(`/workspaces/${wsId}/pi-builder/sessions/${sessionId}/background`).then((r) => r.jobs);
+}
+
+export function cancelPiBackgroundJob(wsId: string, sessionId: string, jobId: string) {
+  return req<{ job: { id: string; status: string } }>(
+    `/workspaces/${wsId}/pi-builder/sessions/${sessionId}/background/${jobId}/cancel`,
+    { method: "POST", body: "{}" },
+  ).then((r) => r.job);
+}
+
 /**
  * `inputs`: what the person typed into the test form, by input name. Absent = run on the declared defaults.
  * `useProductionData`: the per-run opt-in — sent only when checked AND confirmed; the server refuses a non-admin.

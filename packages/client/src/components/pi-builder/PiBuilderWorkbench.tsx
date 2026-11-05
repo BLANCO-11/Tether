@@ -88,6 +88,7 @@ import { PiFlowCanvas } from "./PiFlowCanvas";
 import { ContextMeter } from "./ContextMeter";
 import { CHAT_FILE, PiSidePane, type ChatFile, type PaneView } from "./PiSidePane";
 import { ChatToolsPane, TOOLS_DEFAULT_W, type ToolsTab } from "./ChatToolsPane";
+import { BackgroundChip, BackgroundPanel, BackgroundToggle, useChatBackground } from "./ChatBackground";
 import { TestWorkbenchPanel } from "@/components/flow/TestWorkbenchPanel";
 import { storeRailCollapsed } from "@/lib/rail-preference";
 
@@ -225,6 +226,8 @@ function Workbench_({
   const [toolsTab, setToolsTab] = useState<ToolsTab>("files");
   const [toolsWidth, setToolsWidth] = useState(TOOLS_DEFAULT_W);
   const [toolsExpanded, setToolsExpanded] = useState(false);
+  const [bgOpen, setBgOpen] = useState(false);
+  const bg = useChatBackground(workspaceId, session?.id ?? null);
   /** Agent → Files. Builder keeps its own canvas column, so tools open on Files unless that column is folded. */
   const nativeToolsTab = (m: ChatMode, canvasIsOpen: boolean): ToolsTab =>
     m === "agent" || canvasIsOpen ? "files" : "canvas";
@@ -1059,34 +1062,46 @@ function Workbench_({
             </div>
           ),
           endActions: (
-            <button
-              type="button"
-              onClick={() => {
-                setToolsOpen((v) => {
-                  if (v) {
-                    setPane((p) => (p?.kind === "files" ? null : p));
-                    setToolsExpanded(false);
-                    return false;
-                  }
-                  const tab = nativeToolsTab(mode, canvasOpen);
-                  setToolsTab(tab);
-                  if (tab === "files") setPane({ kind: "files" });
-                  return true;
-                });
-              }}
-              aria-pressed={toolsOpen}
-              aria-label="Tools"
-              title="Files and canvas"
-              className={`flex h-8 w-8 items-center justify-center rounded-md transition-colors ${
-                toolsOpen ? "bg-accent-bg text-accent" : "text-muted hover:bg-surface-2 hover:text-text"
-              }`}
-            >
-              <PanelRight s={16} />
-            </button>
+            <div className="relative flex items-center gap-0.5">
+              <BackgroundToggle live={bg.live.length} open={bgOpen} onOpen={() => setBgOpen((v) => !v)} />
+              {bgOpen ? (
+                <BackgroundPanel
+                  jobs={bg.jobs}
+                  live={bg.live}
+                  err={bg.err}
+                  onStop={bg.stop}
+                  onClose={() => setBgOpen(false)}
+                />
+              ) : null}
+              <button
+                type="button"
+                onClick={() => {
+                  setToolsOpen((v) => {
+                    if (v) {
+                      setPane((p) => (p?.kind === "files" ? null : p));
+                      setToolsExpanded(false);
+                      return false;
+                    }
+                    const tab = nativeToolsTab(mode, canvasOpen);
+                    setToolsTab(tab);
+                    if (tab === "files") setPane({ kind: "files" });
+                    return true;
+                  });
+                }}
+                aria-pressed={toolsOpen}
+                aria-label="Tools"
+                title="Files and canvas"
+                className={`flex h-8 w-8 items-center justify-center rounded-md transition-colors ${
+                  toolsOpen ? "bg-accent-bg text-accent" : "text-muted hover:bg-surface-2 hover:text-text"
+                }`}
+              >
+                <PanelRight s={16} />
+              </button>
+            </div>
           ),
         }
       : null,
-    [session != null, openFlowId, workflow.name, workflow.steps.length, workflow.schedule?.cron, flowId, storedTitle, firstLine(messages), stateOpen, status, savedRevision, isDirty, testResult, busy, hasSteps, saving, pane?.kind, canvasOpen, toolsOpen, mode],
+    [session != null, openFlowId, workflow.name, workflow.steps.length, workflow.schedule?.cron, flowId, storedTitle, firstLine(messages), stateOpen, status, savedRevision, isDirty, testResult, busy, hasSteps, saving, pane?.kind, canvasOpen, toolsOpen, mode, bg.live.length, bgOpen, bg.jobs, bg.err],
   );
 
   // Every file in the chat, once each (a later message with the same name is the same stored file): the pane's
@@ -1395,6 +1410,7 @@ function Workbench_({
                       </div>
                     ) : null}
                     <OthersChatNotice othersChat={session?.othersChat ?? null} />
+                    <BackgroundChip live={bg.live} onOpen={() => setBgOpen(true)} />
                     <StorageNotice storage={storage} onOpenFiles={() => openFilesPane()} />
                     <ReferenceChips
                       refs={references.refs}
