@@ -63,6 +63,22 @@ vi.mock("../services/edge-device.service.js", () => ({
   edgeDeviceService: {
     approveJob: vi.fn(async () => ({ id: "ej1", status: "approved" })),
     rejectJob: vi.fn(async () => ({ id: "ej1", status: "revoked" })),
+    waitForJob: vi.fn(async () => ({
+      id: "ej1",
+      status: "succeeded",
+      kind: "run_command",
+      payload: { command: "mkdir x" },
+      error: null,
+      result: { exitCode: 0, stdout: "", stderr: "" },
+    })),
+    getJob: vi.fn(async () => ({
+      id: "ej1",
+      status: "succeeded",
+      kind: "run_command",
+      payload: { command: "mkdir x" },
+      error: null,
+      result: { exitCode: 0, stdout: "", stderr: "" },
+    })),
   },
 }));
 vi.mock("../services/edge-trust.service.js", () => ({
@@ -79,7 +95,7 @@ function session(over: Record<string, unknown> = {}) {
     workspaceId: WS,
     chatId: null,
     mode: "agent",
-    abort: new AbortController(),
+    abort: new AbortController() as AbortController | null,
     bus: new EventEmitter(),
     messages: [{ id: "u1", role: "user", text: "close my task", at: "", by: ASKER }],
     proposals: [] as unknown[],
@@ -87,6 +103,11 @@ function session(over: Record<string, unknown> = {}) {
     accounts: {} as Record<string, unknown>,
     reader: { subject: ASKER.subject },
     requester: { subject: ASKER.subject },
+    pendingEdgeContinues: [] as Array<{ jobId: string; told: string }>,
+    edgeContinued: new Set<string>(),
+    testing: false,
+    compacting: false,
+    status: "ready",
     ...over,
   };
   __sessionsForTests.sessions.set(s.id, s);
@@ -191,7 +212,10 @@ describe("the person decides", () => {
     );
     // Would 403 if asker matched the null-subject continue row.
     const p = await piBuilderService.decideProposal(WS, "sess-1", "edge-1", "run", { subject: ASKER.subject, email: "h@example.com" });
-    expect(p.status).toBe("done");
+    expect(["running", "done"]).toContain(p.status);
+    // Give the follow-up wait a tick: mock waitForJob settles immediately and should continue once.
+    await new Promise((r) => setTimeout(r, 0));
+    expect(s.edgeContinued.has("ej1") || p.status === "done").toBe(true);
   });
 });
 

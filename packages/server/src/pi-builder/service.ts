@@ -2145,6 +2145,10 @@ export const piBuilderService = {
     // The chat is open: load its Forge now, so the first message does not wait for one to start.
     forgePool.warm(workspaceId, id);
     void refreshContext(s);
+    // Jobs that finished while this chat had no live session (restart / closed tab) — continue now.
+    void catchUpSettledEdgeJobs(s).catch((e) =>
+      console.warn(`[pi-builder] edge catch-up failed for ${id}: ${(e as Error).message}`),
+    );
     return publicOf(s);
   },
 
@@ -3194,10 +3198,20 @@ export const piBuilderService = {
    * Edge agent finished (or was stopped): update the Approve card (it already shows the result) and continue Forge
    * with that result. Do NOT dump stdout into the chat as a fake assistant message — that is why people saw
    * `_bg-job:…` blobs and then had to say "okay" to make Forge move again.
+   *
+   * Resolves the live session by job card when `sessionId` is stale (server restart / chat reopen minted a new id).
    */
-  onEdgeJobSettled(job: { id: string; sessionId: string | null; status: string; error: string | null; result: Record<string, unknown> | null; kind: string; payload: Record<string, unknown> }): void {
-    if (!job.sessionId) return;
-    const s = sessions.get(job.sessionId);
+  onEdgeJobSettled(job: {
+    id: string;
+    sessionId: string | null;
+    workspaceId?: string;
+    status: string;
+    error: string | null;
+    result: Record<string, unknown> | null;
+    kind: string;
+    payload: Record<string, unknown>;
+  }): void {
+    const s = findSessionForEdgeJob(job);
     if (!s) return;
     settleEdgeProposalCard(s, { id: job.id, status: job.status, error: job.error, result: job.result });
     emit(s, { type: "background", jobId: job.id, status: job.status } as never);
@@ -3205,6 +3219,25 @@ export const piBuilderService = {
     queueOrContinueAfterEdge(s, job);
   },
 };
+
+/**
+ * Live Forge session for an edge job: exact id first, else any open session that still shows this job's card
+ * (after a restart the chat reopens under a new session id and the old one is gone).
+ */
+function findSessionForEdgeJob(job: { id: string; sessionId: string | null; workspaceId?: string }): Session | undefined {
+  if (job.sessionId) {
+    const direct = sessions.get(job.sessionId);
+    if (direct) return direct;
+  }
+  for (const s of sessions.values()) {
+    if (job.workspaceId && s.workspaceId !== job.workspaceId) continue;
+    const hit = [...s.proposals, ...s.messages.flatMap((m) => m.proposals ?? [])].some(
+      (p) => p.kind === "edge" && p.edge?.jobId === job.id,
+    );
+    if (hit) return s;
+  }
+  return undefined;
+}
 
 /** Live Forge turn + personal product + talking subject → edge device owner. */
 function forgeEdgeCaller(token: string): { workspaceId: string; subject: string; session: Session } {
@@ -3294,6 +3327,79 @@ function edgeContinueBy(s: Session): { subject: string | null; name: string | nu
   const t = talker(s);
   if (!t?.subject) return undefined;
   return { subject: t.subject, name: t.email ?? "Foundry" };
+}
+
+/**
+ * After Approve on this page: wait for the edge agent on the approving session, settle the card, continue Forge.
+ * Complements onEdgeJobSettled (which misses when the stored sessionId no longer exists).
+ */
+async function followEdgeJobAfterApprove(s: Session, jobId: string, subject: string): Promise<void> {
+  try {
+    const job = await edgeDeviceService.waitForJob(s.workspaceId, jobId, subject, false, 120_000);
+    settleEdgeProposalCard(s, { id: job.id, status: job.status, error: job.error, result: job.result });
+    emit(s, { type: "background", jobId: job.id, status: job.status } as never);
+    if (job.status !== "succeeded" && job.status !== "failed" && job.status !== "revoked") {
+      if (job.timedOut) {
+        updateEdgeCardResult(s, jobId, `Still ${job.status} after waiting — is the edge agent on that computer running?`);
+      }
+      return;
+    }
+    queueOrContinueAfterEdge(s, {
+      id: job.id,
+      status: job.status,
+      error: job.error,
+      result: job.result,
+      kind: job.kind,
+      payload: (job.payload ?? {}) as Record<string, unknown>,
+    });
+  } catch (e) {
+    console.warn(`[pi-builder] edge follow after approve failed for ${jobId}: ${(e as Error).message}`);
+  }
+}
+
+function updateEdgeCardResult(s: Session, jobId: string, result: string): void {
+  let found = false;
+  for (const m of s.messages) {
+    for (const p of m.proposals ?? []) {
+      if (p.kind !== "edge" || p.edge?.jobId !== jobId) continue;
+      p.result = result;
+      found = true;
+    }
+  }
+  if (!found) return;
+  emit(s, { type: "messages", messages: s.messages });
+  persistChat(s);
+}
+
+/**
+ * Chat reopen after a job already finished: continue once if the card still looks unfinished.
+ */
+async function catchUpSettledEdgeJobs(s: Session): Promise<void> {
+  const subject = talker(s)?.subject;
+  if (!subject) return;
+  const cards = [...s.proposals, ...s.messages.flatMap((m) => m.proposals ?? [])].filter(
+    (p): p is PiProposal & { edge: NonNullable<PiProposal["edge"]> } => p.kind === "edge" && !!p.edge?.jobId,
+  );
+  for (const p of cards) {
+    if (s.edgeContinued.has(p.edge.jobId)) continue;
+    if (p.status === "declined") continue;
+    try {
+      const job = await edgeDeviceService.getJob(s.workspaceId, p.edge.jobId, subject, false);
+      if (job.status !== "succeeded" && job.status !== "failed" && job.status !== "revoked") continue;
+      // Card may already show Done (settle ran with no live session to continue). Still continue once.
+      settleEdgeProposalCard(s, { id: job.id, status: job.status, error: job.error, result: job.result });
+      queueOrContinueAfterEdge(s, {
+        id: job.id,
+        status: job.status,
+        error: job.error,
+        result: job.result,
+        kind: job.kind,
+        payload: (job.payload ?? {}) as Record<string, unknown>,
+      });
+    } catch {
+      /* job gone or not ours */
+    }
+  }
 }
 
 function flushPendingEdgeContinues(s: Session): void {
@@ -4024,26 +4130,25 @@ async function decideProposal(
         (p.params ?? {}) as Record<string, unknown>,
       );
     }
-    update({ status: "running", decidedBy: label, decidedAt: new Date().toISOString() });
+    update({ status: "running", decidedBy: label, decidedAt: new Date().toISOString(), result: `Approved. Running on ${p.edge.deviceName}…` });
     try {
       await edgeDeviceService.approveJob(workspaceId, p.edge.jobId, person.subject, false);
-      update({
-        status: "done",
-        result: `Approved. Running on ${p.edge.deviceName} — Forge will pick up the result.`,
-      });
     } catch (e) {
       const code = (e as { statusCode?: number }).statusCode;
       if (code === 409) {
-        // Approved from Needs you / Devices while the card was still open.
-        update({
-          status: "done",
-          result: `Already approved. Running on ${p.edge.deviceName} — Forge will pick up the result.`,
-        });
+        // Already approved elsewhere — still watch for the result on THIS session.
+        update({ status: "running", result: `Already approved. Running on ${p.edge.deviceName}…` });
       } else {
         update({ status: "failed", result: (e as Error).message });
+        s.proposalOutcomes.push(outcomeLine(p));
+        return p;
       }
     }
     s.proposalOutcomes.push(outcomeLine(p));
+    // Stay on this live session until the job finishes — do not rely only on sessionId notify
+    // (a restart between Approve and complete used to drop the continuation entirely).
+    setStatus(s, "awaiting_answers");
+    void followEdgeJobAfterApprove(s, p.edge.jobId, person.subject);
     return p;
   }
   if (p.kind === "account" && p.choice) {

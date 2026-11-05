@@ -41,4 +41,10 @@ describe("edge background settle continues Forge instead of dumping chat", () =>
     expect(body).toMatch(/m\.by\?\.subject/);
     expect(body).toMatch(/device ownership is checked in approveJob/);
   });
+
+  it("Approve watches the job on this session and settle can find a reopened chat", () => {
+    expect(src).toMatch(/function findSessionForEdgeJob/);
+    expect(src).toMatch(/followEdgeJobAfterApprove/);
+    expect(src).toMatch(/catchUpSettledEdgeJobs/);
+  });
 });
