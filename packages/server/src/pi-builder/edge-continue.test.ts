@@ -34,4 +34,11 @@ describe("edge background settle continues Forge instead of dumping chat", () =>
   it("edge-run tool tells Forge not to ask for okay", () => {
     expect(tool).toMatch(/do not ask them to say okay/i);
   });
+
+  it("decideProposal skips the asker rule for edge cards (null-subject continue must not 403 Approve)", () => {
+    const body = src.slice(src.indexOf("async function decideProposal"));
+    expect(body).toMatch(/if \(p\.kind !== "edge"\)/);
+    expect(body).toMatch(/m\.by\?\.subject/);
+    expect(body).toMatch(/device ownership is checked in approveJob/);
+  });
 });

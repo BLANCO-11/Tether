@@ -59,6 +59,15 @@ vi.mock("./agent-changes.js", () => ({
   performConfirmed: (...a: unknown[]) => m.perform(...a),
   outcomeLine: (p: { status: string; summary: string }) => `outcome: ${p.status} ${p.summary}`,
 }));
+vi.mock("../services/edge-device.service.js", () => ({
+  edgeDeviceService: {
+    approveJob: vi.fn(async () => ({ id: "ej1", status: "approved" })),
+    rejectJob: vi.fn(async () => ({ id: "ej1", status: "revoked" })),
+  },
+}));
+vi.mock("../services/edge-trust.service.js", () => ({
+  applyEdgeAlways: vi.fn(async () => undefined),
+}));
 
 import { __sessionsForTests, buildPrompt, piBuilderService, proposeChange, proposeSetting } from "./service.js";
 
@@ -154,6 +163,35 @@ describe("the person decides", () => {
     m.perform.mockRejectedValueOnce(new Error("This workspace lets Forge Agent read from connected services, not change them."));
     const p = await piBuilderService.decideProposal(WS, "sess-1", "p1", "run", { subject: ASKER.subject });
     expect(p).toMatchObject({ status: "failed", result: expect.stringMatching(/not change them/) });
+  });
+  it("an edge Approve after a Foundry continue (by.subject null) still works for the person", async () => {
+    const s = session({ abort: null });
+    s.messages.push(
+      { id: "cont", role: "user", text: "(work on your computer finished)", at: "", by: { subject: null, name: "Foundry" } } as never,
+      {
+        id: "a-edge",
+        role: "assistant",
+        text: "This needs your approval before it runs on your computer.",
+        at: "",
+        proposals: [
+          {
+            id: "edge-1",
+            kind: "edge",
+            tool: "edge-run",
+            connector: "mac",
+            action: "Run a command",
+            summary: "mkdir",
+            params: { command: "mkdir x" },
+            status: "pending",
+            at: "",
+            edge: { jobId: "ej1", deviceId: "d1", deviceName: "mac", kind: "run_command" },
+          },
+        ],
+      } as never,
+    );
+    // Would 403 if asker matched the null-subject continue row.
+    const p = await piBuilderService.decideProposal(WS, "sess-1", "edge-1", "run", { subject: ASKER.subject, email: "h@example.com" });
+    expect(p.status).toBe("done");
   });
 });
 

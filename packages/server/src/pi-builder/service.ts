@@ -3286,10 +3286,14 @@ function queueOrContinueAfterEdge(
     return;
   }
   s.edgeContinued.add(job.id);
-  void runTurn(s, told, 0, {
-    text: "(work on your computer finished)",
-    by: { subject: null, name: "Foundry" },
-  });
+  void runTurn(s, told, 0, { text: "(work on your computer finished)", by: edgeContinueBy(s) });
+}
+
+/** Attribution for a Foundry-driven continuation — keep the person's subject so later cards still know who asked. */
+function edgeContinueBy(s: Session): { subject: string | null; name: string | null } | undefined {
+  const t = talker(s);
+  if (!t?.subject) return undefined;
+  return { subject: t.subject, name: t.email ?? "Foundry" };
 }
 
 function flushPendingEdgeContinues(s: Session): void {
@@ -3301,10 +3305,7 @@ function flushPendingEdgeContinues(s: Session): void {
     return;
   }
   s.edgeContinued.add(next.jobId);
-  void runTurn(s, next.told, 0, {
-    text: "(work on your computer finished)",
-    by: { subject: null, name: "Foundry" },
-  });
+  void runTurn(s, next.told, 0, { text: "(work on your computer finished)", by: edgeContinueBy(s) });
 }
 
 /**
@@ -3961,12 +3962,16 @@ async function decideProposal(
   const s = getOrThrow(workspaceId, sessionId);
   const at = s.messages.findIndex((m) => m.proposals?.some((p) => p.id === proposalId));
   if (at < 0) throw httpErr("There is no such proposed change in this chat.", 404);
-  const asker = s.messages.slice(0, at).reverse().find((m) => m.role === "user" && m.by)?.by;
-  if (!asker?.subject || asker.subject !== person.subject) {
-    throw httpErr("Only the person Forge proposed this change to can confirm or cancel it.", 403);
-  }
   const p = s.messages[at]!.proposals!.find((x) => x.id === proposalId)!;
   if (p.status !== "pending") throw httpErr(`This change was already ${p.status === "running" ? "started" : p.status}.`, 409);
+  // Edge cards: device ownership is checked in approveJob/rejectJob. Do NOT use the "asker" rule —
+  // a Foundry auto-continue lands as a user row with `by.subject: null` and used to 403 the real person ("bruh").
+  if (p.kind !== "edge") {
+    const asker = s.messages.slice(0, at).reverse().find((m) => m.role === "user" && m.by?.subject)?.by;
+    if (!asker?.subject || asker.subject !== person.subject) {
+      throw httpErr("Only the person Forge proposed this change to can confirm or cancel it.", 403);
+    }
+  }
   const label = person.email || person.name || person.subject;
   const update = (patch: Partial<PiProposal>) => {
     Object.assign(p, patch);
@@ -3997,7 +4002,10 @@ async function decideProposal(
       // Same as settle: do not leave them saying "okay" after they declined.
       const told = `The person declined the edge job (${p.summary}). Acknowledge briefly; do not re-propose the same command unless they ask.`;
       if (!s.abort && !s.testing && !s.compacting) {
-        void runTurn(s, told, 0, { text: "(declined on a card)", by: { subject: null, name: label } });
+        void runTurn(s, told, 0, {
+          text: "(declined on a card)",
+          by: { subject: person.subject, name: label },
+        });
       }
     }
     return p;
