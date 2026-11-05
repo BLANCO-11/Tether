@@ -3,7 +3,6 @@ import { copyFileSync, mkdirSync } from "node:fs";
 import { connect } from "node:net";
 import { join } from "node:path";
 import { config } from "../config/index.js";
-import { lastModelConnection } from "../services/model-connection.js";
 import { resolvePiBin, TEMPLATE_ROOT } from "./paths.js";
 import { sandboxDir, sessionRoot } from "./sandbox-fs.js";
 
@@ -23,19 +22,6 @@ export type TurnEnd = {
 
 export function piModel(): string {
   return (process.env.PI_MODEL || config.inference.model || "gpt-6-luna").replace(/^.*\//, "");
-}
-
-/**
- * The one model connection's gateway (2026-11-04), as last resolved. pi-builder/service.ts resolves it
- * (resolveGenerationProvider) when a chat opens, every turn and on a model change, all before a process is spawned.
- * The environment is the fallback.
- */
-export function forgeGateway(): { LITELLM_API_KEY: string; LITELLM_BASE_URL: string } {
-  const c = lastModelConnection();
-  return {
-    LITELLM_API_KEY: c?.apiKey || config.inference.apiKey,
-    LITELLM_BASE_URL: (c?.baseUrl || config.inference.baseUrl).replace(/\/v1\/?$/, ""),
-  };
 }
 
 /** The conversation Forge resumes from — beside the sandbox, not in it, so the agent's file tools are not pointed at it. */
@@ -127,19 +113,18 @@ export class ForgeProcess {
   private pending = new Map<string, (ev: Record<string, unknown>) => void>();
   private nextId = 0;
 
-  /** `effort`: the `reasoning_effort` this process runs with (thinking.ts) — fixed for its life; a change restarts it. `model`: likewise (model-choice.ts). */
-  readonly model: string;
-  constructor(opts: { workspaceId: string; sessionId: string; effort?: string; model?: string }) {
+  /** `effort`: the `reasoning_effort` this process runs with (thinking.ts) — fixed for its life; a change restarts it. */
+  constructor(opts: { workspaceId: string; sessionId: string; effort?: string }) {
     const root = sessionRoot(opts.workspaceId, opts.sessionId);
     const sbx = sandboxDir(opts.workspaceId, opts.sessionId);
-    this.model = opts.model ? opts.model.replace(/^.*\//, "") : piModel();
-    const model = this.model;
+    const model = piModel();
     // The extensions come from the server's template every time (the conversation's copies are Forge's to change).
     const ext = join(root, "pi-extensions");
     mkdirSync(ext, { recursive: true });
     for (const f of ["luna-tools-compat.js", "image-budget.js", "bash-timeout.js"]) copyFileSync(join(TEMPLATE_ROOT, "pi-extensions", f), join(ext, f));
     const ai = {
-      ...forgeGateway(),
+      LITELLM_API_KEY: config.inference.apiKey,
+      LITELLM_BASE_URL: config.inference.baseUrl.replace(/\/v1\/?$/, ""),
       // Offline needs ~/.pi/agent/litellm-models.json keyed to the API-key fingerprint; a fresh container has none.
       LITELLM_OFFLINE: process.env.LITELLM_OFFLINE ?? "0",
       PI_PROVIDER: process.env.PI_PROVIDER ?? "litellm",
@@ -238,13 +223,6 @@ export class ForgeProcess {
   onExit(fn: () => void): void {
     if (this.exited) fn();
     else this.onExitFns.push(fn);
-  }
-
-  /** A message for the turn that is running (2026-11-03): Pi gives it to the agent after its current step. False when no turn is running. */
-  steer(message: string): boolean {
-    if (this.exited || !this.turnDone) return false;
-    this.send({ type: "steer", message });
-    return true;
   }
 
   /** One turn: resolves when Pi reports `agent_end`, the process dies, the time limit passes, or `signal` aborts. */

@@ -17,7 +17,6 @@ export type ThinkingLevel = (typeof THINKING_LEVELS)[number];
 export const DEFAULT_THINKING: ThinkingLevel = "balanced";
 
 const EFFORT: Record<ThinkingLevel, string> = { low: "low", balanced: "medium", high: "high", ultra: "xhigh" };
-const THINKING_LABEL: Record<ThinkingLevel, string> = { low: "Low", balanced: "Balanced", high: "High", ultra: "Ultra high" };
 
 export function isThinkingLevel(v: unknown): v is ThinkingLevel {
   return typeof v === "string" && (THINKING_LEVELS as readonly string[]).includes(v);
@@ -26,9 +25,4 @@ export function isThinkingLevel(v: unknown): v is ThinkingLevel {
 /** The `reasoning_effort` a Forge process runs with. */
 export function reasoningEffort(mode: ChatMode, level: ThinkingLevel): string {
   return mode === "agent" ? EFFORT[level] : "none";
-}
-
-/** The line the chat shows after the level changes. */
-export function thinkingNote(level: ThinkingLevel): string {
-  return `Thinking: ${THINKING_LABEL[level]}.`;
 }

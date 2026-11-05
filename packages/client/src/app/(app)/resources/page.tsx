@@ -39,9 +39,7 @@ import { Skeleton } from "@/components/ui/Skeleton";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { RowMenu } from "@/components/ui/RowMenu";
 import { Confirm } from "@/components/ui/Confirm";
-import { Plus, Search, Database, Upload, Trash, Eye } from "@/components/ui/icons";
-import { Modal } from "@/components/ui/Modal";
-import { ChatFilePreview } from "@/components/pi-builder/ChatFilePreview";
+import { Plus, Search, Database, Upload, Trash } from "@/components/ui/icons";
 import { bulkSentence, runEach } from "@/lib/bulk";
 import { resolveWorkspaceId } from "@/lib/foundry-client";
 import {
@@ -188,9 +186,6 @@ function ResourcesPageContent() {
   const { data: flows } = useAsync(listFlows);
   const { data: files, error: errFiles, reload: reloadFiles } = useAsync(listWorkspaceFiles);
   const [confirmFile, setConfirmFile] = useState<WorkspaceFile | null>(null);
-  // The file being viewed (the eye / the name): its columns and first rows, never the whole data.
-  const [viewing, setViewing] = useState<{ file: WorkspaceFile; href: string } | null>(null);
-  const view = async (f: WorkspaceFile) => setViewing({ file: f, href: await workspaceFileUrl(f.id) });
   const [uploads, setUploads] = useState<Uploading[]>([]);
   const [uploadsHidden, setUploadsHidden] = useState(false);
   const picker = useRef<HTMLInputElement>(null);
@@ -474,7 +469,7 @@ function ResourcesPageContent() {
               aria-label={`Select ${f.name}`}
             />
           )}
-          <button type="button" onClick={() => void view(f)} className="truncate text-left font-medium text-text hover:text-accent" title={`View ${f.name}`}>
+          <button type="button" onClick={() => void download(f)} className="truncate text-left font-medium text-text hover:text-accent" title={`Download ${f.name}`}>
             {f.name}
           </button>
         </span>
@@ -489,23 +484,12 @@ function ResourcesPageContent() {
       ),
       health: <StatusPill status="ok">Stored</StatusPill>,
       actions: (
-        <span className="inline-flex items-center gap-0.5">
-        <button
-          type="button"
-          onClick={() => void view(f)}
-          aria-label={`View ${f.name}`}
-          title="View"
-          className="flex h-8 w-8 items-center justify-center rounded-md text-muted hover:bg-surface-2 hover:text-text focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-        >
-          <Eye s={16} />
-        </button>
         <RowMenu
           actions={[
             { label: "Download", onClick: () => void download(f) },
             { label: "Delete", icon: "delete", danger: true, onClick: () => setConfirmFile(f) },
           ]}
         />
-        </span>
       ),
     },
   }));
@@ -678,18 +662,6 @@ function ResourcesPageContent() {
         onConfirm={() => confirmFile && removeFile(confirmFile)}
         onClose={() => setConfirmFile(null)}
       />
-      {/* The viewer is a dialog, like the Email box's: a sheet is a table and wants the width. It shows the columns and
-          the first 50 rows only — enough to understand the schema; the whole data is the download. */}
-      <Modal open={!!viewing} onClose={() => setViewing(null)} title={viewing?.file.name ?? "File"} wide fit>
-        {viewing ? (
-          <div className="flex max-h-[70vh] min-h-[200px] flex-col">
-            <ChatFilePreview key={viewing.href} name={viewing.file.name} href={viewing.href} maxRows={50} />
-            <div className="mt-3 flex justify-end">
-              <Button variant="ghost" size="sm" onClick={() => void download(viewing.file)}>Download</Button>
-            </div>
-          </div>
-        ) : null}
-      </Modal>
       <Confirm
         open={confirmBulkFiles}
         title={`Delete ${pickedFiles.length} ${pickedFiles.length === 1 ? "file" : "files"}?`}

@@ -23,7 +23,7 @@ import { getMe, listPendingApprovals } from "@/lib/api";
 import { useAsync } from "@/lib/hooks";
 import { usePermissions } from "@/lib/permissions";
 import { useActivityEpoch } from "@/lib/activity";
-import { Chat, Folder, Workflow, Wrench, Activity, CheckCheck, Close, Gauge, Shield, Database, Key, Bolt, ChevronLeft, Home, Plus, Cube, Mail, LogOut, Apps } from "@/components/ui/icons";
+import { Chat, Folder, Workflow, Wrench, Activity, CheckCheck, Close, Shield, Database, Key, Bolt, ChevronLeft, Home, Plus, Cube, Mail, LogOut, Apps } from "@/components/ui/icons";
 import { AlphaChip } from "@/components/shell/AlphaChip";
 
 // ── Pack nav: 04 § nav rail — the full product, not just the 5-row prototype ──
@@ -166,63 +166,17 @@ export const groups: NavGroup[] = [
         href: "/runs",
         label: "Runs & Activity",
         Icon: Activity,
-        // ⚠ No "/runs/schedules": no such route exists (no schedules page under
-        // app/(app)), and next.config redirects only exact "/runs" → "/history" —
-        // the child was a clickable link to a 404. Removed, not disabled: a leaf
-        // with no backing route has no group to preserve.
-        // "/incidents" stays in ownedPaths (below) so the route is still
-        // claimed and its breadcrumb/active-state logic keeps working — only
-        // the visible sub-nav link is removed.
-        ownedPaths: ["/history", "/incidents"],
+        // Personal fork: incidents / admin ops are removed from the product surface
+        // (`lib/personal.ts`). Runs claim history only.
+        ownedPaths: ["/history"],
       },
       {
-        href: "/reports",
-        label: "Dashboards & Reports",
-        Icon: Gauge,
-        needsReports: true,
-        // ⚠ No children: "/reports?scope=to-me", "/reports?scope=mine" and
-        // "/reports/change-requests" were links to nowhere — next.config sends
-        // "/reports*" to "/dashboard", and the dashboard reads no `scope` param
-        // and has no change-requests view, so each filter silently showed the
-        // same unfiltered page. Removed, not disabled: leaves with no backing
-        // filter have no group to preserve. The parent stays: "/reports" itself
-        // redirects to the real "/dashboard".
-      },
-      {
-        href: "/admin",
-        label: "Admin",
+        // Personal settings — kept fat. Enterprise Admin (people / workspaces /
+        // roles / gates / audit / break-glass) is thinned out of this fork.
+        href: "/ai-provider",
+        label: "AI models",
         Icon: Shield,
-        superAdminOnly: true,
-        // ⚠ `/ai-provider` is here because its WRITE path is `requireDeploymentAdmin`
-        // — super admin, or an `admin` row in some workspace. The match is
-        // deliberately CONSERVATIVE in one direction: this group is shown on the
-        // CURRENT workspace's capabilities, so an admin of Finance browsing HR
-        // does not see the link to a page they could in fact use. Hiding a
-        // usable page is recoverable; showing one that 403s is not.
-        ownedPaths: ["/organization", "/ai-provider", "/admin", "/admin/people", "/admin/workspaces", "/admin/roles", "/admin/gates", "/admin/audit", "/admin/incidents", "/incidents/break-glass"],
-        children: [
-          { href: "/admin", label: "Overview" },
-          // Admin simplify (2026-10-30): a person, a workspace, what a role means. "People & access" and "Who can see
-          // what" were removed in its phase 6 — a person's page says where they work and what they can see there.
-          { href: "/admin/people", label: "People" },
-          { href: "/organization", label: "Workspaces" },
-          { href: "/admin/roles", label: "Roles" },
-          // ⚠ **THE PAGE EXISTED THROUGHOUT AND NOTHING LINKED TO IT.** The pack's
-          // IA (04) has no row for it, so the `ui-upgrade` rebuild of this rail
-          // dropped the entry and left `app/(app)/ai-provider/page.tsx`, its
-          // `alpha-registry` entry and its smoke test all in place — a page
-          // reachable only by typing the URL. Reported from use: *"the LLM
-          // configuration page is no longer there."*
-          //
-          // ⚠ Its label says MODELS, plural, because the page configures TWO of
-          // them (D-115) and calling it "AI provider" is what let somebody change
-          // the `llm_complete` model and conclude drafting was still slow.
-          { href: "/ai-provider", label: "AI models" },
-          { href: "/admin/gates", label: "Release gates" },
-          { href: "/admin/audit", label: "Audit" },
-          { href: "/admin/incidents", label: "Incidents" },
-          { href: "/incidents/break-glass", label: "Break-glass" },
-        ],
+        ownedPaths: ["/ai-provider"],
       },
     ],
   },

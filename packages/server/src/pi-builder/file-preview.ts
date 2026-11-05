@@ -28,9 +28,9 @@ export type FilePreview =
 
 const SHEET_EXT = /\.(xlsx|xlsm|xls|ods|csv|tsv)$/i;
 
-export function previewOf(name: string, body: Buffer, maxRows: number = PREVIEW_ROWS): FilePreview {
+export function previewOf(name: string, body: Buffer): FilePreview {
   try {
-    if (SHEET_EXT.test(name)) return sheetPreview(body, /\.tsv$/i.test(name), Math.min(Math.max(1, Math.floor(maxRows)), PREVIEW_ROWS));
+    if (SHEET_EXT.test(name)) return sheetPreview(body, /\.tsv$/i.test(name));
     if (/\.docx$/i.test(name)) return docxPreview(body);
   } catch (e) {
     return { kind: "none", reason: `This file could not be read for a preview (${(e as Error).message}). Download it to open it.` };
@@ -44,12 +44,12 @@ function cell(v: unknown): string {
   return String(v);
 }
 
-function sheetPreview(body: Buffer, tsv: boolean, maxRows: number): FilePreview {
+function sheetPreview(body: Buffer, tsv: boolean): FilePreview {
   const wb = read(body, { type: "buffer", cellDates: true, ...(tsv ? { FS: "\t" } : {}) });
   const sheets = wb.SheetNames.slice(0, 20).map((name) => {
     const all = utils.sheet_to_json<unknown[]>(wb.Sheets[name]!, { header: 1, blankrows: false, defval: "" });
     const totalCols = all.reduce<number>((n, r) => Math.max(n, r.length), 0);
-    const rows = all.slice(0, maxRows).map((r) => r.slice(0, PREVIEW_COLS).map(cell));
+    const rows = all.slice(0, PREVIEW_ROWS).map((r) => r.slice(0, PREVIEW_COLS).map(cell));
     return { name, rows, totalRows: all.length, totalCols };
   });
   return { kind: "table", sheets };

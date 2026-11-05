@@ -145,7 +145,7 @@ async function main() {
     ["GET", "/api/ops/status", "auditor", true],
     ["GET", "/api/signals", "auditor", true],
     ["GET", "/api/ops/llm/provider", "auditor", false],
-    ["PUT", "/api/runtime-model/provider", "auditor", false],
+    ["PUT", "/api/generation/llm/provider", "auditor", false],
   ];
   const platformResults: string[] = [];
   for (const [method, path, who, shouldPass] of platformProbes) {

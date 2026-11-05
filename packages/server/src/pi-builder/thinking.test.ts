@@ -3,7 +3,7 @@
  * travels to the process as PI_FORGE_REASONING_EFFORT, and luna-tools-compat.js puts it on the request.
  */
 import { describe, expect, it } from "vitest";
-import { reasoningEffort, isThinkingLevel, thinkingNote, THINKING_LEVELS } from "./thinking.js";
+import { reasoningEffort, isThinkingLevel, THINKING_LEVELS } from "./thinking.js";
 import { thinkingFromUpdate } from "./activity.js";
 // @ts-expect-error a plain-JS pi extension, loaded by pi rather than by this package
 import lunaCompat, { effortFor } from "../../pi-builder-template/pi-extensions/luna-tools-compat.js";
@@ -26,13 +26,6 @@ describe("reasoningEffort", () => {
     expect(isThinkingLevel("ultra")).toBe(true);
     expect(isThinkingLevel("xhigh")).toBe(false);
     expect(isThinkingLevel(null)).toBe(false);
-  });
-});
-
-describe("thinkingNote", () => {
-  it("names the level the chat shows", () => {
-    expect(thinkingNote("ultra")).toBe("Thinking: Ultra high.");
-    expect(thinkingNote("balanced")).toBe("Thinking: Balanced.");
   });
 });
 

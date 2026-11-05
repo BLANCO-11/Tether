@@ -80,30 +80,8 @@ describe("sending a report", () => {
     expect(msg.to).toEqual(["person.a@microland.com"]);
     expect(msg.attachments[0].name).toMatch(/^cost-report_finance_.*\.xlsx$/);
     expect(msg.attachments[0].data.subarray(0, 2).toString()).toBe("PK"); // an xlsx is a zip
-    expect(msg.attachments.length).toBe(2);
-    expect(msg.attachments[1].name).toMatch(/^cost-report_finance_.*\.pdf$/); // the PDF travels with it
-    expect(msg.attachments[1].data.subarray(0, 5).toString()).toBe("%PDF-");
-    expect(msg.body).toContain("• PDF:"); // and the message describes both
-    expect(msg.body).toContain("• Excel:");
     expect(msg.body).not.toMatch(/https?:\/\//); // a snapshot: nothing links back into the product
     expect(updates.at(-1)).toMatchObject({ outcome: "sent" });
-  });
-
-  it("attaches only what was chosen: the report alone, the workbook alone, and never nothing", async () => {
-    send.mockResolvedValue({ ok: true, messageId: "m", requestId: null });
-    await reportShareService.send({ ...input, formats: ["pdf"] });
-    const pdfOnly = (send.mock.calls[0][0] as { attachments: Array<{ name: string }>; body: string });
-    expect(pdfOnly.attachments.map((a) => a.name.split(".").pop())).toEqual(["pdf"]);
-    expect(pdfOnly.body).toContain("• PDF:");
-    expect(pdfOnly.body).not.toContain("• Excel:");
-    send.mockClear();
-    await reportShareService.send({ ...input, formats: ["xlsx"] });
-    expect((send.mock.calls[0][0] as { attachments: Array<{ name: string }> }).attachments.map((a) => a.name.split(".").pop())).toEqual(["xlsx"]);
-    send.mockClear();
-    const none = await reportShareService.send({ ...input, formats: [] });
-    expect(none).toMatchObject({ ok: false, status: 422 });
-    expect(send).not.toHaveBeenCalled();
-    expect(inserted.length).toBe(2); // the refused one left no record
   });
 
   it("an address outside the domain never reaches the transport or the record", async () => {

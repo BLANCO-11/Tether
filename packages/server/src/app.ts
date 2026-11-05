@@ -217,11 +217,15 @@ export function createApp() {
   // registry that does not exist. See routes/engine-plugins.ts and D-111.
   app.use("/api/engine", requireApiKey, enginePluginsRouter);
 
-  // The one model connection (gateway, key, enabled models, default) for workflows, the builder and Forge — AI models →
-  // Models. It lived in ops-api behind `/api/ops/llm/*` until 2026-10-30.
+  // The RUNTIME model — what the `llm_complete` tool a workflow calls uses (AI models → Runtime). It lived in ops-api
+  // behind `/api/ops/llm/*` until 2026-10-30.
   app.use("/api/runtime-model", requireApiKey, runtimeModelRouter);
 
-  // Model pricing (2026-11-04: the model routes moved to `/api/runtime-model` above). Deployment-wide, so not under
+  // ⚠ Which model DESIGNS automations — a DIFFERENT thing from `/api/runtime-model`
+  // above, which configures the `llm_complete` tool a flow calls (F2: changing
+  // the second did nothing to the first, and nothing said so). Two routers, two
+  // stores, two modules — D-35 forbids merging them, and adjacency in this
+  // file is as close as they may get. Deployment-wide, so not under
   // `/workspaces/:ws`; its writes are gated by `requirePlatformPermission("platform.generation.write")`.
   app.use("/api/generation", requireApiKey, generationProviderRouter);
 

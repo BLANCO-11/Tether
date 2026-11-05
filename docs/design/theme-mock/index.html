@@ -1,0 +1,657 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Foundry — Theme mock</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    /*
+      ── DESIGN LOCK (mock) ─────────────────────────────────────────────────
+      Feel: soft matte instrument — precision tool, not frosty Apple glass.
+        • Solid fills over multi-stop glossy gradients
+        • No outer glow bloom, no heavy backdrop-blur chrome
+        • Depth from tonal steps + quiet hairlines
+        • Character accents used as a SET across roles
+
+      Dark:  soft black #0e1111
+             CTA = chalk (off-white) — ties both themes to one identity
+             accents = horizon · ember · mauve · sea-glass · ink-line
+
+      Light: off-white #F2F0EF
+             CTA = ink (#0e1111) — mirror of dark chalk
+             accents = slate · terracotta · sage · plum · fog (warmer, quieter on paper)
+    */
+
+    :root {
+      --sidebar-w: 240px;
+      --topbar: 56px;
+      --font: "Outfit", sans-serif;
+      --mono: "IBM Plex Mono", ui-monospace, monospace;
+      --radius: 10px;
+      --radius-sm: 8px;
+    }
+
+    /* ══ DARK ════════════════════════════════════════════════════════════ */
+    [data-theme="dark"] {
+      color-scheme: dark;
+
+      --bg: #0e1111;
+      --sunken: #0a0c0c;
+      --surface: #161a1a;
+      --surface-2: #1c2222;
+      --text: #eceae8;
+      --muted: #9a9f9d;
+      --dim: #6f7573;
+
+      /* Character set */
+      --chalk: #f2f0ef;
+      --horizon: #6b9bd1;
+      --horizon-soft: #8eb4dc;
+      --ember: #e3925a;
+      --ember-soft: #efb089;
+      --mauve: #b895c4;
+      --sea: #7aada0;
+      --ink-line: #2c3333;
+      --ink-line-2: #3d4646;
+
+      --chalk-bg: rgba(242, 240, 239, 0.08);
+      --horizon-bg: rgba(107, 155, 209, 0.12);
+      --ember-bg: rgba(227, 146, 90, 0.12);
+      --mauve-bg: rgba(184, 149, 196, 0.12);
+      --sea-bg: rgba(122, 173, 160, 0.12);
+
+      /* Roles */
+      --cta: var(--chalk);
+      --cta-fg: #0e1111;
+      --cta-fill: #f2f0ef;
+      --cta-hover: #ffffff;
+
+      --btn-secondary-bg: transparent;
+      --btn-secondary-fg: var(--text);
+      --btn-secondary-line: var(--ink-line-2);
+
+      --border: var(--ink-line);
+      --border-strong: var(--ink-line-2);
+      --separator: #232828;
+      --hairline: rgba(242, 240, 239, 0.06);
+
+      --shadow: 0 1px 0 var(--hairline), 0 10px 28px rgba(0, 0, 0, 0.45);
+      --selected-bg: var(--chalk-bg);
+      --selected-line: rgba(242, 240, 239, 0.22);
+      --focus: var(--horizon-soft);
+      --link: var(--horizon-soft);
+      --indicator: var(--chalk);
+      --indicator-alt: var(--ember);
+      --icon: var(--dim);
+      --badge-bg: var(--ember-bg);
+      --badge-fg: var(--ember-soft);
+      --badge-line: rgba(227, 146, 90, 0.35);
+      --topbar-bg: rgba(14, 17, 17, 0.92);
+      --table-head: rgba(255, 255, 255, 0.03);
+
+      --ok: #3dba8c; --ok-bg: rgba(61, 186, 140, 0.12); --ok-line: rgba(61, 186, 140, 0.35);
+      --warn: #e0a84a; --warn-bg: rgba(224, 168, 74, 0.12); --warn-line: rgba(224, 168, 74, 0.35);
+      --danger: #e57373; --danger-bg: rgba(229, 115, 115, 0.12); --danger-line: rgba(229, 115, 115, 0.35);
+      --info: var(--horizon-soft); --info-bg: var(--horizon-bg); --info-line: rgba(107, 155, 209, 0.4);
+      --pending: var(--mauve); --pending-bg: var(--mauve-bg);
+
+      --k-agent: var(--ember);
+      --k-tool: var(--sea);
+      --k-data: var(--horizon);
+      --k-code: var(--mauve);
+      --k-http: var(--ember-soft);
+      --k-approval: #d4a0b8;
+    }
+
+    /* ══ LIGHT ═══════════════════════════════════════════════════════════ */
+    [data-theme="light"] {
+      color-scheme: light;
+
+      --bg: #f2f0ef;
+      --sunken: #e8e4e2;
+      --surface: #f7f5f4;
+      --surface-2: #fcfbfb;
+      --text: #1a1715;
+      --muted: #5c574e;
+      --dim: #7a746c;
+
+      /*
+        Warm paper wants ink + dusty accents — not heavy yacht-club teal.
+        CTA mirrors dark chalk: same two pigments swapped.
+      */
+      --ink: #0e1111;
+      --ink-soft: #2a2622;
+      --slate: #5a7a96;
+      --slate-soft: #7a96ae;
+      --terracotta: #c4785a;
+      --terracotta-soft: #d49278;
+      --sage: #6b8f7a;
+      --plum: #9a7b8f;
+      --fog: #c9c2bc;
+
+      --ink-bg: rgba(14, 17, 17, 0.06);
+      --slate-bg: rgba(90, 122, 150, 0.1);
+      --terracotta-bg: rgba(196, 120, 90, 0.12);
+      --sage-bg: rgba(107, 143, 122, 0.12);
+      --plum-bg: rgba(154, 123, 143, 0.12);
+
+      --cta: var(--ink);
+      --cta-fg: #f2f0ef;
+      --cta-fill: #0e1111;
+      --cta-hover: #2a2622;
+
+      --btn-secondary-bg: transparent;
+      --btn-secondary-fg: var(--ink-soft);
+      --btn-secondary-line: var(--fog);
+
+      --border: #e0dbd6;
+      --border-strong: #cfc8c1;
+      --separator: #e8e3de;
+      --hairline: rgba(26, 23, 21, 0.05);
+
+      --shadow: 0 1px 0 rgba(255, 255, 255, 0.85), 0 8px 22px rgba(40, 32, 24, 0.06);
+      --selected-bg: var(--ink-bg);
+      --selected-line: rgba(14, 17, 17, 0.18);
+      --focus: var(--slate);
+      --link: var(--slate);
+      --indicator: var(--ink);
+      --indicator-alt: var(--terracotta);
+      --icon: #8a837a;
+      --badge-bg: var(--terracotta-bg);
+      --badge-fg: #9a5a3e;
+      --badge-line: rgba(196, 120, 90, 0.4);
+      --topbar-bg: rgba(247, 245, 244, 0.94);
+      --table-head: rgba(14, 17, 17, 0.03);
+
+      --ok: #3d7a5c; --ok-bg: rgba(61, 122, 92, 0.1); --ok-line: rgba(61, 122, 92, 0.35);
+      --warn: #b45309; --warn-bg: rgba(180, 83, 9, 0.1); --warn-line: rgba(180, 83, 9, 0.35);
+      --danger: #b91c1c; --danger-bg: rgba(185, 28, 28, 0.1); --danger-line: rgba(185, 28, 28, 0.35);
+      --info: var(--slate); --info-bg: var(--slate-bg); --info-line: rgba(90, 122, 150, 0.35);
+      --pending: var(--plum); --pending-bg: var(--plum-bg);
+
+      --k-agent: var(--terracotta);
+      --k-tool: var(--sage);
+      --k-data: var(--slate);
+      --k-code: var(--plum);
+      --k-http: var(--terracotta-soft);
+      --k-approval: #9d174d;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; }
+    html, body { height: 100%; }
+    body {
+      margin: 0;
+      font-family: var(--font);
+      background: var(--bg);
+      color: var(--text);
+      font-size: 14px;
+      line-height: 1.45;
+      -webkit-font-smoothing: antialiased;
+    }
+    button, input { font: inherit; color: inherit; }
+    a { color: var(--link); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    .shell { display: grid; grid-template-columns: var(--sidebar-w) 1fr; min-height: 100vh; }
+
+    .sidebar {
+      background: var(--sunken);
+      border-right: 1px solid var(--separator);
+      display: flex; flex-direction: column; padding: 14px 12px 16px; gap: 12px;
+      position: sticky; top: 0; height: 100vh;
+    }
+    .brand { display: flex; align-items: center; gap: 10px; padding: 4px 8px 8px; }
+    .brand-mark {
+      width: 28px; height: 28px; border-radius: var(--radius-sm);
+      background: var(--cta-fill); color: var(--cta-fg);
+      display: grid; place-items: center; font-weight: 700; font-size: 13px;
+    }
+    .brand-name { font-weight: 650; letter-spacing: -0.02em; font-size: 15px; }
+    .brand-tag { font-size: 10px; color: var(--dim); letter-spacing: 0.06em; text-transform: uppercase; }
+
+    .new-btn {
+      height: 40px; border: 0; border-radius: var(--radius);
+      background: var(--cta-fill); color: var(--cta-fg);
+      font-weight: 600; cursor: pointer;
+      transition: background 140ms ease, transform 140ms ease;
+    }
+    .new-btn:hover { background: var(--cta-hover); }
+    .new-btn:active { transform: translateY(1px); }
+
+    .nav-group { display: flex; flex-direction: column; gap: 2px; margin-top: 6px; }
+    .nav-label {
+      font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--dim);
+      padding: 10px 10px 6px; border-top: 1px solid var(--separator); margin-top: 6px;
+    }
+    .nav-item {
+      display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: var(--radius-sm);
+      color: var(--muted); border: 1px solid transparent;
+    }
+    .nav-item .ico { width: 16px; height: 16px; color: var(--icon); flex: none; }
+    .nav-item.active {
+      background: var(--selected-bg); color: var(--text); border-color: var(--selected-line);
+      box-shadow: inset 3px 0 0 var(--indicator);
+    }
+    .nav-item .badge {
+      margin-left: auto; font-size: 11px; font-weight: 600;
+      background: var(--badge-bg); color: var(--badge-fg); border: 1px solid var(--badge-line);
+      border-radius: 999px; padding: 1px 7px;
+    }
+
+    .sidebar-foot {
+      margin-top: auto; padding: 10px; border-radius: var(--radius);
+      background: var(--surface); border: 1px solid var(--border);
+      display: flex; gap: 10px; align-items: center;
+    }
+    .avatar {
+      width: 32px; height: 32px; border-radius: 50%;
+      background: var(--cta-fill); color: var(--cta-fg);
+      display: grid; place-items: center; font-weight: 700; font-size: 12px;
+    }
+    .sidebar-foot .name { font-weight: 600; font-size: 13px; }
+    .sidebar-foot .role { color: var(--dim); font-size: 11px; }
+
+    .main { min-width: 0; display: flex; flex-direction: column; }
+    .topbar {
+      height: var(--topbar); display: flex; align-items: center; gap: 12px; padding: 0 20px;
+      border-bottom: 1px solid var(--separator);
+      background: var(--topbar-bg);
+      position: sticky; top: 0; z-index: 20;
+    }
+    .crumb { color: var(--dim); font-size: 13px; }
+    .crumb strong { color: var(--text); font-weight: 600; }
+    .topbar-spacer { flex: 1; }
+    .seg {
+      display: inline-flex; padding: 3px; border-radius: 9px; background: var(--sunken);
+      border: 1px solid var(--border); gap: 2px;
+    }
+    .seg button {
+      border: 0; background: transparent; color: var(--muted); padding: 5px 12px;
+      border-radius: 6px; cursor: pointer; font-size: 12px; font-weight: 500;
+    }
+    .seg button.on {
+      background: var(--surface-2); color: var(--text);
+      border: 1px solid var(--border-strong);
+      margin: -1px;
+    }
+
+    .content { max-width: 1160px; width: 100%; margin: 0 auto; padding: 24px 28px 96px; }
+    .eyebrow { font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--dim); margin: 0 0 6px; }
+    h1 { margin: 0 0 6px; font-size: 28px; letter-spacing: -0.03em; font-weight: 650; }
+    .lede { margin: 0 0 20px; color: var(--muted); max-width: 48rem; }
+
+    .direction {
+      margin-bottom: 18px; padding: 14px 16px; border-radius: var(--radius);
+      background: var(--surface); border: 1px solid var(--border);
+    }
+    .direction h2 { margin: 0 0 6px; font-size: 13px; font-weight: 650; }
+    .direction p { margin: 0; font-size: 12px; color: var(--muted); max-width: 52rem; }
+
+    .palette-strip {
+      display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 8px;
+      margin-bottom: 18px;
+    }
+    .sw {
+      border-radius: var(--radius-sm); overflow: hidden; border: 1px solid var(--border);
+      background: var(--surface);
+    }
+    .sw .chip-color { height: 34px; background: var(--c); }
+    .sw .meta { padding: 8px 10px; }
+    .sw .meta b { display: block; font-size: 12px; font-weight: 600; }
+    .sw .meta span { font-size: 10px; color: var(--dim); }
+
+    .role-map {
+      display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 8px;
+      margin-bottom: 22px;
+    }
+    .role {
+      padding: 12px; border-radius: var(--radius-sm); background: var(--surface);
+      border: 1px solid var(--border);
+    }
+    .role .k { font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--dim); margin-bottom: 6px; }
+    .role .v { font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+    .role .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--c); }
+
+    .composer {
+      background: var(--surface); border: 1px solid var(--border-strong); border-radius: 12px; padding: 14px;
+      box-shadow: var(--shadow); margin-bottom: 22px;
+    }
+    .composer textarea {
+      width: 100%; border: 0; resize: none; background: transparent; min-height: 64px;
+      outline: none; color: var(--text);
+    }
+    .composer textarea:focus { outline: 2px solid var(--focus); outline-offset: 3px; border-radius: 6px; }
+    .composer textarea::placeholder { color: var(--dim); }
+    .composer-bar {
+      display: flex; align-items: center; gap: 8px; margin-top: 8px; padding-top: 10px;
+      border-top: 1px solid var(--separator); flex-wrap: wrap;
+    }
+    .pill {
+      font-size: 12px; padding: 4px 10px; border-radius: 999px; display: inline-flex; align-items: center; gap: 6px;
+      border: 1px solid var(--border); background: var(--surface-2); color: var(--muted);
+    }
+    .pill .dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+    .pill.cta { background: var(--selected-bg); color: var(--cta); border-color: var(--selected-line); }
+    .pill.alt { background: var(--badge-bg); color: var(--badge-fg); border-color: var(--badge-line); }
+    .pill.ok { background: var(--ok-bg); color: var(--ok); border-color: var(--ok-line); }
+    .pill.warn { background: var(--warn-bg); color: var(--warn); border-color: var(--warn-line); }
+    .pill.danger { background: var(--danger-bg); color: var(--danger); border-color: var(--danger-line); }
+    .pill.info { background: var(--info-bg); color: var(--info); border-color: var(--info-line); }
+    .grow { flex: 1; }
+
+    .btn {
+      height: 34px; padding: 0 14px; border-radius: var(--radius-sm);
+      border: 1px solid var(--border); background: var(--surface-2); color: var(--text);
+      font-weight: 550; cursor: pointer;
+    }
+    .btn:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+    .btn.primary {
+      border: 0; background: var(--cta-fill); color: var(--cta-fg);
+    }
+    .btn.primary:hover { background: var(--cta-hover); }
+    .btn.secondary {
+      background: var(--btn-secondary-bg); color: var(--btn-secondary-fg);
+      border-color: var(--btn-secondary-line);
+    }
+    .btn.ghost { background: transparent; color: var(--muted); }
+    .btn.ghost.on {
+      background: var(--selected-bg); color: var(--text); border-color: var(--selected-line);
+      box-shadow: inset 0 -2px 0 var(--indicator);
+    }
+
+    .section-head { display: flex; align-items: baseline; gap: 12px; margin: 8px 0 12px; }
+    .section-head h2 { margin: 0; font-size: 16px; font-weight: 650; }
+    .section-head .sub { color: var(--dim); font-size: 12px; }
+    .toolbar { display: flex; gap: 6px; margin-bottom: 14px; flex-wrap: wrap; }
+
+    .figures { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 16px; }
+    .fig {
+      background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px;
+      position: relative; overflow: hidden;
+    }
+    .fig::after {
+      content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--ind, var(--indicator));
+    }
+    .fig .k { color: var(--dim); font-size: 12px; margin-bottom: 6px; }
+    .fig .v { font-size: 26px; font-weight: 650; letter-spacing: -0.03em; }
+    .fig .h { color: var(--muted); font-size: 11px; margin-top: 4px; }
+    .fig.ok { --ind: var(--ok); }
+    .fig.warn { --ind: var(--warn); }
+    .fig.danger { --ind: var(--danger); }
+    .fig.info { --ind: var(--info); }
+    .fig.ok .v { color: var(--ok); }
+    .fig.warn .v { color: var(--warn); }
+    .fig.danger .v { color: var(--danger); }
+    .fig.info .v { color: var(--info); }
+
+    .table-wrap {
+      background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+      overflow: hidden; margin-bottom: 18px;
+    }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { text-align: left; padding: 11px 14px; border-bottom: 1px solid var(--separator); font-size: 13px; }
+    th {
+      color: var(--dim); font-weight: 500; font-size: 11px; letter-spacing: 0.05em; text-transform: uppercase;
+      background: var(--table-head); border-bottom-color: var(--border);
+    }
+    tr:last-child td { border-bottom: 0; }
+    tr:hover td { background: var(--selected-bg); }
+    td.mono { font-family: var(--mono); font-size: 12px; color: var(--muted); }
+    .linkish { color: var(--link); font-weight: 500; }
+
+    .kind {
+      display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 550;
+      padding: 3px 8px; border-radius: 999px;
+      border: 1px solid color-mix(in srgb, var(--c) 32%, transparent);
+      color: var(--c); background: color-mix(in srgb, var(--c) 10%, transparent);
+    }
+    .kind i { width: 7px; height: 7px; border-radius: 50%; background: var(--c); }
+
+    .finish-row {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 16px 0 8px;
+    }
+    .finish-card {
+      padding: 14px; border-radius: 12px; border: 1px solid var(--border); background: var(--surface);
+    }
+    .finish-card h3 { margin: 0 0 6px; font-size: 13px; }
+    .finish-card p { margin: 0; font-size: 12px; color: var(--muted); }
+    .finish-card.yes { border-color: var(--selected-line); }
+    .finish-card.no { opacity: 0.72; }
+
+    @media (max-width: 960px) {
+      .shell { grid-template-columns: 1fr; }
+      .sidebar { display: none; }
+      .figures, .finish-row { grid-template-columns: 1fr 1fr; }
+    }
+
+    .note {
+      position: fixed; right: 16px; bottom: 16px; max-width: 300px; padding: 12px 14px;
+      border-radius: 12px; background: var(--surface); border: 1px solid var(--border-strong);
+      box-shadow: var(--shadow); font-size: 12px; color: var(--muted); z-index: 30;
+    }
+    .note strong { color: var(--text); display: block; margin-bottom: 4px; }
+
+    .only-dark { display: none; }
+    .only-light { display: none; }
+    [data-theme="dark"] .only-dark { display: grid; }
+    [data-theme="light"] .only-light { display: grid; }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-mark" aria-hidden="true">F</div>
+        <div>
+          <div class="brand-name">Foundry</div>
+          <div class="brand-tag">Matte instrument</div>
+        </div>
+      </div>
+      <button class="new-btn" type="button">+ New chat</button>
+      <div class="nav-group">
+        <div class="nav-item active">
+          <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 10.5 12 4l8 6.5V20a1 1 0 0 1-1 1h-5v-6H10v6H5a1 1 0 0 1-1-1v-9.5z"/></svg>
+          Home
+        </div>
+        <div class="nav-item">
+          <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 6h12v4H6zM6 14h12v4H6z"/></svg>
+          Workflows
+        </div>
+        <div class="nav-item">
+          <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 6h14v10H8l-3 3V6z"/></svg>
+          Chats
+        </div>
+        <div class="nav-item">
+          <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 7h6l2 2h8v10H4z"/></svg>
+          Projects
+        </div>
+        <div class="nav-item">
+          <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m5 13 4 4L19 7"/></svg>
+          Approvals <span class="badge">3</span>
+        </div>
+      </div>
+      <div class="nav-group">
+        <div class="nav-label">Build</div>
+        <div class="nav-item">
+          <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14 4h6v6M10 20H4v-6M20 4l-8 8M4 20l8-8"/></svg>
+          Tools
+        </div>
+        <div class="nav-item">
+          <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><ellipse cx="12" cy="6" rx="7" ry="3"/><path d="M5 6v6c0 1.7 3.1 3 7 3s7-1.3 7-3V6"/></svg>
+          Data sources
+        </div>
+      </div>
+      <div class="sidebar-foot">
+        <div class="avatar">H</div>
+        <div>
+          <div class="name">Himanshu</div>
+          <div class="role">Personal · mock</div>
+        </div>
+      </div>
+    </aside>
+
+    <div class="main">
+      <header class="topbar">
+        <div class="crumb">Workspace · <strong>Home</strong></div>
+        <div class="topbar-spacer"></div>
+        <div class="seg" role="group" aria-label="Mode">
+          <button type="button" id="mode-dark" class="on">Dark</button>
+          <button type="button" id="mode-light">Light</button>
+        </div>
+      </header>
+
+      <main class="content">
+        <p class="eyebrow">Design lock · soft matte instrument</p>
+        <h1>Good evening, Himanshu</h1>
+        <p class="lede" id="lede"></p>
+
+        <div class="direction">
+          <h2>Why this direction</h2>
+          <p>
+            Live Foundry leans frosty glass + blue→indigo glossy CTAs. That reads “SaaS default.”
+            This mock keeps your locked grounds (<strong>#0e1111</strong> / <strong>#F2F0EF</strong>) but switches finish to
+            <strong>matte instrument</strong>: solid CTAs, quiet borders, tonal depth, no glow bloom, no rainbow gradients.
+            Dark CTA is chalk (same off-white family) so both themes share one identity.
+          </p>
+        </div>
+
+        <div class="finish-row">
+          <div class="finish-card yes">
+            <h3>Using — matte instrument</h3>
+            <p>Solid fills · hairline borders · tonal elevation · soft shadow · no blur chrome</p>
+          </div>
+          <div class="finish-card no">
+            <h3>Leaving — frosty gloss</h3>
+            <p>Backdrop blur panels · multi-stop gradients · outer glow · Apple-glass sheen</p>
+          </div>
+        </div>
+
+        <div class="palette-strip only-dark">
+          <div class="sw"><div class="chip-color" style="--c: var(--chalk)"></div><div class="meta"><b>Chalk</b><span>CTA · selection</span></div></div>
+          <div class="sw"><div class="chip-color" style="--c: var(--horizon)"></div><div class="meta"><b>Horizon</b><span>links · info · data</span></div></div>
+          <div class="sw"><div class="chip-color" style="--c: var(--ember)"></div><div class="meta"><b>Ember</b><span>badges · agent</span></div></div>
+          <div class="sw"><div class="chip-color" style="--c: var(--mauve)"></div><div class="meta"><b>Mauve</b><span>pending · code</span></div></div>
+          <div class="sw"><div class="chip-color" style="--c: var(--sea)"></div><div class="meta"><b>Sea glass</b><span>tool kind</span></div></div>
+          <div class="sw"><div class="chip-color" style="--c: var(--ink-line-2)"></div><div class="meta"><b>Ink line</b><span>borders</span></div></div>
+        </div>
+
+        <div class="palette-strip only-light">
+          <div class="sw"><div class="chip-color" style="--c: var(--ink)"></div><div class="meta"><b>Ink</b><span>CTA · selection</span></div></div>
+          <div class="sw"><div class="chip-color" style="--c: var(--slate)"></div><div class="meta"><b>Slate</b><span>links · info · data</span></div></div>
+          <div class="sw"><div class="chip-color" style="--c: var(--terracotta)"></div><div class="meta"><b>Terracotta</b><span>badges · agent</span></div></div>
+          <div class="sw"><div class="chip-color" style="--c: var(--sage)"></div><div class="meta"><b>Sage</b><span>tool · ok-adjacent</span></div></div>
+          <div class="sw"><div class="chip-color" style="--c: var(--plum)"></div><div class="meta"><b>Plum</b><span>pending · code</span></div></div>
+          <div class="sw"><div class="chip-color" style="--c: var(--fog)"></div><div class="meta"><b>Fog</b><span>borders · secondary</span></div></div>
+        </div>
+
+        <div class="role-map">
+          <div class="role"><div class="k">Primary button</div><div class="v"><span class="dot" style="--c: var(--cta)"></span>Solid chalk / ink</div></div>
+          <div class="role"><div class="k">Secondary</div><div class="v"><span class="dot" style="--c: var(--btn-secondary-fg)"></span>Outline, no fill gloss</div></div>
+          <div class="role"><div class="k">Links / focus</div><div class="v"><span class="dot" style="--c: var(--link)"></span>Horizon / slate</div></div>
+          <div class="role"><div class="k">Badge</div><div class="v"><span class="dot" style="--c: var(--badge-fg)"></span>Ember / terracotta</div></div>
+          <div class="role"><div class="k">Borders</div><div class="v"><span class="dot" style="--c: var(--border-strong)"></span>Ink line / fog</div></div>
+          <div class="role"><div class="k">Selection mark</div><div class="v"><span class="dot" style="--c: var(--indicator)"></span>Chalk / ink rail</div></div>
+        </div>
+
+        <div class="composer">
+          <textarea placeholder="Ask Foundry to build a workflow, dig into a run, or act in agent mode…"></textarea>
+          <div class="composer-bar">
+            <span class="pill cta"><span class="dot"></span>Agent</span>
+            <span class="pill alt"><span class="dot"></span>Needs you</span>
+            <span class="pill ok">Healthy</span>
+            <span class="pill warn">Review</span>
+            <span class="pill danger">Failed</span>
+            <span class="pill info">Running</span>
+            <div class="grow"></div>
+            <button class="btn" type="button">Attach</button>
+            <button class="btn secondary" type="button">Secondary</button>
+            <button class="btn primary" type="button">Send</button>
+          </div>
+        </div>
+
+        <div class="section-head">
+          <h2>Runs and health</h2>
+          <span class="sub">Status colors stay independent of brand accents</span>
+        </div>
+        <div class="toolbar">
+          <button class="btn ghost on" type="button">7 days</button>
+          <button class="btn ghost" type="button">Today</button>
+          <button class="btn ghost" type="button">30 days</button>
+        </div>
+        <div class="figures">
+          <div class="fig ok"><div class="k">Succeeded</div><div class="v">128</div><div class="h">+12 vs prior week</div></div>
+          <div class="fig warn"><div class="k">Partly done</div><div class="v">7</div><div class="h">Waiting on approval</div></div>
+          <div class="fig danger"><div class="k">Failed</div><div class="v">3</div><div class="h">2 retried clean</div></div>
+          <div class="fig info"><div class="k">Running now</div><div class="v">2</div><div class="h">Invoice · Eval</div></div>
+        </div>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Run</th><th>Workflow</th><th>Kind</th><th>Status</th><th>Started</th></tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td class="mono">run_8f2a</td>
+                <td class="linkish">Invoice folder → Sheet</td>
+                <td><span class="kind" style="--c: var(--k-tool)"><i></i>Tool</span></td>
+                <td><span class="pill ok">Succeeded</span></td>
+                <td>2 min ago</td>
+              </tr>
+              <tr>
+                <td class="mono">run_71bc</td>
+                <td class="linkish">Friday repo wrap</td>
+                <td><span class="kind" style="--c: var(--k-agent)"><i></i>Agent</span></td>
+                <td><span class="pill info">Running</span></td>
+                <td>11 min ago</td>
+              </tr>
+              <tr>
+                <td class="mono">run_55e0</td>
+                <td class="linkish">Matchday brief</td>
+                <td><span class="kind" style="--c: var(--k-data)"><i></i>Data</span></td>
+                <td><span class="pill warn">Partly done</span></td>
+                <td>1 hr ago</td>
+              </tr>
+              <tr>
+                <td class="mono">run_44aa</td>
+                <td class="linkish">CVE triage</td>
+                <td><span class="kind" style="--c: var(--k-http)"><i></i>HTTP</span></td>
+                <td><span class="pill danger">Failed</span></td>
+                <td>3 hr ago</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </main>
+    </div>
+  </div>
+
+  <div class="note">
+    <strong>Judge this as a system</strong>
+    Dark chalk CTA. Light ink CTA (swap of the same two pigments). Warm dusty accents on paper.
+  </div>
+
+  <script>
+    const root = document.documentElement;
+    const modeDark = document.getElementById("mode-dark");
+    const modeLight = document.getElementById("mode-light");
+    const lede = document.getElementById("lede");
+    const copy = {
+      dark: 'Dark: soft black <strong>#0e1111</strong>. Primary is <strong>chalk</strong> (off-white solid) — not silver, not green. Horizon / ember / mauve / sea-glass give the page character.',
+      light: 'Light: off-white <strong>#F2F0EF</strong>. Primary is solid <strong>ink</strong> (#0e1111) — mirror of dark chalk. Character: slate · terracotta · sage · plum · fog (dusty, warm on paper — no heavy teal).',
+    };
+    function setTheme(t) {
+      root.setAttribute("data-theme", t);
+      modeDark.classList.toggle("on", t === "dark");
+      modeLight.classList.toggle("on", t === "light");
+      lede.innerHTML = copy[t];
+    }
+    modeDark.addEventListener("click", () => setTheme("dark"));
+    modeLight.addEventListener("click", () => setTheme("light"));
+    setTheme("dark");
+  </script>
+</body>
+</html>

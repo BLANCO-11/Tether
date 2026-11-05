@@ -34,21 +34,15 @@ const run = (i: number): ReportRun => ({
   purpose: "live", status: "succeeded", at: "2026-10-25T10:00:00.000Z", tokens: 100, costUsd: 0.5,
 });
 
-const FORECAST = {
-  month: "2026-10", daysInMonth: 31, today: 20, soFar: 40, enough: true, completeDays: 19, basisDays: 7, avgDaily: 2, projected: 62, low: 55, high: 70,
-  series: Array.from({ length: 31 }, (_, i) => ({ day: i + 1, actual: i < 20 ? (i + 1) * 2 : null, projected: i >= 19 ? 40 + (22 * (i - 19)) / 11 : null })),
-};
 const getReportSummary = vi.fn();
 const getReportRuns = vi.fn();
 const downloadReport = vi.fn();
 const emailReport = vi.fn();
-const getReportForecast = vi.fn();
 vi.mock("@/lib/api", () => ({
   getReportSummary: (...a: unknown[]) => getReportSummary(...a),
   getReportRuns: (...a: unknown[]) => getReportRuns(...a),
   downloadReport: (...a: unknown[]) => downloadReport(...a),
   emailReport: (...a: unknown[]) => emailReport(...a),
-  getReportForecast: (...a: unknown[]) => getReportForecast(...a),
 }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }), usePathname: () => "/reports", useSearchParams: () => new URLSearchParams() }));
 
@@ -64,7 +58,6 @@ describe("Cost & usage", () => {
     getReportSummary.mockReset().mockResolvedValue(summary());
     getReportRuns.mockReset().mockResolvedValue({ total: 2, rows: [run(1), run(2)] });
     downloadReport.mockReset();
-    getReportForecast.mockReset().mockResolvedValue(FORECAST);
     emailReport.mockReset();
   });
   afterEach(cleanup);
@@ -146,7 +139,7 @@ describe("Cost & usage", () => {
     renderPage();
     await waitFor(() => expect(screen.getByText("Finance")).toBeTruthy());
     fireEvent.click(screen.getByRole("button", { name: "Download report" }));
-    expect(await screen.findByRole("button", { name: "Download both (zip)" })).toBeTruthy();
+    expect(await screen.findByRole("button", { name: "Download workbook" })).toBeTruthy();
     expect(screen.queryByLabelText("Send to")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
     fireEvent.click(screen.getByRole("button", { name: "Email report" }));
@@ -168,7 +161,7 @@ describe("Cost & usage", () => {
     expect(send.disabled).toBe(false);
     fireEvent.click(send);
     await waitFor(() => expect(emailReport).toHaveBeenCalled());
-    expect(emailReport.mock.calls[0][1]).toEqual({ recipients: ["a@microland.com"], note: undefined, formats: ["pdf", "xlsx"] });
+    expect(emailReport.mock.calls[0][1]).toEqual({ recipients: ["a@microland.com"], note: undefined });
     expect(emailReport.mock.calls[0][0]).toMatchObject({ days: 30 });
   });
 
@@ -196,81 +189,12 @@ describe("Cost & usage", () => {
     fireEvent.click(screen.getByRole("button", { name: "Download report" }));
     const dialog = await screen.findByRole("dialog");
     await waitFor(() => expect(within(dialog).getByText(/12 runs/)).toBeTruthy());
-    fireEvent.click(within(dialog).getByRole("button", { name: "Download both (zip)" }));
+    fireEvent.click(within(dialog).getByRole("button", { name: "Download workbook" }));
     await waitFor(() => expect(downloadReport).toHaveBeenCalled());
     // 7 days is not one of the dialog's presets, so it opens as the same period written as a range.
     const sent = downloadReport.mock.calls[0][0];
     expect(typeof sent.to).toBe("string");
     expect(sent).toHaveProperty("from");
-  });
-
-  it("the download dialog has two check boxes, Report (PDF) and Excel (raw data), and the button follows them", async () => {
-    downloadReport.mockResolvedValue({ blob: new Blob(["x"]), filename: "cost-report.pdf" });
-    URL.createObjectURL = vi.fn(() => "blob:x");
-    URL.revokeObjectURL = vi.fn();
-    vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => undefined);
-    renderPage();
-    await waitFor(() => expect(screen.getByText("Finance")).toBeTruthy());
-    fireEvent.click(screen.getByRole("button", { name: "Download report" }));
-    const dialog = await screen.findByRole("dialog");
-    await waitFor(() => expect(within(dialog).getByText(/12 runs/)).toBeTruthy());
-    const report = within(dialog).getByRole("checkbox", { name: "Report (PDF)" }) as HTMLInputElement;
-    const excel = within(dialog).getByRole("checkbox", { name: "Excel (raw data)" }) as HTMLInputElement;
-    expect([report.checked, excel.checked]).toEqual([true, true]);
-    expect(within(dialog).getByRole("button", { name: "Download both (zip)" })).toBeTruthy();
-    fireEvent.click(excel);
-    fireEvent.click(within(dialog).getByRole("button", { name: "Download PDF" }));
-    await waitFor(() => expect(downloadReport).toHaveBeenCalled());
-    expect(downloadReport.mock.calls[0][1]).toBe("pdf");
-  });
-
-  it("only Excel downloads the workbook", async () => {
-    downloadReport.mockResolvedValue({ blob: new Blob(["x"]), filename: "cost-report.xlsx" });
-    URL.createObjectURL = vi.fn(() => "blob:x");
-    URL.revokeObjectURL = vi.fn();
-    vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => undefined);
-    renderPage();
-    await waitFor(() => expect(screen.getByText("Finance")).toBeTruthy());
-    fireEvent.click(screen.getByRole("button", { name: "Download report" }));
-    const dialog = await screen.findByRole("dialog");
-    await waitFor(() => expect(within(dialog).getByText(/12 runs/)).toBeTruthy());
-    fireEvent.click(within(dialog).getByRole("checkbox", { name: "Report (PDF)" }));
-    fireEvent.click(within(dialog).getByRole("button", { name: "Download workbook" }));
-    await waitFor(() => expect(downloadReport).toHaveBeenCalled());
-    expect(downloadReport.mock.calls[0][1]).toBe("xlsx");
-  });
-
-  it("with neither ticked there is nothing to send, and it says so", async () => {
-    renderPage();
-    await waitFor(() => expect(screen.getByText("Finance")).toBeTruthy());
-    fireEvent.click(screen.getByRole("button", { name: "Download report" }));
-    const dialog = await screen.findByRole("dialog");
-    await waitFor(() => expect(within(dialog).getByText(/12 runs/)).toBeTruthy());
-    fireEvent.click(within(dialog).getByRole("checkbox", { name: "Report (PDF)" }));
-    fireEvent.click(within(dialog).getByRole("checkbox", { name: "Excel (raw data)" }));
-    expect(within(dialog).getByText("Choose at least one.")).toBeTruthy();
-    expect((within(dialog).getByRole("button", { name: /Download/ }) as HTMLButtonElement).disabled).toBe(true);
-  });
-
-  it("shows the month-end forecast beside the lens, for the current month, and says it is screen only", async () => {
-    renderPage();
-    const card = await screen.findByRole("region", { name: "Month-end forecast" });
-    await waitFor(() => expect(within(card).getByText("$62.00")).toBeTruthy());
-    expect(within(card).getByText(/Likely between \$55\.00 and \$70\.00/)).toBeTruthy();
-    expect(within(card).getByText(/not in downloads/)).toBeTruthy();
-    // It is asked for with the filters only: the period picker does not reach it.
-    expect(getReportForecast.mock.calls[0][0]).not.toHaveProperty("days");
-  });
-
-  it("a forecast that cannot be read says so, and one with too few days says that instead of guessing", async () => {
-    getReportForecast.mockReset().mockRejectedValue(new Error("boom"));
-    renderPage();
-    expect(await screen.findByText(/could not be worked out/)).toBeTruthy();
-    cleanup();
-    getReportForecast.mockReset().mockResolvedValue({ ...FORECAST, enough: false, completeDays: 2, projected: null, low: null, high: null, avgDaily: null });
-    renderPage();
-    expect(await screen.findByText(/Not enough days yet/)).toBeTruthy();
-    expect(screen.queryByText("$62.00")).toBeNull();
   });
 
   it("is ONE page: there is no Advanced tab and no tab strip above the report", async () => {

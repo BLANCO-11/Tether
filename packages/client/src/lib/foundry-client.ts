@@ -1351,10 +1351,6 @@ export interface FALlmProvider {
   /** `env` until someone saves a configuration; `configured` afterwards. */
   source: "env" | "configured";
   updatedAt: string | null;
-  updatedBy?: string | null;
-  /** False when Forge's network cannot reach this gateway (its egress allows only LLM_BASE_URL's host or FORGE_EGRESS_ALLOW). */
-  forgeReachable?: boolean;
-  forgeWarning?: string | null;
 }
 export interface FALlmTest {
   ok: boolean;
@@ -2795,20 +2791,17 @@ export const foundryApi = {
   /** The cost report (2026-10-26): tiles, the daily series and the three lenses, limited to what the caller may see. */
   getReportSummary: (q: import("./reports").ReportQuery) =>
     req<import("./reports").ReportSummary>(`/reports/summary?${reportQs(q)}`),
-  /** Where this calendar month is heading. Follows the filters, not the period: it is always the current month. */
-  getReportForecast: (q: import("./reports").ReportQuery) =>
-    req<import("./reports").MonthForecast>(`/reports/forecast?${reportQs({ workspaces: q.workspaces, flowId: q.flowId, subject: q.subject })}`),
   /** One page of runs. The download carries the full set, not this page. */
   getReportRuns: (q: import("./reports").ReportQuery, page: { sort: import("./reports").RunSort; dir: "asc" | "desc"; offset: number; limit: number }) =>
     req<{ total: number; rows: import("./reports").ReportRun[] }>(`/reports/runs?${reportQs(q, page)}`),
-  /** The whole report for saving: the Excel workbook of raw data (the default), the PDF report, or both in one zip. */
-  downloadReport: async (q: import("./reports").ReportQuery, format: "xlsx" | "pdf" | "both" = "xlsx"): Promise<{ blob: Blob; filename: string }> => {
-    const res = await fetch(`${PROXY}/reports/export?${reportQs(q, format !== "xlsx" ? { format } : undefined)}`, { cache: "no-store" });
+  /** The whole report as one workbook, for saving. */
+  downloadReport: async (q: import("./reports").ReportQuery): Promise<{ blob: Blob; filename: string }> => {
+    const res = await fetch(`${PROXY}/reports/export?${reportQs(q)}`, { cache: "no-store" });
     if (!res.ok) throw await reportError(res);
-    return { blob: await res.blob(), filename: filenameFrom(res.headers.get("content-disposition"), `cost-report.${format === "both" ? "zip" : format}`) };
+    return { blob: await res.blob(), filename: filenameFrom(res.headers.get("content-disposition"), "cost-report.xlsx") };
   },
-  /** Email the PDF report and/or the workbook (`formats`, both by default) to people who may hold no access here. Recipients must be on an allowed domain. */
-  emailReport: (q: import("./reports").ReportQuery, body: { recipients: string[]; note?: string; formats?: Array<"pdf" | "xlsx"> }) =>
+  /** Email the same workbook to people who may hold no access here. Recipients must be on an allowed domain. */
+  emailReport: (q: import("./reports").ReportQuery, body: { recipients: string[]; note?: string }) =>
     req<{ status: "sent"; filename: string; recipients: string[] }>(`/reports/email`, {
       method: "POST",
       body: JSON.stringify({ ...reportBody(q), ...body }),
@@ -3397,7 +3390,28 @@ export const foundryApi = {
   llmTest: (probe?: { baseUrl?: string; apiKey?: string; model?: string }) =>
     req<FALlmTest>("/runtime-model/test", { method: "POST", body: JSON.stringify(probe ?? {}) }),
 
-  // Model prices (the model connection itself is the /runtime-model methods above, 2026-11-04).
+  // ── ⚠ The model that DESIGNS automations — a DIFFERENT provider (F2) ───────
+  //
+  // `/generation/*`, not `/ops/*`. Measured 2026-08-07: the ops row said
+  // `gpt-5.4-mini` and flow generation carried on running the environment's
+  // model, because the two are separate stores read by separate processes.
+  // D-35 forbids merging them — *"runtime and generation inference must not be
+  // merged: different credentials, different processes, no shared abstraction"*
+  // — so these are separate methods rather than a `kind` parameter on the four
+  // above, which is the refactor that would quietly delete the property.
+  //
+  // ⚠ **There is no `saveGenerationProvider({baseUrl, apiKey})` and there must
+  // not be.** The gateway and key come from the deployment's environment; the
+  // server refuses those fields by name rather than ignoring them, because a
+  // field accepted and dropped reads exactly like one that works.
+  getGenerationProvider: () => req<FAGenerationProvider>("/generation/llm/provider"),
+  saveGenerationProvider: (body: { defaultModel: string; allowedModels: string[] }) =>
+    req<{ defaultModel: string; allowedModels: string[]; source: string }>("/generation/llm/provider", {
+      method: "PUT",
+      body: JSON.stringify(body),
+    }),
+  clearGenerationProvider: () =>
+    req<{ defaultModel: string; source: string }>("/generation/llm/provider", { method: "DELETE" }),
   /**
    * Model prices, per 1M input and per 1M output tokens, in US dollars (rbac-observability, 2026-10-15). Readable by
    * anyone signed in; setting one needs `platform.generation.write`. Null for both removes a price.
@@ -3407,6 +3421,13 @@ export const foundryApi = {
     req<{ prices: FAModelPrice[] }>("/generation/pricing", { method: "PUT", body: JSON.stringify(body) }),
   getModelSpend: (days: number) =>
     req<{ days: number; models: FAModelSpend[]; currency: "USD" }>(`/generation/pricing/spend?days=${days}`),
+  generationModels: () =>
+    req<{ models: string[]; caveat: string }>("/generation/llm/models", { method: "POST" }),
+  generationTest: () =>
+    req<{ ok: boolean; model?: string; ms: number; reply?: string; message?: string }>(
+      "/generation/llm/test",
+      { method: "POST" },
+    ),
   getMyAttendance: (workspaceId: string, period: string) =>
     req<FAAttendanceStatus>(`/workspaces/${workspaceId}/me/attendance?period=${encodeURIComponent(period)}`),
   getMyExceptions: (workspaceId: string, period: string) =>
@@ -3490,6 +3511,30 @@ export const foundryApi = {
       `/workspaces/${wsId}/approval-requests/figures`,
     ),
 };
+
+/**
+ * The generation provider as the page reads it.
+ *
+ * ⚠ `baseUrl` is READ-ONLY and `keyFingerprint` is never a key — there is no
+ * endpoint in this product that returns a secret value and no `?reveal=`.
+ *
+ * ⚠ `source: "environment"` is the DEFAULT, not a degraded state. Rendering it
+ * the same as `configured` is how "I changed this and nothing happened" happens
+ * a second time.
+ */
+export interface FAGenerationProvider {
+  baseUrl: string | null;
+  keyFingerprint: string | null;
+  defaultModel: string;
+  allowedModels: string[];
+  source: "configured" | "environment";
+  /** What clearing the setting would produce. Named on the button rather than implied. */
+  environmentModel: string;
+  updatedAt: string | null;
+  updatedBy: string | null;
+  /** Who set it, as a person reads it: their sign-in name, else their email. Null when unknown. */
+  updatedByName?: string | null;
+}
 
 // ---- Workspace identity -----------------------------------------------------
 // The server scopes every tool/datasource/flow/trigger under a workspace id, and

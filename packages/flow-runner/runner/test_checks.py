@@ -80,13 +80,6 @@ class WhereRowsWent(unittest.TestCase):
         f = check_outputs(self.STEP, {"report_rows": [{"remark": ""}]})
         self.assertNotIn("row(s) from read", failure_text("classify", f, [{"read": "muster", "rows": 10}], {}))
 
-    def test_an_empty_source_is_named_not_the_conditions(self):
-        text = failure_text("classify", check_outputs(self.STEP, {"report_rows": []}),
-                            [{"read": "attendance", "rows": 10}], {"leave_rows": []})
-        self.assertIn("The step had 10 row(s) from read attendance; 0 row(s) in input leave_rows.", text)
-        self.assertIn("'input leave_rows' was empty, so nothing could be matched against it", text)
-        self.assertNotIn("kept none", text)
-
 
 if __name__ == "__main__":
     unittest.main()

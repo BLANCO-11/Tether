@@ -29,6 +29,18 @@ const nextConfig = {
       // shadow the page.
       { source: "/create", destination: "/chats/new", permanent: false },
       { source: "/create/:path*", destination: "/chats/new", permanent: false },
+
+      // ── Personal fork: enterprise surfaces → Home ─────────────────────────
+      // Admin / org / incidents / reports stay in the tree for now but are not
+      // product. See packages/client/src/lib/personal.ts.
+      { source: "/admin", destination: "/dashboard", permanent: false },
+      { source: "/admin/:path*", destination: "/dashboard", permanent: false },
+      { source: "/organization", destination: "/dashboard", permanent: false },
+      { source: "/organization/:path*", destination: "/dashboard", permanent: false },
+      { source: "/incidents", destination: "/dashboard", permanent: false },
+      { source: "/incidents/:path*", destination: "/dashboard", permanent: false },
+      { source: "/reports", destination: "/dashboard", permanent: false },
+      { source: "/reports/:path*", destination: "/dashboard", permanent: false },
     ];
   },
 };

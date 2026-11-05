@@ -47,11 +47,6 @@ export function ReportDialog({
   const [to_, setTo_] = useState("");
   const [note, setNote] = useState("");
   const [touched, setTouched] = useState(false);
-  // What goes in the file(s): the PDF report, the Excel raw data, or both. At least one must stay ticked.
-  const [wantReport, setWantReport] = useState(true);
-  const [wantExcel, setWantExcel] = useState(true);
-  const format: "xlsx" | "pdf" | "both" = wantReport && wantExcel ? "both" : wantReport ? "pdf" : "xlsx";
-  const nothingChosen = !wantReport && !wantExcel;
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
 
@@ -118,7 +113,7 @@ export function ReportDialog({
   const recipients = parseRecipients(to_);
   const recipientsIssue = email ? recipientProblem(recipients) : null;
   const empty = !!preview && preview.tiles.runs === 0;
-  const blocked = busy || nothingChosen || !!rangeProblem || nothingPicked || empty || !preview || (email && !!recipientsIssue);
+  const blocked = busy || !!rangeProblem || nothingPicked || empty || !preview || (email && !!recipientsIssue);
 
   function toggle(id: string) {
     setPicked((cur) => (cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]));
@@ -129,10 +124,10 @@ export function ReportDialog({
     setFailure(null);
     try {
       if (email) {
-        const r = await emailReport(query, { recipients, note: note.trim() || undefined, formats: [...(wantReport ? (['pdf'] as const) : []), ...(wantExcel ? (['xlsx'] as const) : [])] });
+        const r = await emailReport(query, { recipients, note: note.trim() || undefined });
         toast.success(`Sent ${r.filename} to ${r.recipients.join(", ")}`);
       } else {
-        const { blob, filename } = await downloadReport(query, format);
+        const { blob, filename } = await downloadReport(query);
         const url = URL.createObjectURL(blob);
         const a = document.createElement("a");
         a.href = url;
@@ -156,8 +151,8 @@ export function ReportDialog({
       <div className="space-y-4 text-sm">
         {email ? (
           <Notice tone="info" title="This shares the report outside the workspaces">
-            The people you send it to do not need access to these workspaces to read it. It goes as attached
-            files (the ones you tick below), a snapshot taken now, and each send is recorded.
+            The people you send it to do not need access to these workspaces to read it. It goes as an attached
+            workbook, a snapshot taken now, and each send is recorded.
           </Notice>
         ) : null}
 
@@ -236,31 +231,8 @@ export function ReportDialog({
           </div>
         ) : null}
 
-        <fieldset className="space-y-1">
-          <legend className="text-caption font-medium uppercase tracking-wide text-dim">{email ? "Attach" : "Include"}</legend>
-          <div className="flex flex-wrap gap-4">
-            <label className="flex items-center gap-2 text-text">
-              <input type="checkbox" checked={wantReport} onChange={(e) => setWantReport(e.target.checked)} />
-              Report (PDF)
-            </label>
-            <label className="flex items-center gap-2 text-text">
-              <input type="checkbox" checked={wantExcel} onChange={(e) => setWantExcel(e.target.checked)} />
-              Excel (raw data)
-            </label>
-          </div>
-          {nothingChosen ? <p className="text-xs text-danger">Choose at least one.</p> : null}
-        </fieldset>
-
         <p className="text-xs text-muted">
-          {nothingChosen
-            ? ""
-            : [
-                wantReport ? "Report (PDF): key figures, highlights, charts and how it compares with the previous period." : "",
-                wantExcel ? "Excel (raw data): a sheet each for workspaces, workflows, people and every run." : "",
-              ]
-                .filter(Boolean)
-                .join(" ")}
-          {!email && wantReport && wantExcel ? " Downloaded together as one zip." : ""}
+          One Excel workbook: a summary, then a sheet each for workspaces, workflows, people and every run.
         </p>
 
         {previewError ? <p className="text-xs text-danger">{previewError}</p> : null}
@@ -279,7 +251,7 @@ export function ReportDialog({
           <div className="flex gap-2">
             <Button variant="ghost" size="sm" type="button" onClick={onClose}>Cancel</Button>
             <Button size="sm" type="button" disabled={blocked} onClick={go}>
-              {busy ? (email ? "Sending…" : "Preparing…") : email ? "Send email" : format === "pdf" ? "Download PDF" : format === "both" ? "Download both (zip)" : "Download workbook"}
+              {busy ? (email ? "Sending…" : "Preparing…") : email ? "Send email" : "Download workbook"}
             </Button>
           </div>
         </div>

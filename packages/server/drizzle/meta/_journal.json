@@ -946,20 +946,6 @@
       "when": 1796600000000,
       "tag": "0134_runtime_model_provider",
       "breakpoints": true
-    },
-    {
-      "idx": 135,
-      "version": "7",
-      "when": 1796700000000,
-      "tag": "0135_chat_model",
-      "breakpoints": true
-    },
-    {
-      "idx": 136,
-      "version": "7",
-      "when": 1796800000000,
-      "tag": "0136_one_model_connection",
-      "breakpoints": true
     }
   ]
 }

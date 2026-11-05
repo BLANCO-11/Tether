@@ -1753,8 +1753,6 @@ export const piChats = pgTable(
     mode: varchar("mode", { length: 16 }).notNull().default("workflow"),
     /** How hard Forge Agent thinks: `low` / `balanced` / `high` / `ultra` (0119). CHECK-constrained. */
     thinking: varchar("thinking", { length: 16 }).notNull().default("balanced"),
-    /** The model this chat's Forge runs with (0135); null = the builder's default. */
-    model: text("model"),
     /**
      * Who reads it (migration 0122, sharing-boundaries): `private` — its owner and Admins; `public` — every member reads
      * the conversation. Only its owner (or an Admin) ever continues, renames or deletes it.

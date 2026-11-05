@@ -1,7 +1,10 @@
 /**
- * THE model connection (2026-11-04): the gateway, key, enabled-model list and default model that workflows'
- * `llm_complete`, the builder's generation and Forge all use. Until today D-35 kept this apart from the builder's
- * model (`generation_llm`); the owner reversed that, and migration 0136 merged the two rows into this one.
+ * The RUNTIME model: who `llm_complete` calls, with what key, and which models a workflow may name (2026-10-30, moved
+ * here from ops-api's `llm/provider.ts` with its rules unchanged).
+ *
+ * ⚠ Not the builder's model. `inference.service.ts` / `generation-provider.service.ts` are the model that DESIGNS
+ * workflows; this is the one a running workflow calls. D-35 keeps them apart: separate settings, separate code, no
+ * shared abstraction. Its "different processes" clause is what this move amended — both now run in the server.
  *
  *  - **The settings are a ROW** (`runtime_model_provider`, set on the AI models page); the `LLM_*` environment values
  *    are the fallback until one is saved (`source: "env"`).
@@ -18,7 +21,6 @@ import { config } from "../config/index.js";
 import { db } from "../db/index.js";
 import { runtimeModelProvider } from "../db/schema.js";
 import { decrypt, encrypt } from "../utils/encryptor.js";
-import { forgeReachability, rememberModelConnection } from "./model-connection.js";
 
 export interface RuntimeProvider {
   baseUrl: string;
@@ -28,16 +30,10 @@ export interface RuntimeProvider {
   /** Where the live values came from — `env` until someone saves the settings. */
   source: "env" | "configured";
   updatedAt: string | null;
-  updatedBy: string | null;
 }
 
 /** What an operator may see. Deliberately has no `apiKey`. */
-export type RuntimeProviderView = Omit<RuntimeProvider, "apiKey"> & {
-  configured: boolean;
-  keyFingerprint: string;
-  forgeReachable: boolean;
-  forgeWarning: string | null;
-};
+export type RuntimeProviderView = Omit<RuntimeProvider, "apiKey"> & { configured: boolean; keyFingerprint: string };
 
 export function keyFingerprint(key: string): string {
   if (!key) return "";
@@ -53,7 +49,6 @@ function fromEnv(): RuntimeProvider {
     allowedModels: models,
     source: "env",
     updatedAt: null,
-    updatedBy: null,
   };
 }
 
@@ -62,50 +57,18 @@ export async function loadRuntimeProvider(): Promise<RuntimeProvider> {
   const [row] = await db.select().from(runtimeModelProvider).where(eq(runtimeModelProvider.id, 1)).limit(1);
   if (!row) return fromEnv();
   return {
-    baseUrl: (row.baseUrl.trim() || config.inference.baseUrl).replace(/\/+$/, ""),
+    baseUrl: row.baseUrl.replace(/\/+$/, ""),
     apiKey: row.apiKeyEnc ? decrypt(row.apiKeyEnc) : fromEnv().apiKey,
     defaultModel: row.defaultModel,
     allowedModels: Array.isArray(row.allowedModels) ? row.allowedModels : [],
     source: "configured",
     updatedAt: row.updatedAt.toISOString(),
-    updatedBy: row.updatedBy ?? null,
   };
-}
-
-export type ModelConnection = RuntimeProvider;
-
-/**
- * A short TTL, not a process-lifetime cache, so Save is visibly effective without a restart (2026-11-04).
- * Save and clear invalidate it at once.
- */
-const TTL_MS = 10_000;
-let cached: { at: number; value: ModelConnection } | null = null;
-
-export function invalidateModelConnection(): void {
-  cached = null;
-}
-
-/**
- * The connection every consumer uses. A failure to read the row THROWS: falling back to the environment would send
- * work to a different gateway from the one the screen shows, silently, for as long as the database is unhappy. A
- * missing ROW is the normal env case and `loadRuntimeProvider` already handles it.
- */
-export async function resolveModelConnection(): Promise<ModelConnection> {
-  if (cached && Date.now() - cached.at < TTL_MS) return cached.value;
-  const value = await loadRuntimeProvider();
-  rememberModelConnection({ baseUrl: value.baseUrl, apiKey: value.apiKey });
-  cached = { at: Date.now(), value };
-  return value;
 }
 
 export function viewOf(p: RuntimeProvider): RuntimeProviderView {
   const { apiKey, ...rest } = p;
-  return {
-    ...rest,
-    configured: Boolean(p.baseUrl && apiKey),
-    keyFingerprint: keyFingerprint(apiKey),
-    ...forgeReachability(p.baseUrl, config.inference.baseUrl, config.forge.egressAllow),
-  };
+  return { ...rest, configured: Boolean(p.baseUrl && apiKey), keyFingerprint: keyFingerprint(apiKey) };
 }
 
 export class RuntimeModelError extends Error {
@@ -142,14 +105,12 @@ export async function saveRuntimeProvider(update: { baseUrl: string; apiKey?: st
     updatedBy: by,
   };
   await db.insert(runtimeModelProvider).values({ id: 1, ...values }).onConflictDoUpdate({ target: runtimeModelProvider.id, set: values });
-  invalidateModelConnection();
   return loadRuntimeProvider();
 }
 
 /** Forget the saved settings and fall back to the environment. */
 export async function clearRuntimeProvider(): Promise<RuntimeProvider> {
   await db.delete(runtimeModelProvider).where(eq(runtimeModelProvider.id, 1));
-  invalidateModelConnection();
   return loadRuntimeProvider();
 }
 

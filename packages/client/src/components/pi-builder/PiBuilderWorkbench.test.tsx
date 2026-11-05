@@ -4,7 +4,7 @@
  * kept beside it. Reported 2026-10-10: "the input options disappeared". Rendered end to end through the workbench.
  */
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 
 vi.mock("next/link", () => ({ default: ({ children, href }: { children: React.ReactNode; href: string }) => <a href={href}>{children}</a> }));
 vi.mock("@/lib/workspace", () => ({ useWorkspace: () => ({ workspaceId: "ws" }), useResolvedWorkspace: () => "ws" }));
@@ -43,7 +43,6 @@ vi.mock("@/lib/pi-builder", async (orig) => ({
   // Chat modes (ModeSwitch.tsx): this workspace does not offer Forge Agent, so the switch renders nothing.
   setPiMode: vi.fn(), setForgeDefaultMode: vi.fn(),
   removePiChatFile: vi.fn(),
-  setPiModel: vi.fn(), steerPiMessage: vi.fn(), setPiThinking: vi.fn(),
   storageLevel: (st: { bytes: number; limit: number } | null) => (!st ? "ok" : st.bytes > st.limit ? "full" : st.bytes >= st.limit * 0.8 ? "near" : "ok"),
   errorText: (e: unknown) => String(e),
   MODE_LABEL: { workflow: "Workflow Builder", agent: "Forge Agent" }, MODE_BLURB: { workflow: "", agent: "" },
@@ -51,7 +50,7 @@ vi.mock("@/lib/pi-builder", async (orig) => ({
 
 // jsdom performs no layout and has no scrollTo; the chat auto-scroll calls it.
 Element.prototype.scrollTo = function scrollTo() {} as typeof Element.prototype.scrollTo;
-const { PiBuilderWorkbench, chatItems, runStatePill, RUN_STATE_LABELS } = await import("./PiBuilderWorkbench");
+const { PiBuilderWorkbench, chatItems } = await import("./PiBuilderWorkbench");
 const { PageHeaderProvider, usePageHeaderSlot } = await import("@/lib/page-header");
 
 /** The shell's half: the builder's title and actions render in the ONE top bar, which this stands in for. */
@@ -109,12 +108,12 @@ describe("the Pi builder's test drawer", () => {
 });
 
 describe("one header, and the chat as turns (2026-10-10)", () => {
-  it("a chat's top bar names the CHAT only — never \"New workflow\" (2026-10-30)", async () => {
+  it("a chat's top bar names the CHAT and its mode — never \"New workflow\" (2026-10-30)", async () => {
     current = workflow();
     render(inShell(<PiBuilderWorkbench title="Hours for payroll" />));
     const bar = await screen.findByTestId("topbar");
     await waitFor(() => expect(bar.textContent).toContain("Hours for payroll"));
-    expect(bar.textContent).not.toContain("Workflow Builder");
+    expect(bar.textContent).toContain("Workflow Builder");
     expect(bar.textContent).not.toContain("New workflow");
   });
 
@@ -254,210 +253,5 @@ describe("Forge Agent's header and files (2026-10-28)", () => {
     expect((await screen.findByTestId("side-pane")).getAttribute("data-docked")).toBe("false");
     expect(screen.getByTestId("builder-test")).toBeTruthy();
     expect(screen.getByRole("button", { name: /^(Save|Saved)$/ })).toBeTruthy();
-  });
-});
-
-describe("the header's run state (2026-11-03)", () => {
-  it("is one short word on one line, never truncated to a fragment", async () => {
-    current = workflow();
-    render(inShell(<PiBuilderWorkbench flowId="f1" />));
-    const btn = within(await screen.findByTestId("topbar")).getByTestId("run-state");
-    expect(btn.className).toContain("whitespace-nowrap");
-    expect(btn.className).toContain("shrink-0");
-    expect(btn.querySelector(".truncate")).toBeNull();
-    expect(btn.textContent).toBe("Ready");
-  });
-
-  it("a test that needs real data says so in the header and the banner, and a non-admin is told to ask", async () => {
-    current = workflow();
-    const lib = await import("@/lib/pi-builder");
-    let emit: ((ev: unknown) => void) | undefined;
-    vi.mocked(lib.openPiEventStream).mockImplementation(((_ws: string, _id: string, on: (ev: unknown) => void) => {
-      emit = on;
-      return () => undefined;
-    }) as never);
-    render(inShell(<PiBuilderWorkbench flowId="f1" />));
-    await waitFor(() => expect(emit).toBeTruthy());
-    act(() => emit!({ type: "test_run", ok: false, detail: "raw", summary: "The test needs real data.", runId: "r1", needsRealData: true }));
-    const bar = await screen.findByTestId("topbar");
-    await waitFor(() => expect(bar.textContent).toContain("Needs real data"));
-    expect(screen.getAllByText("The test needs real data.").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("Ask an admin to run it on real data.").length).toBeGreaterThan(0);
-  });
-});
-
-describe("the run state pill's one word (2026-11-03)", () => {
-  async function emitter() {
-    current = workflow();
-    const lib = await import("@/lib/pi-builder");
-    let emit: ((ev: unknown) => void) | undefined;
-    vi.mocked(lib.openPiEventStream).mockImplementation(((_ws: string, _id: string, on: (ev: unknown) => void) => {
-      emit = on;
-      return () => undefined;
-    }) as never);
-    return () => emit;
-  }
-
-  it('a failed test reads "Test failed", and the label is always one of the defined words with no separator', async () => {
-    const get = await emitter();
-    render(inShell(<PiBuilderWorkbench flowId="f1" />));
-    await waitFor(() => expect(get()).toBeTruthy());
-    const emit = get();
-    act(() => emit!({ type: "test_run", ok: false, detail: "raw", summary: "It broke.", runId: "r2" }));
-    const bar = await screen.findByTestId("topbar");
-    await waitFor(() => expect(within(bar).getByTestId("run-state-label").textContent).toBe("Test failed"));
-    expect(RUN_STATE_LABELS as readonly string[]).toContain(within(bar).getByTestId("run-state-label").textContent);
-    expect(within(bar).getByTestId("run-state").textContent).not.toContain("·");
-  });
-
-  it("runStatePill: what Forge is doing wins, then the last test, then Ready", () => {
-    expect(runStatePill("running", null).label).toBe("Working…");
-    expect(runStatePill("awaiting_answers", null).label).toBe("Needs your answer");
-    expect(runStatePill("failed", null).label).toBe("Stopped");
-    expect(runStatePill("failed", "failed").label).toBe("Test failed");
-    expect(runStatePill("failed", "passed").label).toBe("Stopped");
-    expect(runStatePill("ready", "passed")).toEqual({ label: "Test passed", dot: "bg-ok" });
-    expect(runStatePill("ready", "refused").label).toBe("Checks refused");
-    expect(runStatePill("ready", "needs real data").dot).toBe("bg-warn");
-    expect(runStatePill("running", "failed").label).toBe("Working…");
-    expect(runStatePill("ready", null).label).toBe("Ready");
-  });
-
-  it("the workflow link lives in the run state's details, not in the bar", async () => {
-    const get = await emitter();
-    render(inShell(<PiBuilderWorkbench title="Hours" />));
-    await waitFor(() => expect(get()).toBeTruthy());
-    const emit = get();
-    act(() => emit!({ type: "saved", flowId: "f9", revision: 1 }));
-    const bar = await screen.findByTestId("topbar");
-    expect(within(bar).queryByText(/Workflow:/)).toBeNull();
-    const btn = within(bar).getByTestId("run-state");
-    fireEvent.click(btn);
-    await waitFor(() => expect(screen.getByRole("link", { name: "Monthly hours" }).getAttribute("href")).toBe("/flows/f9"));
-    expect(btn.getAttribute("aria-expanded")).toBe("true");
-  });
-});
-
-describe("messages queue while Forge works (2026-11-03)", () => {
-  async function setup() {
-    current = workflow();
-    const lib = await import("@/lib/pi-builder");
-    let emit: ((ev: unknown) => void) | undefined;
-    vi.mocked(lib.openPiEventStream).mockImplementation(((_ws: string, _id: string, on: (ev: unknown) => void) => {
-      emit = on;
-      return () => undefined;
-    }) as never);
-    const session = await vi.mocked(lib.createPiSession)("ws");
-    vi.mocked(lib.sendPiMessage).mockReset();
-    vi.mocked(lib.sendPiMessage).mockResolvedValue(session as never);
-    vi.mocked(lib.steerPiMessage).mockReset();
-    render(inShell(<PiBuilderWorkbench />));
-    await waitFor(() => expect(emit).toBeTruthy());
-    const box = (await screen.findByLabelText("Chat message")) as HTMLTextAreaElement;
-    const say = (text: string, label: string) => {
-      fireEvent.change(box, { target: { value: text } });
-      fireEvent.click(screen.getByLabelText(label));
-    };
-    return { lib, box, say, done: () => act(() => emit!({ type: "done" })) };
-  }
-
-  it("a second message waits under Queued messages, then goes when the turn is done", async () => {
-    const { lib, box, say, done } = await setup();
-    say("first", "Send");
-    await waitFor(() => expect(screen.getByLabelText("Add to queue")).toBeTruthy());
-    expect(lib.sendPiMessage).toHaveBeenCalledTimes(1);
-    say("second", "Add to queue");
-    const strip = await screen.findByLabelText("Queued messages");
-    expect(within(strip).getByText("second")).toBeTruthy();
-    expect(box.value).toBe("");
-    expect(lib.sendPiMessage).toHaveBeenCalledTimes(1);
-
-    done();
-    await waitFor(() => expect(lib.sendPiMessage).toHaveBeenCalledTimes(2));
-    expect(vi.mocked(lib.sendPiMessage).mock.calls[1]![2]).toBe("second");
-    await waitFor(() => expect(screen.queryByLabelText("Queued messages")).toBeNull());
-  });
-
-  it("a removed message is never sent", async () => {
-    const { lib, say, done } = await setup();
-    say("first", "Send");
-    await screen.findByLabelText("Add to queue");
-    say("second", "Add to queue");
-    fireEvent.click(await screen.findByLabelText("Remove from queue"));
-    expect(screen.queryByLabelText("Queued messages")).toBeNull();
-    done();
-    await new Promise((r) => setTimeout(r, 20));
-    expect(lib.sendPiMessage).toHaveBeenCalledTimes(1);
-  });
-
-  it("Send now steers the running turn, and a failure keeps the message with its error", async () => {
-    const { lib, say } = await setup();
-    say("first", "Send");
-    await screen.findByLabelText("Add to queue");
-    say("steer me", "Add to queue");
-    vi.mocked(lib.steerPiMessage).mockRejectedValueOnce(new Error("no turn"));
-    fireEvent.click(await screen.findByText("Send now"));
-    await waitFor(() => expect(lib.steerPiMessage).toHaveBeenCalledWith("ws", "s1", "steer me"));
-    const strip = screen.getByLabelText("Queued messages");
-    await waitFor(() => expect(within(strip).getByText(/no turn/)).toBeTruthy());
-    expect(within(strip).getByText("steer me")).toBeTruthy();
-
-    vi.mocked(lib.steerPiMessage).mockResolvedValueOnce({} as never);
-    fireEvent.click(within(strip).getByText("Send now"));
-    await waitFor(() => expect(screen.queryByLabelText("Queued messages")).toBeNull());
-  });
-});
-
-describe("the composer's model pill and / commands (2026-11-04)", () => {
-  const MODELS = ["gpt-6-luna", "DeepSeek-V4-Flash-0731"];
-  async function setup() {
-    const lib = await import("@/lib/pi-builder");
-    const base = await vi.mocked(lib.createPiSession)("ws");
-    vi.mocked(lib.createPiSession).mockResolvedValueOnce({ ...base, model: "gpt-6-luna", models: MODELS } as never);
-    vi.mocked(lib.sendPiMessage).mockReset();
-    vi.mocked(lib.setPiModel).mockReset();
-    render(inShell(<PiBuilderWorkbench />));
-    const box = (await screen.findByLabelText("Chat message")) as HTMLTextAreaElement;
-    await waitFor(() => expect(screen.getByTestId("model-pill").textContent).toContain("GPT-6 Luna"));
-    return { lib, box };
-  }
-
-  it("the pill shows the clean model name", async () => {
-    await setup();
-    expect(screen.getByTestId("model-pill").textContent).toBe("GPT-6 Luna");
-  });
-
-  it("typing / lists /model, and not /think in Workflow Builder", async () => {
-    const { box } = await setup();
-    fireEvent.change(box, { target: { value: "/" } });
-    const menu = screen.getByTestId("slash-menu");
-    expect(menu.textContent).toContain("/model");
-    expect(menu.textContent).not.toContain("/think");
-  });
-
-  it("/model deep picks the matching model, sends nothing, and the pill follows", async () => {
-    const { lib, box } = await setup();
-    vi.mocked(lib.setPiModel).mockResolvedValueOnce({ model: "DeepSeek-V4-Flash-0731", models: MODELS } as never);
-    fireEvent.change(box, { target: { value: "/model deep" } });
-    fireEvent.keyDown(box, { key: "Enter" });
-    await waitFor(() => expect(lib.setPiModel).toHaveBeenCalledWith("ws", "s1", "DeepSeek-V4-Flash-0731"));
-    expect(lib.sendPiMessage).not.toHaveBeenCalled();
-    expect(box.value).toBe("");
-    await waitFor(() => expect(screen.getByTestId("model-pill").textContent).toContain("DeepSeek V4 Flash"));
-  });
-
-  it("/model alone opens the pill menu and sends nothing", async () => {
-    const { lib, box } = await setup();
-    fireEvent.change(box, { target: { value: "/model" } });
-    fireEvent.keyDown(box, { key: "Enter" });
-    expect(await screen.findByRole("menu")).toBeTruthy();
-    expect(lib.sendPiMessage).not.toHaveBeenCalled();
-  });
-
-  it("the / button puts a / in the box and shows the menu", async () => {
-    const { box } = await setup();
-    fireEvent.click(screen.getByTestId("composer-slash"));
-    await waitFor(() => expect(box.value).toBe("/"));
-    expect(screen.getByTestId("slash-menu")).toBeTruthy();
   });
 });

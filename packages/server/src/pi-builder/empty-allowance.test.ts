@@ -17,7 +17,6 @@ import {
   saysYes,
   withAllowance,
   withoutAllowances,
-  withRoots,
 } from "./empty-allowance.js";
 
 const wf = (allow: unknown[]) => ({
@@ -102,60 +101,5 @@ describe("columns blank in every row are put to the person, by code (chat 25d67d
     ]);
     // every entry has a field: none of them lets the report itself come back with no rows
     expect(out.steps[0]!.allow_empty.every((a) => a.field)).toBe(true);
-  });
-});
-
-describe("asked once per root: what is built only from an allowed-empty output follows its answer (chat eb205c03)", () => {
-  const step = (id: string, inputs: Record<string, string> | undefined, outputs: string[]) => ({
-    id,
-    entry: `steps/${id}/main.py`,
-    ...(inputs ? { inputs } : {}),
-    outputs,
-    allow_empty: outputs.map((o) => ({ output: o, reason: "r" })),
-  });
-  const flow = {
-    reads: {},
-    steps: [
-      step("attendance", undefined, ["rows"]),
-      step("leave", undefined, ["rows"]),
-      step("prepare", { att: "attendance.rows", lv: "leave.rows" }, ["count", "body"]),
-      step("send", { body: "prepare.body" }, ["result"]),
-    ],
-  };
-  const held = newWholeOutputAllowances(flow, []);
-
-  it("two roots; the steps built from them follow both, through a chain", () => {
-    const got = Object.fromEntries(withRoots(flow, held).map((h) => [`${h.stepId}:${h.output}`, h.follows]));
-    expect(got["attendance:rows"]).toBeUndefined();
-    expect(got["leave:rows"]).toBeUndefined();
-    expect(got["prepare:count"]).toEqual(["attendance:rows", "leave:rows"]);
-    expect(got["send:result"]).toEqual(["attendance:rows", "leave:rows"]);
-  });
-
-  it("CONTROL: a step with one input that must have rows, or a $input, stays a root", () => {
-    const f = {
-      steps: [
-        step("a", undefined, ["rows"]),
-        { id: "b", entry: "b.py", outputs: ["rows"] },
-        step("c", { x: "a.rows", y: "b.rows" }, ["out"]),
-        step("d", { x: "a.rows", p: "$input.month" }, ["out"]),
-      ],
-    };
-    const got = withRoots(f, newWholeOutputAllowances(f, []));
-    expect(got.every((h) => h.follows === undefined)).toBe(true);
-  });
-
-  it("follows nothing held when its source was accepted before this turn", () => {
-    const before = ["attendance:rows", "leave:rows"];
-    const got = withRoots(flow, newWholeOutputAllowances(flow, before));
-    expect(got.find((h) => h.stepId === "prepare")?.follows).toEqual([]);
-  });
-
-  it("the root's question names what its answer also decides", () => {
-    const [root] = held;
-    const q = heldQuestion(root, [{ stepId: "prepare", output: "count", reason: "" }]);
-    expect(q.id).toBe("allow_empty:attendance:rows");
-    expect(q.prompt).toContain('also decides "count" (step prepare)');
-    expect(heldQuestion(root).prompt).not.toContain("also decides");
   });
 });

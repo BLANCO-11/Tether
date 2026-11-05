@@ -261,4 +261,3 @@ and `kestra:phase1-verify|phase3|phase4|phase6`, `kestra:prove`,
 - **Expectation:** green package suite + clean typecheck before
   `/speckit-comply`; fix CRITICAL findings first; never bypass gates to get
   green.
-  

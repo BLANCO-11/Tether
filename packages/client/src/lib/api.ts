@@ -760,9 +760,8 @@ export const getReportRuns = (
   q: import("./reports").ReportQuery,
   page: { sort: import("./reports").RunSort; dir: "asc" | "desc"; offset: number; limit: number },
 ) => foundryApi.getReportRuns(q, page);
-export const getReportForecast = (q: import("./reports").ReportQuery) => foundryApi.getReportForecast(q);
-export const downloadReport = (q: import("./reports").ReportQuery, format?: "xlsx" | "pdf" | "both") => foundryApi.downloadReport(q, format);
-export const emailReport = (q: import("./reports").ReportQuery, body: { recipients: string[]; note?: string; formats?: Array<"pdf" | "xlsx"> }) =>
+export const downloadReport = (q: import("./reports").ReportQuery) => foundryApi.downloadReport(q);
+export const emailReport = (q: import("./reports").ReportQuery, body: { recipients: string[]; note?: string }) =>
   foundryApi.emailReport(q, body);
 
 export async function getDeploymentObservability(days = 30): Promise<import("./types").Observability> {

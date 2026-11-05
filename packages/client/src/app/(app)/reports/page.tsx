@@ -21,7 +21,6 @@ import { MultiSelect } from "@/components/ui/MultiSelect";
 import { Button } from "@/components/ui/Button";
 import { ReportDialog } from "@/components/reports/ReportDialog";
 import { DailyCostChart } from "@/components/reports/DailyCostChart";
-import { MonthForecastCard } from "@/components/reports/MonthForecastCard";
 import { RankedBars } from "@/components/reports/RankedBars";
 import { getReportRuns, getReportSummary } from "@/lib/api";
 import { FoundryApiError } from "@/lib/foundry-client";
@@ -241,8 +240,6 @@ function Report({ summary, lens, setLens, onDrill, query, stale }: {
   stale: boolean;
 }) {
   const t = summary.tiles;
-  // The forecast follows the filters but not the period, so it is re-read only when a filter changes.
-  const forecastQuery = useMemo(() => ({ workspaces: query.workspaces, flowId: query.flowId, subject: query.subject }), [query.workspaces, query.flowId, query.subject]);
   const counts: Record<Lens, number> = { workspaces: t.workspaces, workflows: t.workflows, people: t.people, runs: t.runs };
   // A workspace keeps its colour whatever else is selected: the index is its place in the full list the server offered.
   const colourOfWorkspace = (id: string | undefined) => workspaceColour(Math.max(0, summary.workspaces.findIndex((w) => w.id === id)));
@@ -260,8 +257,8 @@ function Report({ summary, lens, setLens, onDrill, query, stale }: {
 
       <DailyCostChart byDay={summary.byDay} byPurpose={summary.byPurpose} />
 
-      <div className="grid items-start gap-5 lg:grid-cols-4">
-        <section className="pane min-w-0 p-4 lg:col-span-3" aria-label={title}>
+      <div className="space-y-5">
+        <section className="pane min-w-0 p-4" aria-label={title}>
           <h2 className="text-body font-semibold text-text">{title}</h2>
           <p className="mb-3 text-caption text-dim">{lens === "runs" ? "Each row is one run." : "Click a bar to drill in."}</p>
           <div role="tablist" aria-label="Group the report by" className="mb-3 flex flex-wrap gap-2">
@@ -292,7 +289,6 @@ function Report({ summary, lens, setLens, onDrill, query, stale }: {
             </>
           )}
         </section>
-        <MonthForecastCard query={forecastQuery} />
       </div>
       <p className="text-xs text-muted">Cost is model (LLM) spend only, priced at the rate in effect when each call happened.</p>
     </div>

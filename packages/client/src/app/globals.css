@@ -39,92 +39,90 @@
   /* Render native form controls (select popups, scrollbars, date pickers) dark. */
   color-scheme: dark;
 
-  /* Surfaces — deep blue-black, subtle layered panels. */
-  --bg: #0b0d12; /* app background */
-  --surface: #14161d; /* cards, rows */
-  --surface-2: #1b1e26; /* stat tiles, hover, raised */
-  --line: #20242d; /* hairline borders — whispers against --surface, never outlines */
-  --line-2: #313641; /* hover border — was written inline in three places */
+  /* Surfaces — soft black #0e1111 ladder (personal palette lock). */
+  --bg: #0e1111; /* app background */
+  --surface: #161a1a; /* cards, rows */
+  --surface-2: #1c2222; /* stat tiles, hover, raised */
+  --line: #2c3333; /* hairline borders — whispers against --surface, never outlines */
+  --line-2: #3d4646; /* hover border — was written inline in three places */
   /* ⚠ THE ONLY BORDER ON A CONTROL WHOSE BOUNDS ARE OTHERWISE UNDEFINED — inputs,
      selects, textareas, choice cards. The design handoff pack was explicit that it
      **clears 3:1** where `--line` (a decorative hairline) does not (pack record
      removed 2026-09-11). So this is an accessibility control and not a shade: a select
      drawn in `--line` has no perceivable bounds, and the pack's own checklist asked
      that every border which alone defines a control clears 3:1. */
-  --line-interactive: #6b7280;
-  --sunken: #10131a; /* inset wells: YAML gutters, code blocks, diff panes */
-  --dots: #1e222b; /* the canvas dot grid */
-  --dash: #2b3040; /* dashed outlines: drop targets, empty slots */
-  --shadow: rgba(0, 0, 0, 0.5); /* raised-surface drop shadow */
+  --line-interactive: #6f7573;
+  --sunken: #0a0c0c; /* inset wells: YAML gutters, code blocks, diff panes */
+  --dots: #232828; /* the canvas dot grid */
+  --dash: #3d4646; /* dashed outlines: drop targets, empty slots */
+  --shadow: rgba(0, 0, 0, 0.55); /* raised-surface drop shadow */
   --scrim: rgba(0, 0, 0, 0.6); /* the dim behind a modal */
-  --mask: rgba(11, 13, 18, 0.72); /* the canvas minimap's out-of-view mask */
-  --frost: rgba(20, 22, 29, 0.78);
-  --frost-modal: rgba(20, 22, 29, 0.82);
+  --mask: rgba(14, 17, 17, 0.72); /* the canvas minimap's out-of-view mask */
+  --frost: rgba(22, 26, 26, 0.88);
+  --frost-modal: rgba(22, 26, 26, 0.92);
   --frost-blur: 12px;
   --frost-blur-lg: 20px;
-  --lift: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 1px 2px rgba(0, 0, 0, 0.35);
+  --lift: inset 0 1px 0 rgba(242, 240, 239, 0.06), 0 1px 2px rgba(0, 0, 0, 0.35);
   /* ── Elevation (2026-10-10): a surface is LIGHTER the higher it sits — in dark mode shadows do not show, so tone
      carries depth (tonal elevation). The `depth-*` classes read these; they used to make a higher surface MORE
      transparent, i.e. darker in dark mode — depth pointing the wrong way. `--edge-light` is the top highlight of a
      raised pane: a whisper in dark (a 72%-white line there read as an embossed outline), bright in light. */
-  --elev-1: #14161d;
-  --elev-2: #191c24;
-  --elev-3: #1e212b;
-  --elev-4: #242833;
-  --edge-light: rgba(255, 255, 255, 0.05);
+  --elev-1: #161a1a;
+  --elev-2: #1c2222;
+  --elev-3: #222828;
+  --elev-4: #2a3131;
+  --edge-light: rgba(242, 240, 239, 0.06);
   /* ── Card depth: the node card and the summoned step pane read these, not
      the generic surface/line pair, so both themes segment card-from-ground.
      Same values as `--surface-2` / `--line-2` / `--shadow` on purpose — the
      09-03 lock is layout, not palette: border + surface-2 contrast does the
      segmentation, no hue is re-keyed. Separate NAMES because the roles differ
      and the themes may diverge later. */
-  --card-bg: #1b1e26;
-  --card-border: #313641;
-  --card-shadow: rgba(0, 0, 0, 0.5);
+  --card-bg: #1c2222;
+  --card-border: #3d4646;
+  --card-shadow: rgba(0, 0, 0, 0.55);
 
   /* Text. */
-  --text: #e6e8ec; /* primary */
-  --muted: #8a8f9a; /* secondary */
-  --dim: #868b96; /* faint labels / eyebrows (WCAG AA on --bg) */
-  --muted-soft: rgba(138, 143, 154, 0.5); /* muted, as a hairline or a disabled fill */
+  --text: #eceae8; /* primary */
+  --muted: #9a9f9d; /* secondary */
+  --dim: #6f7573; /* faint labels / eyebrows (WCAG AA on --bg) */
+  --muted-soft: rgba(154, 159, 157, 0.5); /* muted, as a hairline or a disabled fill */
 
-  /* Brand blue → indigo. Solid accent for links/steps; gradient for primary actions. */
-  --accent: #4c8dff;
-  --grad: linear-gradient(105deg, #3d9bff 0%, #6366f1 100%);
-  --accent-bg: rgba(76, 141, 255, 0.09); /* selected row, active tab */
-  --accent-bg-2: rgba(76, 141, 255, 0.16); /* its hover / pressed twin */
-  --accent-line: rgba(76, 141, 255, 0.5); /* accent as a border */
-  --accent-soft: rgba(76, 141, 255, 0.8); /* accent as secondary text */
-  --path: #a3e635; /* a condition's path on the canvas — "runs on this path"; a hue no step kind, state or selection uses */
-  --glow: rgba(80, 130, 255, 0.55); /* the primary button's cast light */
+  /* Personal palette: chalk CTA (solid) — matte instrument, not blue→indigo gloss. */
+  --accent: #f2f0ef;
+  --grad: linear-gradient(180deg, #f2f0ef 0%, #f2f0ef 100%);
+  --accent-bg: rgba(242, 240, 239, 0.08); /* selected row, active tab */
+  --accent-bg-2: rgba(242, 240, 239, 0.14); /* its hover / pressed twin */
+  --accent-line: rgba(242, 240, 239, 0.22); /* accent as a border */
+  --accent-soft: rgba(242, 240, 239, 0.85); /* accent as secondary text */
+  --path: #7aada0; /* a condition's path on the canvas — sea glass; not status/selection */
+  --glow: rgba(242, 240, 239, 0); /* matte: no outer glow bloom */
   /* ⚠ Text ON a solid --accent fill, and it FLIPS between the themes — dark's
-     accent is a light blue that needs dark text, light's is a deep blue that
-     needs pale text. It was written as `text-black` on two buttons, which is
-     correct in dark and unreadable in earth. A theme-dependent foreground
-     cannot be a Tailwind literal; it has to be a token. */
-  --on-accent: #0b0d12;
+     chalk needs ink text; light's ink needs chalk text. A theme-dependent
+     foreground cannot be a Tailwind literal; it has to be a token. */
+  --on-accent: #0e1111;
 
   /* Semantic colors + matching translucent pill backgrounds. */
-  --ok: #34d399;
-  --ok-bg: rgba(52, 211, 153, 0.12);
-  --warn: #fbbf24;
-  --warn-bg: rgba(245, 158, 11, 0.12);
-  --warn-line: rgba(251, 191, 36, 0.36);
-  --orange: #fb923c; /* "changes real data" */
-  --orange-bg: rgba(251, 146, 60, 0.12);
-  --danger: #f87171;
-  --danger-bg: rgba(248, 113, 113, 0.12);
-  --danger-soft: rgba(248, 113, 113, 0.8);
-  --danger-line: rgba(248, 113, 113, 0.34);
+  --ok: #3dba8c;
+  --ok-bg: rgba(61, 186, 140, 0.12);
+  --warn: #e0a84a;
+  --warn-bg: rgba(224, 168, 74, 0.12);
+  --warn-line: rgba(224, 168, 74, 0.35);
+  --orange: #e3925a; /* ember — "changes real data" */
+  --orange-bg: rgba(227, 146, 90, 0.12);
+  --danger: #e57373;
+  --danger-bg: rgba(229, 115, 115, 0.12);
+  --danger-soft: rgba(229, 115, 115, 0.8);
+  --danger-line: rgba(229, 115, 115, 0.34);
 
   /* ── Alpha-stage chrome. Deliberately NOT --warn (D-86) ───────────────────
      `--warn` already means "this automation needs your attention". The alpha
      notice means "this part of Foundry is unfinished". One hue for both makes a
      permanent product disclaimer and a live incident look identical — and since
      the disclaimer is on every page, it is the incident that stops being read. */
-  --alpha: #c084fc;
-  --alpha-bg: rgba(192, 132, 252, 0.1);
-  --alpha-line: rgba(192, 132, 252, 0.34);
+  --alpha: #b895c4;
+  --alpha-bg: rgba(184, 149, 196, 0.1);
+  --alpha-line: rgba(184, 149, 196, 0.34);
 
   /* ── The flow canvas: one colour per step kind ────────────────────────────
      Kind is the FIRST thing a reviewer reads off a node, so it gets a hue of
@@ -135,32 +133,32 @@
      ⚠ Colour is never the only carrier — every node also states its kind in
      words, because a palette of six hues is exactly where colour-alone encoding
      stops working. */
-  --k-datasource: #58a6ff;
-  --k-transform: #94a3b8;
-  --k-code: #a78bfa;
-  --k-tool: #2dd4bf;
-  --k-approval: #f472b6;
-  --k-agent: #f0b429;
-  --k-llm: #f0b429;
-  --k-http: #fb923c;
+  --k-datasource: #6b9bd1; /* horizon */
+  --k-transform: #9a9f9d;
+  --k-code: #b895c4; /* mauve */
+  --k-tool: #7aada0; /* sea glass */
+  --k-approval: #d4a0b8;
+  --k-agent: #e3925a; /* ember */
+  --k-llm: #e3925a;
+  --k-http: #efb089;
   /* A loop (For each, its output, and the box around what repeats): a hue of its own, so the section that runs once per
      item reads apart from the steps that run once — the box is tinted with it, never only outlined. */
-  --k-loop: #818cf8;
+  --k-loop: #8eb4dc;
   /* An unknown kind: the engine ran a task Foundry holds no pointer for. Drawn,
      never hidden — a step the UI cannot classify is still a step that ran. */
-  --k-unknown: #6b7280;
+  --k-unknown: #6f7573;
 
   /* RGB triplets of the tokens above, for Tailwind's opacity modifiers
      (bg-accent/80 etc.). Tailwind can only compose alpha onto a color it can
      take apart, so these feed `rgb(var(--x-rgb) / <alpha-value>)` in the config.
      Keep each in sync with its hex twin. */
-  --bg-rgb: 11 13 18;
-  --surface-rgb: 20 22 29;
-  --accent-rgb: 76 141 255;
-  --ok-rgb: 52 211 153;
-  --warn-rgb: 251 191 36;
-  --orange-rgb: 251 146 60;
-  --danger-rgb: 248 113 113;
+  --bg-rgb: 14 17 17;
+  --surface-rgb: 22 26 26;
+  --accent-rgb: 242 240 239;
+  --ok-rgb: 61 186 140;
+  --warn-rgb: 224 168 74;
+  --orange-rgb: 227 146 90;
+  --danger-rgb: 229 115 115;
 
   /* ── The three measures. A page picks one by ARCHETYPE, never by taste ────
      Before these existed a page chose its own width — `max-w-5xl` in eleven
@@ -208,103 +206,93 @@
      instance; this is the default and the only number. */
   --aside-w: 340px;
 
-  /* ══ THE IVORY PORCELAIN LIGHT PALETTE — every light value, written once ══
+  /* ══ LIGHT — Figma off-white #F2F0EF + ink CTA (personal palette lock) ══
      Declared on :root so it is inert until one of the two rules below points a
      live token at it. Nothing reads `--l-*` directly; if something does, it has
      hardcoded the light theme.
 
-     Near-white with a warm bias held to 3-6 points per channel: porcelain, not
-     sand. Ladder (relative luminance): sunken #E5E2DA 0.761, ground #EDEBE4
-     0.830, hover #F4F2EC 0.888, surface #F8F7F2 0.929, card #FDFCF9 0.973.
-     Card-to-ground step 1.163. Every pair was computed, worst case taken; the
-     binding pairs are dim on sunken (4.67:1) and the input edge on card
-     (3.19:1, the 3:1 non-text rule). Do not adjust by eye.
+     Ground is off-white; primary is ink #0e1111 (mirror of dark chalk). Character
+     accents (slate · terracotta · sage · plum · fog) live mainly in kind/status
+     tokens. --l-grad stays a flat fill under its old name so .btn-grad keeps
+     working. --l-glow stays zeroed: matte instrument, no outer glow. */
+  --l-bg: #f2f0ef;
+  --l-surface: #f7f5f4;
+  --l-surface-2: #fcfbfb;
+  --l-line: #e0dbd6;
+  --l-line-2: #cfc8c1;
+  --l-line-interactive: #7a746c; /* interactive edge on --l-surface */
+  --l-sunken: #e8e4e2;
+  --l-dots: #e0dbd6;
+  --l-dash: #7a746c;
+  --l-shadow: rgba(40, 32, 24, 0.1);
+  --l-scrim: rgba(26, 23, 21, 0.42);
+  --l-mask: rgba(242, 240, 239, 0.72);
 
-     One accent, and the hue stays blue: the dark theme is blue, so this is a
-     recalibration, not a rebrand. No gradient renders in light: --l-grad is a
-     flat fill under its old name, so .btn-grad, .grad-border and the logo chip
-     keep working with zero component edits. --l-glow is zeroed for the same
-     reason: no outer glow on any light control. */
-  --l-bg: #EDEBE4;
-  --l-surface: #F8F7F2;
-  --l-surface-2: #F4F2EC;
-  --l-line: #DEDBD2;
-  --l-line-2: #D5D2C8;
-  --l-line-interactive: #918E85; /* 3.19:1 on --l-surface — see --line-interactive */
-  --l-sunken: #E5E2DA;
-  --l-dots: #D5D2C8;
-  --l-dash: #918E85;
-  --l-shadow: rgba(45, 40, 32, 0.22);
-  --l-scrim: rgba(30, 27, 22, 0.42);
-  --l-mask: rgba(237, 235, 228, 0.72);
+  --l-card-bg: #fcfbfb;
+  --l-card-border: #cfc8c1;
+  --l-card-shadow: rgba(40, 32, 24, 0.1);
 
-  --l-card-bg: #FDFCF9;
-  --l-card-border: #D5D2C8;
-  --l-card-shadow: rgba(45, 40, 32, 0.22);
+  --l-text: #1a1715;
+  --l-muted: #5c574e;
+  --l-dim: #7a746c;
+  --l-muted-soft: rgba(92, 87, 78, 0.42);
 
-  --l-text: #1E1B16;
-  --l-muted: #56514A;
-  --l-dim: #67625A;
-  --l-muted-soft: rgba(86, 81, 74, 0.42);
+  --l-accent: #0e1111;
+  --l-grad: linear-gradient(180deg, #0e1111 0%, #0e1111 100%);
+  --l-accent-bg: rgba(14, 17, 17, 0.06);
+  --l-accent-bg-2: rgba(14, 17, 17, 0.1);
+  --l-accent-line: rgba(14, 17, 17, 0.18);
+  --l-accent-soft: rgba(14, 17, 17, 0.8);
+  --l-path: #6b8f7a; /* sage */
+  --l-glow: rgba(14, 17, 17, 0);
+  --l-on-accent: #f2f0ef;
 
-  --l-accent: #1D4ED8;
-  --l-grad: linear-gradient(105deg, #1D4ED8 0%, #1D4ED8 100%);
-  --l-accent-bg: rgba(29, 78, 216, 0.1);
-  --l-accent-bg-2: rgba(29, 78, 216, 0.18);
-  --l-accent-line: rgba(29, 78, 216, 0.45);
-  --l-accent-soft: rgba(29, 78, 216, 0.8);
-  --l-path: #4d7c0f;
-  --l-glow: rgba(29, 78, 216, 0);
-  --l-on-accent: #FDFCF9;
+  --l-ok: #3d7a5c;
+  --l-ok-bg: rgba(61, 122, 92, 0.1);
+  --l-warn: #b45309;
+  --l-warn-bg: rgba(180, 83, 9, 0.1);
+  --l-warn-line: rgba(180, 83, 9, 0.35);
+  --l-orange: #c4785a; /* terracotta */
+  --l-orange-bg: rgba(196, 120, 90, 0.12);
+  --l-danger: #b91c1c;
+  --l-danger-bg: rgba(185, 28, 28, 0.1);
+  --l-danger-soft: rgba(185, 28, 28, 0.8);
+  --l-danger-line: rgba(185, 28, 28, 0.35);
 
-  --l-ok: #047857;
-  --l-ok-bg: rgba(4, 120, 87, 0.14);
-  --l-warn: #B45309;
-  --l-warn-bg: rgba(180, 83, 9, 0.14);
-  --l-warn-line: rgba(180, 83, 9, 0.38);
-  --l-orange: #8c3a15;
-  --l-orange-bg: rgba(140, 58, 21, 0.13);
-  --l-danger: #BE123C;
-  --l-danger-bg: rgba(190, 18, 60, 0.12);
-  --l-danger-soft: rgba(190, 18, 60, 0.8);
-  --l-danger-line: rgba(190, 18, 60, 0.36);
+  --l-k-datasource: #5a7a96; /* slate */
+  --l-k-transform: #6b8f7a;
+  --l-k-code: #9a7b8f; /* plum */
+  --l-k-tool: #6b8f7a; /* sage */
+  --l-k-approval: #9d174d;
+  --l-k-agent: #c4785a; /* terracotta */
+  --l-k-llm: #c4785a;
+  --l-k-http: #d49278;
+  --l-k-loop: #7a96ae;
+  --l-k-unknown: #7a746c;
 
-  --l-k-datasource: #304e7e;
-  --l-k-transform: #307e57;
-  --l-k-code: #26706a;
-  --l-k-tool: #307e7e;
-  --l-k-approval: #7e304a;
-  --l-k-agent: #73307e;
-  --l-k-llm: #73307e;
-  --l-k-http: #7e5030;
-  --l-k-loop: #4338ca;
-  --l-k-unknown: #4A4844;
+  --l-alpha: #9a7b8f;
+  --l-alpha-bg: rgba(154, 123, 143, 0.1);
+  --l-alpha-line: rgba(154, 123, 143, 0.34);
 
-  --l-alpha: #634786;
-  --l-alpha-bg: rgba(99, 71, 134, 0.1);
-  --l-alpha-line: rgba(99, 71, 134, 0.34);
-
-  /* Frost fills. 0.78 is the lowest alpha at which --l-dim still clears AA over
-     a scrimmed backdrop (0.72 is the hard floor); 0.82 for modals. The blur
-     radii live on :root beside --frost because they are not theme-dependent. */
-  --l-frost: rgba(253, 252, 249, 0.78);
-  --l-frost-modal: rgba(253, 252, 249, 0.82);
-  --l-lift: inset 0 1px 0 rgba(255, 255, 255, 0.5), 0 1px 2px rgba(45, 40, 32, 0.08);
-  --l-elev-1: #f8f7f2;
-  --l-elev-2: #fbfaf6;
-  --l-elev-3: #fdfcf9;
+  /* Frost fills. Matte topbar uses high opacity; blur radii stay on :root. */
+  --l-frost: rgba(247, 245, 244, 0.94);
+  --l-frost-modal: rgba(247, 245, 244, 0.96);
+  --l-lift: inset 0 1px 0 rgba(255, 255, 255, 0.85), 0 1px 2px rgba(40, 32, 24, 0.06);
+  --l-elev-1: #f7f5f4;
+  --l-elev-2: #faf8f7;
+  --l-elev-3: #fcfbfb;
   --l-elev-4: #ffffff;
-  --l-edge-light: rgba(255, 255, 255, 0.72);
+  --l-edge-light: rgba(255, 255, 255, 0.8);
 
   /* ⚠ The RGB triplets need light values too, or `bg-accent/80` silently keeps
-     the dark blue — Tailwind composes alpha onto the triplet, not onto --accent. */
-  --l-bg-rgb: 237 235 228;
-  --l-surface-rgb: 248 247 242;
-  --l-accent-rgb: 29 78 216;
-  --l-ok-rgb: 4 120 87;
+     the dark chalk — Tailwind composes alpha onto the triplet, not onto --accent. */
+  --l-bg-rgb: 242 240 239;
+  --l-surface-rgb: 247 245 244;
+  --l-accent-rgb: 14 17 17;
+  --l-ok-rgb: 61 122 92;
   --l-warn-rgb: 180 83 9;
-  --l-orange-rgb: 140 58 21;
-  --l-danger-rgb: 190 18 60;
+  --l-orange-rgb: 196 120 90;
+  --l-danger-rgb: 185 28 28;
 }
 
 /* ══ APPLYING THE LIGHT THEME ═══════════════════════════════════════════════

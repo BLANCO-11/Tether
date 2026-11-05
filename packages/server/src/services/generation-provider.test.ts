@@ -1,12 +1,15 @@
 /**
- * One model connection (2026-11-04), and the D-115 deployment gate on the pricing routes.
- * The owner reversed D-35: the builder's model is the runtime connection, so what these tests pin is that nothing
- * reads `generation_llm` any more, the model routes are gone, and a failed read still throws.
+ * The two AI providers are two things, and this file exists to keep them two.
+ * `breaking-2026-08-07/plan-provider-and-scope.md` Part A · F2 · D-115
+ *
+ * ⚠ **The assertion worth writing is the one that looks tautological.** F2 was
+ * not a broken function — every unit here worked. It was *two things that must
+ * not be connected looking, on screen and in the docs, like one thing*, so the
+ * defect lived in the gap between them where no test was pointed.
  */
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 
-const runtimeSvc = readFileSync("src/services/runtime-model.service.ts", "utf8");
 const svc = readFileSync("src/services/generation-provider.service.ts", "utf8");
 const routes = readFileSync("src/routes/generation-provider.ts", "utf8");
 const inference = readFileSync("src/services/inference.service.ts", "utf8");
@@ -23,34 +26,64 @@ const inference = readFileSync("src/services/inference.service.ts", "utf8");
  */
 const guard = readFileSync("src/middleware/platform-permission.middleware.ts", "utf8");
 
-describe("one model connection (2026-11-04)", () => {
-  it("the generation adapter resolves the one connection and never reads generation_llm", () => {
-    expect(svc).toContain("resolveModelConnection");
-    expect(svc).not.toContain("generationLlm");
+describe("F2 — the generation provider is not the runtime provider", () => {
+  it("⚠ shares no module with the runtime model's (D-35) — not ops-api's old client, not runtime-model.service", () => {
+    // *"Runtime and generation inference must not be merged — different
+    // credentials, different processes, no shared abstraction."* That was forced
+    // by I-24, where the agent-runtime transport silently destroyed the
+    // `insufficient_contract` refusal channel. Two panels on one page is a
+    // layout choice; this is the property.
+    for (const src of [svc, routes]) {
+      expect(src).not.toMatch(/ops-client\.service|opsClient|runtime-model\.service/);
+    }
   });
 
-  it("the generation router has no model routes", () => {
-    expect(routes).not.toMatch(/"\/llm\//);
+  it("⚠ resolves a MODEL and never a credential", () => {
+    // The rejected alternative was "the parent fetches the gateway and key from
+    // ops-api's row", which inverts Stage 5's boundary: ops-api holds no
+    // control-plane credential and the parent holds no ops database credential.
+    // So the row has neither column, and nothing here may invent one.
+    expect(svc).not.toMatch(/baseUrl:\s*row|apiKey:\s*row|row\?\.(baseUrl|apiKey)/);
+    expect(svc).toContain("config.inference.baseUrl");
+    expect(svc).toContain("config.inference.apiKey");
   });
 
-  it("resolves the connection PER CALL, not once at import", () => {
+  it("⚠ never returns a key, and refuses one by NAME rather than dropping it", () => {
+    // There is deliberately no endpoint in this product that returns a secret
+    // value and no `?reveal=`; a settings page is precisely where that rule gets
+    // broken "so the operator can check what they pasted".
+    expect(routes).toContain("keyFingerprint");
+    expect(routes).not.toMatch(/apiKey:\s*config\.inference\.apiKey/);
+    // ⚠ Accepted-and-ignored reads exactly like a field that works, which is
+    // the same class of defect as F2 itself.
+    expect(routes).toContain("refuseCredentialFields");
+    expect(routes).toContain(".strict()");
+  });
+
+  it("⚠ resolves the model PER CALL, not once at import", () => {
+    // `export const inference = resolveInference()` bound the model at module
+    // load, so changing it needed a container restart — which is the state this
+    // whole feature exists to leave. A settings page over a boot-time binding is
+    // a page that reports a change it did not make.
     expect(inference).not.toMatch(/export const inference: InferenceClient = resolveInference\(\)/);
     expect(inference).toContain("class ResolvingInference");
-    expect(inference).toContain("currentConnection()");
+    expect(inference).toContain("currentModel()");
   });
 
-  it("caches for seconds, never for the process lifetime", () => {
-    const ttl = /const TTL_MS = ([\d_]+)/.exec(runtimeSvc);
+  it("⚠ caches for seconds, never for the process lifetime", () => {
+    // A process-lifetime cache would reinstate the restart requirement while
+    // looking like it had been removed.
+    const ttl = /const TTL_MS = ([\d_]+)/.exec(svc);
     expect(ttl).not.toBeNull();
     expect(Number(ttl![1]!.replace(/_/g, ""))).toBeLessThanOrEqual(60_000);
   });
 
-  it("a failed read is not silently the environment", () => {
-    const from = runtimeSvc.indexOf("export async function resolveModelConnection");
-    const next = runtimeSvc.indexOf("\nexport ", from + 1);
-    const body = runtimeSvc.slice(from, next === -1 ? undefined : next);
-    expect(from).toBeGreaterThan(-1);
-    expect(body).not.toMatch(/catch/);
+  it("⚠ a failed read is not silently the environment", () => {
+    // That would generate on a different model from the one the screen shows,
+    // for as long as the database is unhappy, and say nothing — the shape of
+    // I-07, where `begin` answers 503 rather than trusting the request body.
+    // A missing ROW is a different thing and is the normal case.
+    expect(svc).not.toMatch(/catch[\s\S]{0,120}config\.inference\.model/);
   });
 });
 

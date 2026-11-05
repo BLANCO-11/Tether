@@ -46,12 +46,13 @@ const PAGES: SearchResult[] = [
   { kind: "workflow", id: "nav-workflows", title: "Workflows", meta: "build · /workflows", href: "/workflows", iconKey: "Cube" },
   { kind: "approval", id: "nav-approvals", title: "Approvals", meta: "build · /approvals", href: "/approvals", iconKey: "Cube" },
   { kind: "run", id: "nav-runs", title: "Runs & Activity", meta: "watch · /runs", href: "/runs", iconKey: "Activity" },
-  { kind: "run", id: "nav-reports", title: "Dashboards & Reports", meta: "watch · /reports", href: "/reports", iconKey: "Gauge" },
   { kind: "run", id: "nav-datasources", title: "Data sources", meta: "connect · /data-sources/new", href: "/data-sources/new", iconKey: "Database" },
   { kind: "resource", id: "nav-resources", title: "Resources", meta: "connect · /resources", href: "/resources", iconKey: "Box" },
-  { kind: "person", id: "nav-admin", title: "Admin", meta: "admin · /admin", href: "/admin", iconKey: "Building" },
   { kind: "run", id: "nav-dashboard", title: "Dashboard", meta: "watch · /dashboard", href: "/dashboard", iconKey: "Gauge" },
   { kind: "resource", id: "nav-data-sources", title: "Data sources", meta: "connect · /data-sources", href: "/data-sources", iconKey: "Database" },
+  { kind: "resource", id: "nav-ai-models", title: "AI models", meta: "settings · /ai-provider", href: "/ai-provider", iconKey: "Shield" },
+  { kind: "resource", id: "nav-chats", title: "Chats", meta: "build · /chats", href: "/chats", iconKey: "Cube" },
+  { kind: "resource", id: "nav-projects", title: "Projects", meta: "build · /projects", href: "/projects", iconKey: "Box" },
 ];
 
 const ACTIONS: SearchResult[] = [

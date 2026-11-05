@@ -18,8 +18,6 @@
  *            and its $n placeholders match `params`
  *   - uses: every `read:`/`tool:` resolves (a declared read / a tool in entries), and every literal
  *           foundry.read("x") / foundry.call("y") in a step's code is in that step's uses
- *   - data flow: every params["k"] / inputs["k"] the code reads is bound on the step (the runner passes nothing
- *                else), and a step listing reads either calls one or is bound inputs — or it has no data at all
  *   - clarification: no open questions, and no question without a prompt
  *   - cases: every choice the request describes is listed under "cases" and points at a real branch path; a case marked
  *            "missing" is refused until the person is asked — so no choice is hidden in code or silently dropped
@@ -201,15 +199,6 @@ export function verify() {
   // point: a step's outputs after it runs; inside a loop, the loop's item; never a branch arm's or loop body's own
   // steps from outside (only what the branch declares, and the loop's counts).
   const seen = new Set();
-  // Every step id at any depth: whose file steps/<id>/main.py is.
-  const stepIds = new Set();
-  (function ids(v) {
-    if (Array.isArray(v)) v.forEach(ids);
-    else if (v && typeof v === "object") {
-      if (typeof v.id === "string" && typeof v.entry === "string") stepIds.add(v.id);
-      Object.values(v).forEach((x) => x && typeof x === "object" && ids(x));
-    }
-  })(wf.steps);
   /** branch id → its paths, for "cases". */
   const branches = new Map();
   let stepCount = 0;
@@ -240,24 +229,12 @@ export function verify() {
     }
     const m = /^([A-Za-z_]\w*)\.([A-Za-z_]\w*)$/.exec(t);
     if (!m) {
-      if (!literalOk && Object.hasOwn(reads, t)) {
-        // A read's bare name is the commonest wrong binding, and the generic sentence below names no fix — measured
-        // getting "fixed" twice by guessing ($input.<read>, then no binding at all) on 2026-11-03.
-        errors.push(`${owner}: ${where} is "${t}" — that is a read's name, and a read is not a binding; call foundry.read("${t}") in the step's code and list "read:${t}" in its uses`);
-        return;
-      }
       if (!literalOk) errors.push(`${owner}: ${where} must be "$input.<name>", "$item…", or "<earlier_step>.<output>"`);
       return;
     }
     const outs = ctx.visible.get(m[1]);
     if (!outs) {
       if (literalOk && !seen.has(m[1])) return; // a literal that happens to contain a dot
-      if (!seen.has(m[1]) && Object.hasOwn(reads, m[1])) {
-        // "<read>.rows" is the read-name binding in step form (chat 934d4254): told only "no step is called attendance",
-        // the fix round invented three steps of that name, each running another step's code.
-        errors.push(`${owner}: ${where} is "${t}" — ${m[1]} is a read, not a step, and a read is not a binding; call foundry.read("${m[1]}", ...) in this step's code, list "read:${m[1]}" in its uses, and remove this input`);
-        return;
-      }
       errors.push(seen.has(m[1])
         ? `${owner}: ${where} reads ${t}, but ${m[1]} is inside a loop or a branch path — read the loop's counts, or what the branch declares under "outputs" and sets in every path`
         : `${owner}: ${where} reads ${t}, but no EARLIER step is called ${m[1]}`);
@@ -366,11 +343,6 @@ export function verify() {
 
     let src = "";
     const entry = step.entry || `steps/${sid}/main.py`;
-    // One code file per step: a step running another step's file runs that step's logic under the wrong bindings.
-    const owns = /^steps\/([^/]+)\/main\.py$/.exec(entry)?.[1];
-    if (owns && owns !== sid && stepIds.has(owns)) {
-      errors.push(`step ${sid}: runs ${entry}, which is step ${owns}'s code — each step runs its own file, steps/${sid}/main.py`);
-    }
     if (!existsSync(join(SANDBOX, entry))) errors.push(`step ${sid}: ${entry} does not exist`);
     else {
       src = readFileSync(join(SANDBOX, entry), "utf8");
@@ -409,87 +381,7 @@ export function verify() {
         }
       }
     }
-    if (src) dataFlow(sid, step, entry, src, uses);
-    if (src) reopenedWorkbook(sid, entry, src);
   };
-
-  /**
-   * A step that writes a workbook with foundry.write_xlsx must not re-open it with openpyxl.load_workbook in full
-   * mode. That loads every cell as an object: a step wrote ~100k rows, re-opened the file to add a second sheet and
-   * ran out of the run's 1024 MB (run 12e1a455, 2026-11-04) — the test had passed on a few invented rows. Several
-   * sheets go in ONE write_xlsx call. A load_workbook in a step that never writes one (a small workspace template
-   * File opened to keep its formatting) is fine, and so is read_only=True.
-   *
-   * Comments are dropped first: a comment explaining the rule says the same words as the violation (I-62).
-   */
-  function reopenedWorkbook(sid, entry, src) {
-    const code = src.split("\n").map((l) => l.replace(/(^|\s)#.*$/, "$1")).join("\n");
-    if (!/\bwrite_xlsx\s*\(/.test(code)) return;
-    for (const m of code.matchAll(/\bload_workbook\s*\(/g)) {
-      let depth = 1;
-      let i = m.index + m[0].length;
-      const start = i;
-      for (; i < code.length && depth > 0; i++) {
-        if (code[i] === "(") depth++;
-        else if (code[i] === ")") depth--;
-      }
-      const args = code.slice(start, depth === 0 ? i - 1 : i);
-      if (/\bread_only\s*=\s*True\b/.test(args)) continue;
-      errors.push(
-        `step ${sid}: ${entry} re-opens a workbook with openpyxl.load_workbook after writing it with foundry.write_xlsx — ` +
-          `that loads every cell and runs out of memory on a large report. ` +
-          `Write every sheet in one call: foundry.write_xlsx(path, {"Sheet A": rows, "Sheet B": other_rows})`,
-      );
-      return;
-    }
-  }
-
-  /**
-   * The REVERSE of the two checks above, and of "a foundry.read in the code is in uses": data must reach the code.
-   *
-   * The runner hands a step exactly the params and inputs it binds and nothing else (flow-runner engine.py), so a key
-   * the code reads that nothing binds never has a value — None, its default, or a KeyError — on every run. And a step
-   * that lists reads, calls none and is bound no input has no data at all. Both passed this verifier and failed only
-   * at run time as "returned empty data", which reads as a question about the test rows (chat 5e491c36, 2026-11-03:
-   * a fix turn removed the step's only bindings to get past a check, and the verifier said OK).
-   *
-   * Comments are dropped first: a comment explaining a binding says the same words as the binding (I-62).
-   */
-  function dataFlow(sid, step, entry, src, uses) {
-    const code = src.split("\n").map((l) => l.replace(/(^|\s)#.*$/, "$1")).join("\n");
-    for (const [what, field] of [["inputs", "input"], ["params", "param"]]) {
-      if (new RegExp(`\\*\\*\\s*${what}\\b`).test(code)) continue;
-      const bound = new Set(Object.keys(step[what] ?? {}));
-      const pattern = new RegExp(`\\b${what}\\s*(?:\\[\\s*["']([^"']+)["']\\s*\\]|\\.get\\(\\s*["']([^"']+)["'])`, "g");
-      const wanted = new Set([...code.matchAll(pattern)].map((m) => m[1] ?? m[2]));
-      for (const k of wanted) {
-        if (bound.has(k)) continue;
-        const how = field === "input" ? `"<earlier_step>.<output>"` : `"$input.<name>" or a fixed value`;
-        errors.push(
-          `step ${sid}: ${entry} reads ${what}["${k}"] but the step binds no ${field} "${k}", so it never has a value ` +
-            `(None, its default, or an error, on every run) — bind ${field} "${k}" to ${how}` +
-            (field === "input" ? `, or call foundry.read(...) in the code for a declared read` : ""),
-        );
-      }
-    }
-    // A STARVED step: it lists reads, calls none, and is bound no input. A step that gets its rows through inputs and
-    // still lists a read is untidy, not wrong — flagging it was a false positive on a working workflow (a5d432f3).
-    // A foundry.read with a computed name cannot be matched, so it counts as a call.
-    const called = new Set([...code.matchAll(/foundry\.read\(\s*["']([^"']+)["']/g)].map((m) => m[1]));
-    const computed = /foundry\.read\(\s*[^"'\s)]/.test(code);
-    if (called.size || computed || Object.keys(step.inputs ?? {}).length) return;
-    for (const u of uses) {
-      const [kind, ...rest] = String(u).split(":");
-      const name = rest.join(":");
-      if (kind === "read" && Object.hasOwn(reads, name)) {
-        errors.push(
-          `step ${sid}: uses lists "read:${name}" but ${entry} never calls foundry.read("${name}") and the step is ` +
-            `bound no inputs, so it has no data — call foundry.read("${name}") in the code, or bind its inputs to an ` +
-            `earlier step's output`,
-        );
-      }
-    }
-  }
 
   walk(wf.steps, { where: "workflow", loops: [], visible: new Map() });
 

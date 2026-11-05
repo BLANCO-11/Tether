@@ -232,13 +232,6 @@ export type StepBatchInput = z.infer<typeof stepBatchSchema>;
  */
 export { resetOAuth2TokenCache } from "./tool-invoke.js";
 
-/** The all-failed message, with the first failing call's reason (cut to 500 chars) when it has one. */
-function allFailedMessage(toolName: string, failed: number, results: StepItemResult[]): string {
-  const base = `tool "${toolName}": all ${failed} call(s) failed`;
-  const reason = results.find((r) => !r.ok && r.error)?.error;
-  return reason ? `${base} — ${reason.slice(0, 500)}` : base;
-}
-
 
 /**
  * How many entries the biggest array in a payload has, or `null` when there is
@@ -403,7 +396,7 @@ async function invokePlugin(
   const { results } = await invokePluginTool(workspaceId, tool, params, runId, use.secretName ? { secretName: use.secretName, actingSubject: use.actingSubject } : {});
   const failed = results.filter((r) => !r.ok).length;
   if (failed > 0 && failed === results.length) {
-    throw new StepError(allFailedMessage(tool.name, failed, results), 502, { results });
+    throw new StepError(`tool "${tool.name}": all ${failed} call(s) failed`, 502, { results });
   }
   const warnings: string[] = [];
   if (failed > 0) warnings.push(`${failed} of ${results.length} call(s) to "${tool.name}" failed`);
@@ -551,7 +544,7 @@ async function invokeTool(
      * shape; a new key beside it is additive, a changed `results` is not.
      */
     throw new StepError(
-      allFailedMessage(tool.name, failed, results),
+      `tool "${tool.name}": all ${failed} call(s) failed`,
       502,
       { results, ...(remarks.length > 0 ? { warnings: remarks } : {}) },
     );

@@ -17,12 +17,7 @@ import { join } from "node:path";
 import { sandboxDir } from "./sandbox-fs.js";
 import type { PiQuestion } from "./types.js";
 
-/**
- * `follows`: set on an allowance DERIVED from others (every input of its step is an output that may be empty). It names
- * the root allowances, held in the same batch, whose answer it takes; empty when it follows only allowances the person
- * already accepted.
- */
-export type HeldAllowance = { stepId: string; output: string; reason: string; follows?: string[] };
+export type HeldAllowance = { stepId: string; output: string; reason: string };
 
 export const HOLD_PREFIX = "allow_empty:";
 export const ALLOW_YES = "Yes, an empty result is fine";
@@ -41,7 +36,7 @@ function nodesWithAllowances(v: Json, out: Array<Record<string, unknown>> = []):
   return out;
 }
 
-export const keyOf = (stepId: string, output: string) => `${stepId}:${output}`;
+const keyOf = (stepId: string, output: string) => `${stepId}:${output}`;
 
 /** Whole-output allowances in `workflow` that were not there when the turn began (`before`, "step:output[:field]"). */
 export function newWholeOutputAllowances(workflow: Json, before: readonly string[]): HeldAllowance[] {
@@ -55,59 +50,6 @@ export function newWholeOutputAllowances(workflow: Json, before: readonly string
     }
   }
   return out;
-}
-
-/** Every step node (an id and an entry), wherever it sits. */
-function stepNodes(v: Json, out = new Map<string, Record<string, unknown>>()): Map<string, Record<string, unknown>> {
-  if (Array.isArray(v)) for (const x of v) stepNodes(x, out);
-  else if (v && typeof v === "object") {
-    const o = v as Record<string, unknown>;
-    if (typeof o.id === "string" && typeof o.entry === "string") out.set(o.id, o);
-    for (const x of Object.values(o)) if (x && typeof x === "object") stepNodes(x, out);
-  }
-  return out;
-}
-
-/**
- * Ask once per ROOT (2026-11-03). Chat eb205c03 asked five questions that were two facts: "a month may have no
- * attendance" and "no leave". The count, the status totals and the email body built from them are empty BECAUSE their
- * inputs are, so asking about each again was the same question in other words.
- *
- * An allowance is derived when its step has inputs and every one is "<step>.<output>" naming an output that is itself
- * allowed to be empty (held now, or accepted before). Anything else — a "$input", a loop's "$item", a source that must
- * have rows — keeps it a root, so the person is still asked. Derived ones carry the held roots they follow.
- */
-export function withRoots(workflow: Json, held: readonly HeldAllowance[]): HeldAllowance[] {
-  const allowed = new Set<string>();
-  for (const node of nodesWithAllowances(workflow))
-    for (const a of node.allow_empty as Array<Record<string, unknown>>)
-      if (a && typeof a.output === "string" && !a.field) allowed.add(keyOf(node.id as string, a.output));
-  for (const h of held) allowed.add(keyOf(h.stepId, h.output));
-  const steps = stepNodes(workflow);
-  const heldKeys = new Set(held.map((h) => keyOf(h.stepId, h.output)));
-  const sourcesOf = (stepId: string): string[] | null => {
-    const inputs = steps.get(stepId)?.inputs;
-    if (!inputs || typeof inputs !== "object" || Array.isArray(inputs)) return null;
-    const keys: string[] = [];
-    for (const v of Object.values(inputs as Record<string, unknown>)) {
-      if (typeof v !== "string" || v.startsWith("$")) return null;
-      const dot = v.indexOf(".");
-      if (dot <= 0 || !steps.has(v.slice(0, dot))) return null;
-      keys.push(keyOf(v.slice(0, dot), v.slice(dot + 1)));
-    }
-    return keys.length && keys.every((k) => allowed.has(k)) ? keys : null;
-  };
-  const rootsOf = (key: string, seen: Set<string>): string[] => {
-    if (seen.has(key)) return [];
-    seen.add(key);
-    const sources = sourcesOf(key.slice(0, key.indexOf(":")));
-    if (!sources) return heldKeys.has(key) ? [key] : [];
-    return [...new Set(sources.flatMap((k) => (heldKeys.has(k) ? rootsOf(k, seen) : [])))];
-  };
-  return held.map((h) => {
-    if (!sourcesOf(h.stepId)) return h;
-    return { ...h, follows: rootsOf(keyOf(h.stepId, h.output), new Set()) };
-  });
 }
 
 /** The workflow with these whole-output allowances removed (field allowances untouched). */
@@ -143,16 +85,12 @@ export function withAllowance(workflow: Json, h: HeldAllowance): Json {
 }
 
 /** The question the person answers, in plain words with the consequence of each answer. */
-export function heldQuestion(h: HeldAllowance, derived: readonly HeldAllowance[] = []): PiQuestion {
-  const also = derived.map((d) => `"${d.output}" (step ${d.stepId})`);
+export function heldQuestion(h: HeldAllowance): PiQuestion {
   return {
     id: `${HOLD_PREFIX}${h.stepId}:${h.output}`,
     prompt:
       `Can "${h.output}" (step ${h.stepId}) genuinely come back with nothing in it?` +
       (h.reason ? ` Forge's reason: ${h.reason}` : "") +
-      (also.length
-        ? ` Your answer also decides ${also.join(", ")}: ${also.length > 1 ? "they are" : "it is"} built from it.`
-        : "") +
       ` If yes, a run that finds nothing carries on — an empty report would still go out. If no, a run that finds ` +
       `nothing stops and says so.`,
     choices: [ALLOW_YES, ALLOW_NO],

@@ -306,13 +306,6 @@ describe("the flat attachment — attach_rows + attach_name + attach_format", ()
     }
   });
 
-  it("an empty rows list with no name and no format declares no file — same as not given", () => {
-    const existing = [{ name: "a.txt", content: "x" }];
-    expect(foldFlatAttachment(existing, { attach_rows: [] })).toEqual({ ok: true, attachments: existing, skipped: [] });
-    // CONTROL: rows given with no name are still refused.
-    expect(foldFlatAttachment(undefined, { attach_rows: [{ a: 1 }] })).toMatchObject({ ok: false, message: "attach_rows given without attach_name" });
-  });
-
   it("adds nothing when none of the three is given", () => {
     expect(foldFlatAttachment(undefined, {})).toEqual({ ok: true, attachments: [], skipped: [] });
   });

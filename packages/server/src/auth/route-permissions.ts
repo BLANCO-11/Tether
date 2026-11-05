@@ -33,8 +33,8 @@ import type { PlatformPermission, WorkspacePermission } from "./permissions.js";
  * `:workspaceId`. Inferring scope from "does this path contain :workspaceId" gets one of
  * those wrong in each direction, so every workspace entry names its parameter.
  *
- * Counts at generation time: **348 mounted routes** —
- * 255 workspace-scoped, 42 platform, 22 identity-only,
+ * Counts at generation time: **350 mounted routes** —
+ * 253 workspace-scoped, 44 platform, 24 identity-only,
  * 29 exempt. ⚠ Read these from the exported arrays, never from this comment.
  */
 
@@ -281,11 +281,9 @@ export const ROUTE_PERMISSIONS: ReadonlyMap<string, RouteRequirement> = Object.f
     ["POST /api/workspaces/:workspaceId/pi-builder/sessions/:sessionId/compact", { kind: "workspace", permission: "flows.write", param: "workspaceId" }],
     ["POST /api/workspaces/:workspaceId/pi-builder/sessions/:sessionId/messages", { kind: "workspace", permission: "flows.write", param: "workspaceId" }],
     ["POST /api/workspaces/:workspaceId/pi-builder/sessions/:sessionId/mode", { kind: "workspace", permission: "flows.write", param: "workspaceId" }],
-    ["POST /api/workspaces/:workspaceId/pi-builder/sessions/:sessionId/model", { kind: "workspace", permission: "flows.write", param: "workspaceId" }],
     ["POST /api/workspaces/:workspaceId/pi-builder/sessions/:sessionId/proposals/:proposalId", { kind: "workspace", permission: "plugins.read", param: "workspaceId" }],
     ["POST /api/workspaces/:workspaceId/pi-builder/sessions/:sessionId/references", { kind: "workspace", permission: "flows.write", param: "workspaceId" }],
     ["POST /api/workspaces/:workspaceId/pi-builder/sessions/:sessionId/save-version", { kind: "workspace", permission: "flows.write", param: "workspaceId" }],
-    ["POST /api/workspaces/:workspaceId/pi-builder/sessions/:sessionId/steer", { kind: "workspace", permission: "flows.write", param: "workspaceId" }],
     ["POST /api/workspaces/:workspaceId/pi-builder/sessions/:sessionId/stop", { kind: "workspace", permission: "flows.write", param: "workspaceId" }],
     ["POST /api/workspaces/:workspaceId/pi-builder/sessions/:sessionId/test-run", { kind: "workspace", permission: "flows.write", param: "workspaceId" }],
     ["POST /api/workspaces/:workspaceId/pi-builder/sessions/:sessionId/thinking", { kind: "workspace", permission: "flows.write", param: "workspaceId" }],
@@ -325,6 +323,7 @@ export const ROUTE_PERMISSIONS: ReadonlyMap<string, RouteRequirement> = Object.f
     ["GET /api/workspaces/:id/manifest", { kind: "workspace", permission: "flows.read", param: "id" }],
 
     // ── platform tier ────────────────────────────────────────────────────────
+    ["DELETE /api/generation/llm/provider", { kind: "platform", permission: "platform.generation.write" }],
     ["DELETE /api/local-users/:id", { kind: "platform", permission: "platform.localusers.write" }],
     ["DELETE /api/local-users/:id/access/:workspaceId", { kind: "platform", permission: "platform.members.grant" }],
     ["DELETE /api/platform/role-assignments/:subject/:roleKey", { kind: "platform", permission: "platform.members.grant" }],
@@ -362,6 +361,7 @@ export const ROUTE_PERMISSIONS: ReadonlyMap<string, RouteRequirement> = Object.f
     ["POST /api/runtime-model/models", { kind: "platform", permission: "platform.toolmodel.read" }],
     ["POST /api/runtime-model/test", { kind: "platform", permission: "platform.toolmodel.read" }],
     ["POST /api/workspaces", { kind: "platform", permission: "platform.workspaces.write" }],
+    ["PUT /api/generation/llm/provider", { kind: "platform", permission: "platform.generation.write" }],
     ["PUT /api/generation/pricing", { kind: "platform", permission: "platform.generation.write" }],
     ["PUT /api/local-users/:id/access/:workspaceId", { kind: "platform", permission: "platform.members.grant" }],
     ["PUT /api/plugins/installs/:piece/hosts", { kind: "platform", permission: "platform.plugins.install" }],
@@ -376,18 +376,20 @@ export const ROUTE_PERMISSIONS: ReadonlyMap<string, RouteRequirement> = Object.f
     ["DELETE /api/invitations/:id/workspaces/:workspaceId", { kind: "identity", why: "an invitation spans workspaces; `members.grant` is checked per workspace inside, the platform role by the grantable check" }],
     ["GET /api/engine/plugins", { kind: "identity", why: "signed in; no further permission" }],
     ["GET /api/engine/plugins/:name/credentials", { kind: "identity", why: "signed in; no further permission" }],
+    ["GET /api/generation/llm/provider", { kind: "identity", why: "signed in; no further permission" }],
     ["GET /api/generation/pricing", { kind: "identity", why: "signed in; a member sees their own cost, so the prices behind it are readable" }],
     ["GET /api/invitations", { kind: "identity", why: "an invitation spans workspaces; `members.grant` is checked per workspace inside, the platform role by the grantable check" }],
     ["GET /api/me", { kind: "identity", why: "signed in; no further permission" }],
     ["GET /api/permissions/catalogue", { kind: "identity", why: "signed in; no further permission" }],
     ["GET /api/reports/export", { kind: "identity", why: "the report spans workspaces; `reports.read` is checked per workspace inside, and the answer is limited to those" }],
-    ["GET /api/reports/forecast", { kind: "identity", why: "the report spans workspaces; `reports.read` is checked per workspace inside, and the answer is limited to those" }],
     ["GET /api/reports/runs", { kind: "identity", why: "the report spans workspaces; `reports.read` is checked per workspace inside, and the answer is limited to those" }],
     ["GET /api/reports/summary", { kind: "identity", why: "the report spans workspaces; `reports.read` is checked per workspace inside, and the answer is limited to those" }],
     ["GET /api/templates", { kind: "identity", why: "signed in; no further permission" }],
     ["GET /api/templates/:slug", { kind: "identity", why: "signed in; no further permission" }],
     ["GET /api/templates/suggestions", { kind: "identity", why: "signed in; no further permission" }],
     ["GET /api/workspaces", { kind: "identity", why: "signed in; the LIST ITSELF is filtered per grant (FR-015)" }],
+    ["POST /api/generation/llm/models", { kind: "identity", why: "signed in; no further permission" }],
+    ["POST /api/generation/llm/test", { kind: "identity", why: "signed in; no further permission" }],
     ["POST /api/invitations", { kind: "identity", why: "an invitation spans workspaces; `members.grant` is checked per workspace inside, the platform role by the grantable check" }],
     ["POST /api/reports/email", { kind: "identity", why: "the report spans workspaces; `reports.read` is checked per workspace inside, and the answer is limited to those" }],
     ["PUT /api/me/forge-default-mode", { kind: "identity", why: "own setting; subject from the token" }],

@@ -227,9 +227,6 @@ const DEFAULT_TIMEOUT_MS = 300_000;
 /**
  * ⚠ **THE SECOND SENDER OF `temperature: 0`, AND IT HAD TO BE FIXED SEPARATELY.**
  *
- * ⚠ 2026-11-04: the separation described below (D-35, `generation_llm`) is REVERSED — one model connection for the
- * deployment (`resolveModelConnection`). ops-api is gone too. Kept as the record of why this predicate exists here.
- *
  * `packages/ops-api`'s provider carries the same predicate with the same
  * reasoning. That is not a duplication to tidy away: **runtime inference
  * (`llm_complete`) and generation inference (this) share a provider and nothing
@@ -449,9 +446,10 @@ export class GatewayInference implements InferenceClient {
  * exists to leave: a settings page over a boot-time binding is a page that
  * reports a change it did not make.
  *
- * ⚠ **The gateway and key now come from the one model connection** (2026-11-04),
- * with `config.inference` as the fallback. The `LLM_*` environment is still read
- * in `config/index.ts` and nowhere else (`kestra:check` asserts it).
+ * ⚠ **Only the model is looked up.** The base URL and key stay
+ * `config.inference`'s, which is what keeps the `LLM_*` environment read in
+ * `config/index.ts` and nowhere else (`kestra:check` asserts it) and what keeps
+ * D-35 structural: this seam gains a *model*, never a credential.
  */
 
 /**
@@ -463,9 +461,9 @@ export class GatewayInference implements InferenceClient {
  * every one of them open a connection to resolve a model they are not going to
  * use.
  */
-async function currentConnection() {
+async function currentModel(): Promise<string> {
   const { resolveGenerationProvider } = await import("./generation-provider.service.js");
-  return await resolveGenerationProvider();
+  return (await resolveGenerationProvider()).model;
 }
 
 class ResolvingInference implements InferenceClient {
@@ -473,11 +471,17 @@ class ResolvingInference implements InferenceClient {
     prompt: string,
     opts: { label: string; timeoutMs?: number; maxTokens?: number; model?: string; system?: string; schema?: { name: string; schema: Record<string, unknown> } },
   ): Promise<string> {
-    // `config.inference` gets both credentials from `required()`, so the `||`
-    // fallbacks never yield an empty string arriving as a request to
-    // `/chat/completions`. A per-call model override wins over the default.
-    const p = await currentConnection();
-    return new GatewayInference(p.baseUrl || config.inference.baseUrl, p.apiKey || config.inference.apiKey, opts.model ?? p.model).complete(prompt, opts);
+    // A per-call override skips the provider lookup: it already names the model,
+    // and the lookup exists to resolve the DEFAULT, not to second-guess this.
+    const model = opts.model ?? (await currentModel());
+    // No `!` on either credential and no branch guarding them: `config.inference`
+    // gets both from `required()`, so an unset one is a boot failure rather than
+    // an empty string arriving here as a request to `/chat/completions`.
+    return new GatewayInference(
+      config.inference.baseUrl,
+      config.inference.apiKey,
+      model,
+    ).complete(prompt, opts);
   }
 }
 

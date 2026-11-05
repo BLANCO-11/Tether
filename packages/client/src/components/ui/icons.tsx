@@ -39,7 +39,6 @@ export const Minus = (p: P) => <S {...p}><path d="M5 12h14" /></S>;
 export const Frame = (p: P) => <S {...p}><path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3" /></S>;
 export const Expand = (p: P) => <S {...p}><path d="M9 4H4v5M15 4h5v5M15 20h5v-5M9 20H4v-5" /></S>;
 export const Collapse = (p: P) => <S {...p}><path d="M4 9h5V4M20 9h-5V4M20 15h-5v5M4 15h5v5" /></S>;
-export const Eye = (p: P) => <S {...p}><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12Z" /><circle cx="12" cy="12" r="3" /></S>;
 export const Check = (p: P) => <S {...p}><path d="M20 6 9 17l-5-5" /></S>;
 export const ChevronDown = (p: P) => <S {...p}><path d="m6 9 6 6 6-6" /></S>;
 export const ChevronUp = (p: P) => <S {...p}><path d="m18 15-6-6-6 6" /></S>;

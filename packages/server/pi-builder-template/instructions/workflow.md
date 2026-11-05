@@ -45,11 +45,6 @@ Two things, in this directory:
 }
 ```
 
-- **A read is not a step and has no outputs.** Its rows exist only where a step's code calls
-  `foundry.read("<read-name>", <param>=...)`, and that step lists `"read:<read-name>"` in `uses`. Never write
-  `"<read-name>.rows"` (or the bare read name) in `inputs`. A step that needs a read's rows calls it in its own
-  code, or receives them from an earlier step whose code called it. Every step runs its own file,
-  `steps/<its id>/main.py`.
 - Steps run **in the order listed**. A step's `inputs` may only name outputs of steps listed before it (for loops,
   choices and approvals, see below).
 - `description` is one plain sentence a person reads when they click the step ("Adds up each employee's hours for
@@ -209,9 +204,6 @@ path = foundry.file("<file name>")                     # a workspace file, as a 
   `CASE`) so a step receives only the rows it needs — one row per employee for the month, not one per employee per day.
   Test data has a handful of rows; production tables have hundreds of thousands, and what a step returns is carried to
   every later step (at most 100 MB; a run waiting at an approval keeps at most 4 MB). Python is for what SQL cannot do.
-  A table in another datasource and a workspace File cannot be joined in SQL: read each one (filtered in its own SQL,
-  or opened with `foundry.file`) in the same step, then match the rows in Python on the key they share. That is
-  normal, never a reason to ask or refuse.
 - `foundry.file` opens one of the workspace's **Files** (catalogue `files[]`): a rate card, a policy, a template the
   workflow reads every time it runs. List `"file:<name>"` in the step's `uses`, then read the path like any file
   (`pd.read_excel(foundry.file("Rates.xlsx"))`). A file in this chat (`files/`, `out/`) is read the same way and is
@@ -229,20 +221,10 @@ path = foundry.file("<file name>")                     # a workspace file, as a 
 - **A report as a file.** When the person wants rows in a spreadsheet and there could be more than a few thousand of
   them, build the file in the step and attach it by path:
   ```python
-  foundry.write_xlsx("lop_report.xlsx", rows)
+  pd.DataFrame(rows).to_excel("lop_report.xlsx", index=False)
   foundry.call("foundry_email_send", {"subject": "...", "body": "<a short summary>",
                                       "attachments": [{"name": "LOP report.xlsx", "path": "lop_report.xlsx"}]})
   ```
-  Build a spreadsheet with `foundry.write_xlsx(path, rows)`, never pandas' `to_excel`: `to_excel` holds several
-  copies of the data and runs out of memory on a large report.
-  The step builds the file, so it may have any number of sheets, and one email may carry several files;
-  a tool never limits what a file holds.
-  Write several sheets in ONE call, a dict of sheet name to rows:
-  `foundry.write_xlsx("report.xlsx", {"Details": rows, "Summary": summary_rows})`. Never re-open a workbook the step
-  wrote with `openpyxl.load_workbook` to add a sheet or a style: it loads every cell and runs out of memory on real
-  data, even though the test passed on a few invented rows. Open a workspace File you only read with
-  `load_workbook(path, read_only=True)`. A step returns only what later steps use: when the next step needs a count
-  or the file, return the count and the path, never the rows (a run's memory holds every output handed on).
   The message **body is a summary or prose, never the report**: a table of more than 50 rows in a body is sent as an
   attached file anyway, and the body replaced with "the full results are in the attached file". Pass a step's file
   between steps as its path, not its contents as text.

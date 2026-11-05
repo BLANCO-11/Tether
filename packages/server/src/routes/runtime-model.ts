@@ -1,8 +1,7 @@
 /**
  * The runtime model, served by Foundry itself (2026-10-30; was ops-api behind `/api/ops/llm/*`).
  *
- *  - `runtimeModelRouter` at `/api/runtime-model` — the one model connection (AI models → Models), used by workflows, the
- *    builder and Forge: read, save, clear, list the
+ *  - `runtimeModelRouter` at `/api/runtime-model` — the AI models page's Runtime tab: read, save, clear, list the
  *    gateway's models, run a test completion. Behind the parent API key; each route's platform permission comes from
  *    the generated route map (`platform.toolmodel.read` / `.write`).
  *  - `llmCompleteRouter` at `/api/llm` — the endpoint behind the `llm_complete` tool, with its own derived key like
