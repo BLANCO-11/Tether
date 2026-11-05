@@ -98,7 +98,17 @@ while (Date.now() < deadline) {
     process.exit(0);
   }
   if (j.status === "failed" || j.status === "revoked") {
-    console.error(j.error ?? j.status);
+    console.error(
+      j.status === "revoked"
+        ? `Declined: ${j.error ?? "the person cancelled this job"}`
+        : `Approved but the command failed: ${j.error ?? "unknown"}`,
+    );
+    if (j.result && typeof j.result === "object") {
+      const r = j.result;
+      if (r.stderr) console.error(String(r.stderr).slice(0, 4000));
+      if (r.stdout) console.error(String(r.stdout).slice(0, 4000));
+      else console.error(JSON.stringify(r, null, 2));
+    }
     process.exit(1);
   }
   if (j.needsApproval) {

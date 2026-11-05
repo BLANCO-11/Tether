@@ -11,7 +11,7 @@
  * Token: ~/.foundry-edge/credentials.json
  */
 import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { homedir } from "node:os";
+import { homedir, platform as osPlatform } from "node:os";
 import { join } from "node:path";
 import { spawn } from "node:child_process";
 
@@ -190,12 +190,23 @@ async function runLoop() {
   const url = (arg("--url") || creds.url || "http://localhost:4000").replace(/\/$/, "");
   console.log(`Polling ${url} as device ${creds.deviceId}… (Ctrl+C to stop)`);
   for (;;) {
-    const claim = await fetch(`${url}/api/edge/jobs/claim`, {
-      method: "POST",
-      headers: { authorization: `Bearer ${creds.token}`, "content-type": "application/json" },
-      body: "{}",
-    });
-    const claimed = await claim.json().catch(() => ({}));
+    let claim, claimed;
+    try {
+      claim = await fetch(`${url}/api/edge/jobs/claim`, {
+        method: "POST",
+        headers: { authorization: `Bearer ${creds.token}`, "content-type": "application/json" },
+        body: JSON.stringify({
+          home: homedir(),
+          cwd: process.cwd(),
+          platform: osPlatform(),
+        }),
+      });
+      claimed = await claim.json().catch(() => ({}));
+    } catch (err) {
+      console.error("claim connection error:", err.cause?.code || err.message, "— retrying in 5s");
+      await sleep(5000);
+      continue;
+    }
     if (!claim.ok) {
       console.error("claim failed", claim.status, claimed.message || claimed.error);
       await sleep(5000);
@@ -208,13 +219,18 @@ async function runLoop() {
     }
     console.log(`Job ${job.id} ${job.kind}`, job.payload);
     const outcome = await handleJob(job);
-    const body = outcome.ok ? { ok: true, result: outcome.result } : { ok: false, error: outcome.error || "failed" };
+    const body = outcome.ok
+      ? { ok: true, result: outcome.result }
+      : { ok: false, error: outcome.error || "failed", result: outcome.result };
     const done = await fetch(`${url}/api/edge/jobs/${job.id}/complete`, {
       method: "POST",
       headers: { authorization: `Bearer ${creds.token}`, "content-type": "application/json" },
       body: JSON.stringify(body),
+    }).catch((err) => {
+      console.error("complete connection error:", err.cause?.code || err.message, "— job may be retried");
+      return null;
     });
-    console.log(`  → ${done.status} ${outcome.ok ? "ok" : outcome.error}`);
+    if (done) console.log(`  → ${done.status} ${outcome.ok ? "ok" : outcome.error}`);
   }
 }
 

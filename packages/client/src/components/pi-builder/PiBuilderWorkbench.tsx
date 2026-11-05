@@ -27,6 +27,7 @@ import {
   steerPiMessage,
   stopPiSession,
   compactPiSession,
+  type EdgeAlways,
   type PiContext,
   testRunPiSession,
   type PiActivity,
@@ -924,7 +925,10 @@ function Workbench_({
     }
   }, [session, workspaceId]);
 
-  const awaiting = status === "awaiting_answers" && (questions.questions?.length ?? 0) > 0;
+  const awaitingAskSurface = messages.some((m) =>
+    (m.proposals ?? []).some((p) => p.kind === "surface" && p.surface?.mode === "ask" && p.status === "pending"),
+  );
+  const awaiting = status === "awaiting_answers" && ((questions.questions?.length ?? 0) > 0 || awaitingAskSurface);
   const hasSteps = workflow.steps.length > 0;
   // What Forge is doing, in one sentence: a retry first (it explains a pause), then the file it is on. Null: the working
   // line says one word for the turn instead ("Ruminating…").
@@ -1082,8 +1086,14 @@ function Workbench_({
   const decideProposal = useMemo(
     () =>
       sessionIdForDecide
-        ? async (id: string, decision: "run" | "decline", scope?: GrantScope, choice?: string) =>
-            void (await decidePiProposal(workspaceId, sessionIdForDecide, id, decision, scope, choice))
+        ? async (
+            id: string,
+            decision: "run" | "decline",
+            scope?: GrantScope,
+            choice?: string,
+            surfaceAct?: { actionId?: string; selected?: string[] },
+            always?: EdgeAlways | null,
+          ) => void (await decidePiProposal(workspaceId, sessionIdForDecide, id, decision, scope, choice, surfaceAct, always))
         : null,
     [sessionIdForDecide, workspaceId],
   );
@@ -2072,7 +2082,9 @@ function Said({
 /** Where a sent file of this chat downloads from — null until the chat is saved (its files are in the database). */
 const ChatFileHref = createContext<((name: string) => string) | null>(null);
 /** Do or cancel a proposed change in this chat (null until the session exists). */
-const DecideProposal = createContext<((id: string, decision: "run" | "decline", scope?: GrantScope, choice?: string) => Promise<void>) | null>(null);
+const DecideProposal = createContext<
+  ((id: string, decision: "run" | "decline", scope?: GrantScope, choice?: string, surfaceAct?: { actionId?: string; selected?: string[] }, always?: EdgeAlways | null) => Promise<void>) | null
+>(null);
 /** Opens a chat file's preview in the Files pane. */
 const OpenChatFile = createContext<((name: string) => void) | null>(null);
 /** Project memory (Phase 4): Remember on a message when the chat lives in a project. */

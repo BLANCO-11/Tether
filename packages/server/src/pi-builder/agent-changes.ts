@@ -231,6 +231,23 @@ export function outcomeLine(p: PiProposal): string {
     if (p.status === "done") return `The person APPROVED ${what}. Keep polling edge-job for the result.`;
     return `The person tried to approve ${what} but it FAILED: ${p.result ?? ""}`;
   }
+  if (p.kind === "surface" && p.surface) {
+    const title = p.surface.title;
+    if (p.status === "declined") return `The person CANCELLED the card “${title}”; do not assume a choice.`;
+    if (p.surface.mode === "ask" && p.surface.selected?.length) {
+      const names = p.surface.selected.map((id) => p.surface!.items.find((i) => i.id === id)?.title ?? id);
+      return `The person chose on “${title}”: ${names.join(", ")}. Continue with that.`;
+    }
+    if (p.surface.acted) {
+      const a = p.surface.actions?.find((x) => x.id === p.surface!.acted);
+      const payload = p.surface.actedPayload;
+      const payloadBit =
+        payload && Object.keys(payload).length ? ` with context ${JSON.stringify(payload)}` : "";
+      return `The person pressed “${a?.label ?? p.surface.acted}” (action id “${p.surface.acted}”) on the card “${title}”${payloadBit}${p.result ? ` — ${p.result}` : ""}. Use that context; do not invent a different choice.`;
+    }
+    if (p.status === "done") return `The person confirmed the card “${title}”: ${p.result ?? ""}`;
+    return `The person tried the card “${title}” but it FAILED: ${p.result ?? ""}`;
+  }
   if (p.status === "declined") return `The person DECLINED your proposed change "${p.summary}" (${p.tool}); nothing was done.`;
   if (p.status === "done") return `The person confirmed "${p.summary}" (${p.tool}) and it was DONE through ${p.account ? `“${p.account.label}”${p.account.personal ? " (their own)" : " (the workspace's)"}` : p.via === "personal" ? "their own connection" : "the workspace's connection"}. The service answered: ${p.result ?? ""}`;
   if (p.status === "partial") {

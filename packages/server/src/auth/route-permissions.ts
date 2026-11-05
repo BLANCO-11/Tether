@@ -437,6 +437,7 @@ export const EXEMPT: ReadonlyMap<string, { reason: string }> = Object.freeze(
     ["POST /api/executions/:id/steps/:stepId/result", { reason: "execution token" }],
     ["POST /api/executions/begin", { reason: "Kestra callback secret" }],
     ["POST /api/forge/actions", { reason: "Forge's per-conversation tool key (Forge Agent; lists the connected services' actions, changes nothing)" }],
+    ["POST /api/forge/card", { reason: "Forge's per-conversation tool key (Forge Agent; shows a structured info/ask card in chat, performs nothing)" }],
     ["POST /api/forge/data", { reason: "Forge's per-conversation tool key (assistant mode, checked in the service)" }],
     ["POST /api/forge/edge/devices", { reason: "Forge's per-conversation tool key (personal thin; lists the person's paired edge devices)" }],
     ["POST /api/forge/edge/enqueue", { reason: "Forge's per-conversation tool key (personal thin; queues a job on a paired edge device)" }],

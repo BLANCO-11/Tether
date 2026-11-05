@@ -9,7 +9,7 @@ import { createHash, randomBytes, randomInt } from "node:crypto";
 import { and, asc, desc, eq, isNull } from "drizzle-orm";
 import { db } from "../db/index.js";
 import { edgeDevices, edgeJobs, edgeSetupLinks } from "../db/schema.js";
-import { edgeJobNeedsApproval } from "./edge-command-allowlist.js";
+import { edgeJobNeedsApprovalForOwner } from "./edge-trust.service.js";
 
 export type EdgeDevice = typeof edgeDevices.$inferSelect;
 export type EdgeJob = typeof edgeJobs.$inferSelect;
@@ -371,8 +371,20 @@ Same behaviour (auto-starts the poll loop after Approve). Use \`--setup-only\` o
     return row ?? null;
   },
 
-  async touch(deviceId: string): Promise<void> {
-    await db.update(edgeDevices).set({ lastSeenAt: new Date() }).where(eq(edgeDevices.id, deviceId));
+  async touch(
+    deviceId: string,
+    host?: { home?: string | null; cwd?: string | null; platform?: string | null },
+  ): Promise<void> {
+    const patch: {
+      lastSeenAt: Date;
+      hostHome?: string;
+      hostCwd?: string;
+      hostPlatform?: string;
+    } = { lastSeenAt: new Date() };
+    if (host?.home && host.home.length <= 500) patch.hostHome = host.home;
+    if (host?.cwd && host.cwd.length <= 500) patch.hostCwd = host.cwd;
+    if (host?.platform && host.platform.length <= 64) patch.hostPlatform = host.platform;
+    await db.update(edgeDevices).set(patch).where(eq(edgeDevices.id, deviceId));
   },
 
   async enqueue(
@@ -387,7 +399,7 @@ Same behaviour (auto-starts the poll loop after Approve). Use \`--setup-only\` o
       .from(edgeDevices)
       .where(and(eq(edgeDevices.id, deviceId), eq(edgeDevices.workspaceId, workspaceId), eq(edgeDevices.status, "active")));
     if (!dev) throw httpErr("No such device, or it is not paired.", 404);
-    const needsApproval = edgeJobNeedsApproval(kind, payload);
+    const needsApproval = await edgeJobNeedsApprovalForOwner(workspaceId, dev.ownerSubject, kind, payload);
     const [job] = await db
       .insert(edgeJobs)
       .values({
@@ -426,8 +438,11 @@ Same behaviour (auto-starts the poll loop after Approve). Use \`--setup-only\` o
     return updated!;
   },
 
-  async claimNext(device: EdgeDevice): Promise<EdgeJob | null> {
-    await this.touch(device.id);
+  async claimNext(
+    device: EdgeDevice,
+    host?: { home?: string | null; cwd?: string | null; platform?: string | null },
+  ): Promise<EdgeJob | null> {
+    await this.touch(device.id, host);
     const [job] = await db
       .select()
       .from(edgeJobs)
@@ -446,7 +461,7 @@ Same behaviour (auto-starts the poll loop after Approve). Use \`--setup-only\` o
   async completeJob(
     device: EdgeDevice,
     jobId: string,
-    outcome: { ok: true; result?: Record<string, unknown> } | { ok: false; error: string },
+    outcome: { ok: true; result?: Record<string, unknown> } | { ok: false; error: string; result?: Record<string, unknown> },
   ): Promise<EdgeJob> {
     const [job] = await db
       .select()
@@ -457,7 +472,8 @@ Same behaviour (auto-starts the poll loop after Approve). Use \`--setup-only\` o
       .update(edgeJobs)
       .set({
         status: outcome.ok ? "succeeded" : "failed",
-        result: outcome.ok ? (outcome.result ?? {}) : null,
+        // Keep stdout/stderr on failure so chat and Forge can show why (I: ls exit 1 with empty card).
+        result: outcome.result ?? (outcome.ok ? {} : null),
         error: outcome.ok ? null : outcome.error.slice(0, 2000),
         finishedAt: new Date(),
       })
@@ -510,7 +526,12 @@ Same behaviour (auto-starts the poll loop after Approve). Use \`--setup-only\` o
     // Allowlist may have landed after enqueue (or a stuck pre-allowlist whoami): release without a person click.
     if (
       row.job.status === "awaiting_approval" &&
-      !edgeJobNeedsApproval(row.job.kind as EdgeJobKind, (row.job.payload ?? {}) as Record<string, unknown>)
+      !(await edgeJobNeedsApprovalForOwner(
+        workspaceId,
+        row.device.ownerSubject,
+        row.job.kind as EdgeJobKind,
+        (row.job.payload ?? {}) as Record<string, unknown>,
+      ))
     ) {
       const [released] = await db.update(edgeJobs).set({ status: "approved" }).where(eq(edgeJobs.id, row.job.id)).returning();
       if (released) row = { job: released, device: row.device };

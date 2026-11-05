@@ -1790,6 +1790,10 @@ export const edgeDevices = pgTable(
     waitSecretHash: varchar("wait_secret_hash", { length: 64 }),
     connectTokenOnce: text("connect_token_once"),
     agentLabel: text("agent_label"),
+    /** Last-reported OS home dir from the edge agent (so Forge does not invent /workspaces). */
+    hostHome: text("host_home"),
+    hostCwd: text("host_cwd"),
+    hostPlatform: text("host_platform"),
     tokenHash: varchar("token_hash", { length: 64 }),
     lastSeenAt: timestamp("last_seen_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
@@ -1846,6 +1850,28 @@ export const edgeJobs = pgTable(
   },
   (t) => ({
     byDevice: index("ix_edge_jobs_device_status").on(t.deviceId, t.status),
+  }),
+);
+
+
+/** Per-user edge allow/deny + directory grants (0142). Evaluated in edgeJobNeedsApproval. */
+export const edgeTrustRules = pgTable(
+  "edge_trust_rules",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    ownerSubject: text("owner_subject").notNull(),
+    effect: varchar("effect", { length: 16 }).notNull(),
+    scope: varchar("scope", { length: 32 }).notNull(),
+    pattern: text("pattern").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    createdBy: text("created_by").notNull(),
+  },
+  (t) => ({
+    uniq: uniqueIndex("uq_edge_trust_rules").on(t.workspaceId, t.ownerSubject, t.effect, t.scope, t.pattern),
+    byOwner: index("ix_edge_trust_rules_owner").on(t.workspaceId, t.ownerSubject),
   }),
 );
 

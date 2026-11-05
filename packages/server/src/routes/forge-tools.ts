@@ -1,7 +1,7 @@
 import express, { Router } from "express";
 import { z } from "zod";
 import { asyncHandler } from "../middleware/error.middleware.js";
-import { listActions, piBuilderService, proposeChange, proposeSetting, usePlugin } from "../pi-builder/service.js";
+import { listActions, piBuilderService, proposeChange, proposeSetting, showCard, usePlugin } from "../pi-builder/service.js";
 
 /**
  * What Forge's OWN tools call while it answers in a chat (2026-10-12) — mounted at `/api/forge`, outside the API key:
@@ -106,6 +106,20 @@ forgeToolsRouter.post(
       .strict()
       .parse(req.body);
     res.json(await proposeSetting(token, body.service, body.action, body.on, body.reason));
+  }),
+);
+
+/**
+ * Forge shows a structured card in the chat (tools/show-card.mjs): list (info) or choice (ask).
+ * Validated allowlisted JSON only; ask-mode pauses until the person acts.
+ */
+forgeToolsRouter.post(
+  "/card",
+  express.json({ limit: "64kb" }),
+  asyncHandler(async (req, res) => {
+    const token = req.header("x-forge-token") ?? "";
+    const body = z.object({ card: z.unknown() }).strict().parse(req.body ?? {});
+    res.json(await showCard(token, body.card));
   }),
 );
 

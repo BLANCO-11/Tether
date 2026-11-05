@@ -3,6 +3,9 @@
  * List the person's paired edge devices (personal Foundry).
  *
  *   node tools/edge-devices.mjs
+ *
+ * Prints id, name, status, and (when the agent has polled) home / cwd / platform
+ * so you can build paths without inventing /workspaces.
  */
 import { readFileSync } from "node:fs";
 
@@ -38,4 +41,9 @@ console.log(`${devices.length} device(s):`);
 for (const d of devices) {
   const seen = d.lastSeenAt ? ` · seen ${d.lastSeenAt}` : " · never seen";
   console.log(`- ${d.name} (${d.id})${seen} [${d.status}]`);
+  if (d.home || d.cwd || d.platform) {
+    console.log(`    home=${d.home ?? "?"}  cwd=${d.cwd ?? "?"}  platform=${d.platform ?? "?"}`);
+  } else {
+    console.log("    (home/cwd unknown until the edge agent polls — ask them to keep it running)");
+  }
 }

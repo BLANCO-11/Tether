@@ -6,7 +6,8 @@
 // own request to the server, which re-checks the rules and runs exactly the values shown here, once. The values are
 // shown in full, as they will be sent — what the person reads is what runs.
 import { useState } from "react";
-import type { GrantScope, PiAccount, PiAccountQuestion, PiEdgeJob, PiProposal, PiSettingChange } from "@/lib/pi-builder";
+import type { EdgeAlways, GrantScope, PiAccount, PiAccountQuestion, PiEdgeJob, PiProposal, PiSettingChange } from "@/lib/pi-builder";
+import { SurfaceCard } from "./SurfaceCard";
 import { Button } from "@/components/ui/Button";
 import { StatusPill } from "@/components/ui/Badge";
 
@@ -112,7 +113,14 @@ function Outcome({ p }: { p: PiProposal }) {
   );
 }
 
-type Decide = (id: string, decision: "run" | "decline", scope?: GrantScope, choice?: string) => Promise<void>;
+type Decide = (
+  id: string,
+  decision: "run" | "decline",
+  scope?: GrantScope,
+  choice?: string,
+  surfaceAct?: { actionId?: string; selected?: string[] },
+  always?: EdgeAlways | null,
+) => Promise<void>;
 
 /** A connection as people read it: "your own GitHub “Mine”", "the workspace's “Team GitHub”". */
 export function accountName(a: PiAccount): string {
@@ -123,33 +131,44 @@ export function ProposalCard({ p, onDecide }: { p: PiProposal; onDecide: Decide 
   if (p.kind === "setting" && p.setting) return <SettingCard p={p} s={p.setting} onDecide={onDecide} />;
   if (p.kind === "account" && p.choice) return <AccountCard p={p} q={p.choice} onDecide={onDecide} />;
   if (p.kind === "edge" && p.edge) return <EdgeCard p={p} e={p.edge} onDecide={onDecide} />;
+  if (p.kind === "surface" && p.surface) return <SurfaceCard p={p} onDecide={onDecide} />;
   return <ActionCard p={p} onDecide={onDecide} />;
 }
 
 /**
  * Forge asked to run something on a paired computer. Approve lets the edge agent claim it;
- * Cancel revokes the job. Harmless commands never reach this card.
+ * Always-allow / Deny-always persist trust rules. Harmless commands never reach this card.
  */
 function EdgeCard({ p, e, onDecide }: { p: PiProposal; e: PiEdgeJob; onDecide: Decide | null }) {
-  const [busy, setBusy] = useState<"run" | "decline" | null>(null);
+  const [busy, setBusy] = useState<"once" | "command" | "path_read" | "deny" | "decline" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const state = STATE[p.status];
-  const decide = async (d: "run" | "decline") => {
+  const params = (p.params && !Array.isArray(p.params) ? p.params : {}) as Record<string, unknown>;
+  const command = typeof params.command === "string" ? params.command : null;
+  const path = typeof params.path === "string" ? params.path : null;
+  const contents = typeof params.contents === "string" ? params.contents : null;
+  const folderHint = (() => {
+    if (path) return path;
+    if (!command) return null;
+    const parts = command.trim().split(/\s+/);
+    if (parts[0] !== "ls") return null;
+    const paths = parts.slice(1).filter((a) => !a.startsWith("-"));
+    return paths.length === 1 ? paths[0]! : null;
+  })();
+  const showFolder = (e.kind === "run_command" && !!folderHint) || e.kind === "read_path";
+  const showCommandAlways = e.kind === "run_command" && !!command;
+  const decide = async (d: "run" | "decline", always?: EdgeAlways | null) => {
     if (!onDecide) return;
-    setBusy(d);
+    setBusy(always ?? (d === "run" ? "once" : "decline"));
     setError(null);
     try {
-      await onDecide(p.id, d);
+      await onDecide(p.id, d, undefined, undefined, undefined, always ?? null);
     } catch (err) {
       setError((err as Error).message);
     } finally {
       setBusy(null);
     }
   };
-  const params = (p.params && !Array.isArray(p.params) ? p.params : {}) as Record<string, unknown>;
-  const command = typeof params.command === "string" ? params.command : null;
-  const path = typeof params.path === "string" ? params.path : null;
-  const contents = typeof params.contents === "string" ? params.contents : null;
   return (
     <section aria-label={`Edge job: ${p.summary}`} className="pc-card">
       <div className="flex flex-wrap items-center gap-2">
@@ -180,19 +199,36 @@ function EdgeCard({ p, e, onDecide }: { p: PiProposal; e: PiEdgeJob; onDecide: D
         ) : null}
       </dl>
       {p.status === "pending" && (
-        <div className="flex flex-wrap items-center gap-2 pt-0.5">
-          <Button size="sm" disabled={!!busy || !onDecide} onClick={() => void decide("run")}>
-            {busy === "run" ? "Approving…" : "Approve"}
-          </Button>
-          <Button size="sm" variant="ghost" disabled={!!busy || !onDecide} onClick={() => void decide("decline")}>
-            {busy === "decline" ? "Cancelling…" : "Cancel"}
-          </Button>
-          <span className="text-caption text-dim">Runs on your computer only after you Approve. Nothing starts until then.</span>
+        <div className="flex flex-col gap-2 pt-0.5">
+          <div className="flex flex-wrap items-center gap-2">
+            <Button size="sm" disabled={!!busy || !onDecide} onClick={() => void decide("run")}>
+              {busy === "once" ? "Approving…" : "Approve once"}
+            </Button>
+            {showCommandAlways ? (
+              <Button size="sm" variant="ghost" disabled={!!busy || !onDecide} onClick={() => void decide("run", "command")}>
+                {busy === "command" ? "Saving…" : "Always allow this command"}
+              </Button>
+            ) : null}
+            {showFolder ? (
+              <Button size="sm" variant="ghost" disabled={!!busy || !onDecide} onClick={() => void decide("run", "path_read")}>
+                {busy === "path_read" ? "Saving…" : "Always allow this folder"}
+              </Button>
+            ) : null}
+            <Button size="sm" variant="ghost" disabled={!!busy || !onDecide} onClick={() => void decide("decline")}>
+              {busy === "decline" ? "Cancelling…" : "Cancel"}
+            </Button>
+            {showCommandAlways ? (
+              <Button size="sm" variant="ghost" disabled={!!busy || !onDecide} onClick={() => void decide("decline", "deny")}>
+                {busy === "deny" ? "Saving…" : "Deny always"}
+              </Button>
+            ) : null}
+          </div>
+          <span className="text-caption text-dim">Runs on your computer only after you Approve. Always-allow remembers for next time in this workspace.</span>
         </div>
       )}
       {(p.status === "done" || p.status === "failed") && p.result ? (
         <div className={`pc-outcome ${p.status === "done" ? "ok" : "danger"}`}>
-          <span className="min-w-0 break-words">{p.result}</span>
+          <span className="min-w-0 whitespace-pre-wrap break-words">{p.result}</span>
         </div>
       ) : null}
       {p.decidedBy && p.status !== "pending" && (

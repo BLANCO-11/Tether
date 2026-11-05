@@ -196,12 +196,42 @@ export type PiProposal = {
    * `account`: which connection this chat uses for a service; the person picks one of `choice.options`.
    * `edge`: a job on a paired computer that needs Approve before it runs.
    */
-  kind?: "action" | "setting" | "account" | "edge";
+  kind?: "action" | "setting" | "account" | "edge" | "surface";
   setting?: PiSettingChange;
   /** `chat` is only on cards decided before actions were kept per person (0117). */
   scope?: GrantScope | "chat" | null;
   choice?: PiAccountQuestion;
   edge?: PiEdgeJob;
+  surface?: PiSurface;
+};
+
+export type PiSurfaceItem = {
+  id: string;
+  title: string;
+  subtitle?: string;
+  tone?: "ok" | "warn" | "danger" | "neutral" | "muted";
+  meta?: string;
+};
+
+export type PiSurfaceAction = {
+  id: string;
+  label: string;
+  style?: "primary" | "ghost";
+  itemId?: string;
+  payload?: Record<string, string | number | boolean | null>;
+};
+
+export type PiSurface = {
+  mode: "info" | "ask";
+  type: "list" | "choice";
+  title: string;
+  subtitle?: string;
+  items: PiSurfaceItem[];
+  actions?: PiSurfaceAction[];
+  multi?: boolean;
+  selected?: string[] | null;
+  acted?: string | null;
+  actedPayload?: Record<string, string | number | boolean | null> | null;
 };
 
 /** An edge job waiting in chat — Approve runs it on the named device; Cancel revokes it. */
@@ -727,10 +757,28 @@ export function steerPiMessage(wsId: string, sessionId: string, text: string) {
 }
 
 /** Do (or cancel) a change Forge Agent proposed. Only the person Forge was answering may; the server checks. */
-export function decidePiProposal(wsId: string, sessionId: string, proposalId: string, decision: "run" | "decline", scope?: GrantScope, choice?: string) {
+export type EdgeAlways = "command" | "path_read" | "deny";
+
+export function decidePiProposal(
+  wsId: string,
+  sessionId: string,
+  proposalId: string,
+  decision: "run" | "decline",
+  scope?: GrantScope,
+  choice?: string,
+  surfaceAct?: { actionId?: string; selected?: string[] },
+  always?: EdgeAlways | null,
+) {
   return req<{ proposal: PiProposal }>(`/workspaces/${wsId}/pi-builder/sessions/${sessionId}/proposals/${proposalId}`, {
     method: "POST",
-    body: JSON.stringify({ decision, ...(scope ? { scope } : {}), ...(choice ? { choice } : {}) }),
+    body: JSON.stringify({
+      decision,
+      ...(scope ? { scope } : {}),
+      ...(choice ? { choice } : {}),
+      ...(surfaceAct?.actionId ? { actionId: surfaceAct.actionId } : {}),
+      ...(surfaceAct?.selected ? { selected: surfaceAct.selected } : {}),
+      ...(always ? { always } : {}),
+    }),
   }).then((r) => r.proposal);
 }
 

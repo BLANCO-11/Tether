@@ -280,7 +280,16 @@ edgePublicRouter.post(
   "/jobs/claim",
   asyncHandler(async (req, res) => {
     const device = await deviceAuth(req);
-    const job = await edgeDeviceService.claimNext(device);
+    const host = z
+      .object({
+        home: z.string().max(500).optional(),
+        cwd: z.string().max(500).optional(),
+        platform: z.string().max(64).optional(),
+      })
+      .strict()
+      .optional()
+      .parse(req.body ?? {});
+    const job = await edgeDeviceService.claimNext(device, host);
     res.json({ job });
   }),
 );
@@ -292,7 +301,7 @@ edgePublicRouter.post(
     const body = z
       .union([
         z.object({ ok: z.literal(true), result: z.record(z.unknown()).optional() }),
-        z.object({ ok: z.literal(false), error: z.string().min(1).max(2000) }),
+        z.object({ ok: z.literal(false), error: z.string().min(1).max(2000), result: z.record(z.unknown()).optional() }),
       ])
       .parse(req.body ?? {});
     const job = await edgeDeviceService.completeJob(device, req.params.jobId!, body);

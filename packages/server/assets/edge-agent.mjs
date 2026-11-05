@@ -11,7 +11,7 @@
  * Token: ~/.foundry-edge/credentials.json
  */
 import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { homedir } from "node:os";
+import { homedir, platform as osPlatform } from "node:os";
 import { join } from "node:path";
 import { spawn } from "node:child_process";
 
@@ -193,7 +193,11 @@ async function runLoop() {
     const claim = await fetch(`${url}/api/edge/jobs/claim`, {
       method: "POST",
       headers: { authorization: `Bearer ${creds.token}`, "content-type": "application/json" },
-      body: "{}",
+      body: JSON.stringify({
+        home: homedir(),
+        cwd: process.cwd(),
+        platform: osPlatform(),
+      }),
     });
     const claimed = await claim.json().catch(() => ({}));
     if (!claim.ok) {
@@ -208,7 +212,9 @@ async function runLoop() {
     }
     console.log(`Job ${job.id} ${job.kind}`, job.payload);
     const outcome = await handleJob(job);
-    const body = outcome.ok ? { ok: true, result: outcome.result } : { ok: false, error: outcome.error || "failed" };
+    const body = outcome.ok
+      ? { ok: true, result: outcome.result }
+      : { ok: false, error: outcome.error || "failed", result: outcome.result };
     const done = await fetch(`${url}/api/edge/jobs/${job.id}/complete`, {
       method: "POST",
       headers: { authorization: `Bearer ${creds.token}`, "content-type": "application/json" },

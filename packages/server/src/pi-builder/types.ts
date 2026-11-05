@@ -189,12 +189,14 @@ export type PiProposal = {
    * `setting`: not a call to the service but switching one of its actions on or off (agent-grants.ts). `params` is then
    * empty and `setting` says everything the card shows; the person picks WHERE (`scope`) by the button they press.
    */
-  kind?: "action" | "setting" | "account" | "edge";
+  kind?: "action" | "setting" | "account" | "edge" | "surface";
   setting?: PiSettingChange;
   /** `account`: which connection this chat should use for a service — the person picks one of `options`. */
   choice?: PiAccountQuestion;
   /** `edge`: a job on the person's paired computer that needs Approve before the agent runs it. */
   edge?: PiEdgeJob;
+  /** `surface`: Forge-authored info/ask card (list or choice) — see surface-card.ts. */
+  surface?: PiSurface;
   /** Where the person applied a setting change. */
   /** `chat` is only on cards decided before 0117, when an action was switched on for one chat. */
   scope?: "me" | "workspace" | "chat" | null;
@@ -206,6 +208,48 @@ export type PiEdgeJob = {
   deviceId: string;
   deviceName: string;
   kind: "run_command" | "read_path" | "write_path";
+};
+
+/** One row on a Forge-authored surface card. */
+export type PiSurfaceItem = {
+  id: string;
+  title: string;
+  subtitle?: string;
+  tone?: "ok" | "warn" | "danger" | "neutral" | "muted";
+  meta?: string;
+};
+
+/**
+ * A button Forge defines on an info list (footer or per-row). Id/label/payload are agent-chosen for this conversation;
+ * the server only bounds shape/size. Click resumes Forge with the action + payload — no hardcoded handlers.
+ */
+export type PiSurfaceAction = {
+  id: string;
+  label: string;
+  style?: "primary" | "ghost";
+  itemId?: string;
+  /** Opaque context for Forge when this is clicked (device id, path, …). Flat JSON only. */
+  payload?: Record<string, string | number | boolean | null>;
+};
+
+/**
+ * Structured UI Forge puts in the chat (tools/show-card.mjs).
+ * `info` never pauses; `ask` (choice) pauses until the person submits or cancels.
+ */
+export type PiSurface = {
+  mode: "info" | "ask";
+  type: "list" | "choice";
+  title: string;
+  subtitle?: string;
+  items: PiSurfaceItem[];
+  actions?: PiSurfaceAction[];
+  multi?: boolean;
+  /** After an ask submit: the item id(s) the person picked. */
+  selected?: string[] | null;
+  /** After an info action click: which action id. */
+  acted?: string | null;
+  /** Payload Forge attached to the action that was clicked (echoed back on resume). */
+  actedPayload?: Record<string, string | number | boolean | null> | null;
 };
 
 /** One connection a chat could use for a service, as the person reads it. */

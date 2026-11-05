@@ -574,8 +574,15 @@ piBuilderRouter.post(
   asyncHandler(async (req, res) => {
     // `scope`: where a SETTING change applies (the person, in every chat of theirs, or the workspace), chosen by the button the person pressed.
     // `choice`: on an ACCOUNT card, the connection the person picked for this chat.
-    const { decision, scope, choice } = z
-      .object({ decision: z.enum(["run", "decline"]), scope: z.enum(["me", "workspace"]).optional(), choice: z.string().uuid().optional() })
+    const { decision, scope, choice, actionId, selected, always } = z
+      .object({
+        decision: z.enum(["run", "decline"]),
+        scope: z.enum(["me", "workspace"]).optional(),
+        choice: z.string().uuid().optional(),
+        actionId: z.string().max(64).optional(),
+        selected: z.array(z.string().max(128)).max(50).optional(),
+        always: z.enum(["command", "path_read", "deny"]).nullable().optional(),
+      })
       .strict()
       .parse(req.body ?? {});
     if (!req.user?.subject) throw Object.assign(new Error("confirming a change needs a signed-in person"), { statusCode: 401 });
@@ -587,6 +594,8 @@ piBuilderRouter.post(
       { subject: req.user.subject, email: req.user.email ?? null, name: req.user.name ?? null, identity: req.user },
       scope,
       choice,
+      actionId || selected ? { actionId, selected } : undefined,
+      always ?? null,
     );
     res.json({ proposal });
   }),

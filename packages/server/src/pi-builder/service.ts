@@ -102,6 +102,7 @@ import { filesUsedBy, workspaceFileService } from "../services/workspace-file.se
 import { stepApprovalService } from "../services/step-approval.service.js";
 import { usageService } from "../services/usage.service.js";
 import { edgeDeviceService, type EdgeJobKind } from "../services/edge-device.service.js";
+import { applyEdgeAlways, type EdgeAlways } from "../services/edge-trust.service.js";
 import { PERSONAL_PRODUCT } from "../personal.js";
 import type { RunRequester } from "../services/run-requester.js";
 import type { RevisionAuthor } from "../services/revision-author.js";
@@ -147,7 +148,9 @@ import type {
   PiAccountChoice,
   PiAccount,
   PiAccountQuestion,
+  PiSurface,
 } from "./types.js";
+import { isPendingAskSurface, parseSurface } from "./surface-card.js";
 
 type Session = {
   id: string;
@@ -1876,6 +1879,9 @@ async function runTurn(
     } else if (open && blank.length === 0) {
       setStatus(s, "awaiting_answers");
       emit(s, { type: "questions", questions: q });
+    } else if (pendingAskSurfaces(s).length > 0) {
+      // Forge showed a choice card and needs a pick before continuing (surface cards, ask mode).
+      setStatus(s, "awaiting_answers");
     } else if (open && s.mode === "agent") {
       // A blank question in Forge Agent is not a build to repair: the turn ends, and nothing is tested.
       setStatus(s, wf.steps.length ? "ready" : "idle");
@@ -2975,7 +2981,17 @@ export const piBuilderService = {
    * Scoped to the person talking. Harmless run_command is auto-approved; other run_command / write_path
    * get an in-chat Approve card (Needs you / Devices still work as backup).
    */
-  async edgeListDevices(token: string): Promise<{ devices: Array<{ id: string; name: string; lastSeenAt: string | null; status: string }> }> {
+  async edgeListDevices(token: string): Promise<{
+    devices: Array<{
+      id: string;
+      name: string;
+      lastSeenAt: string | null;
+      status: string;
+      home: string | null;
+      cwd: string | null;
+      platform: string | null;
+    }>;
+  }> {
     const { workspaceId, subject } = forgeEdgeCaller(token);
     const devices = (await edgeDeviceService.list(workspaceId, subject))
       .filter((d) => d.status === "active")
@@ -2984,6 +3000,9 @@ export const piBuilderService = {
         name: d.name,
         lastSeenAt: d.lastSeenAt ? new Date(d.lastSeenAt).toISOString() : null,
         status: d.status,
+        home: d.hostHome ?? null,
+        cwd: d.hostCwd ?? null,
+        platform: d.hostPlatform ?? null,
       }));
     return { devices };
   },
@@ -3050,6 +3069,12 @@ export const piBuilderService = {
       waitMs > 0
         ? await edgeDeviceService.waitForJob(workspaceId, body.jobId, subject, false, waitMs)
         : await edgeDeviceService.getJob(workspaceId, body.jobId, subject, false);
+    settleEdgeProposalCard(s, {
+      id: job.id,
+      status: job.status,
+      error: job.error,
+      result: job.result,
+    });
     let message = `Status: ${job.status}.`;
     const timedOut = "timedOut" in job && job.timedOut === true;
     if (job.needsApproval) {
@@ -3057,7 +3082,8 @@ export const piBuilderService = {
     } else if (job.status === "succeeded") {
       message = "Done.";
     } else if (job.status === "failed") {
-      message = `Failed: ${job.error ?? "unknown"}`;
+      const stderr = typeof job.result?.stderr === "string" ? job.result.stderr.trim() : "";
+      message = `Approved but the command failed: ${job.error ?? "unknown"}${stderr ? `\n${stderr.slice(0, 2000)}` : ""}`;
     } else if (job.status === "revoked") {
       message = `Declined: ${job.error ?? "the person cancelled this job"}`;
     } else if (timedOut) {
@@ -3155,6 +3181,132 @@ function showEdgeApprovalCard(
   }
   persistChat(s);
 }
+
+/** Format edge job outcome for the Approve card (success preview or failure stderr). */
+function edgeJobOutcomeText(job: {
+  status: string;
+  error: string | null;
+  result: Record<string, unknown> | null;
+}): string {
+  const r = job.result ?? {};
+  const stdout = typeof r.stdout === "string" ? r.stdout : "";
+  const stderr = typeof r.stderr === "string" ? r.stderr : "";
+  const exitCode = r.exitCode;
+  if (job.status === "succeeded") {
+    const preview = (stdout || JSON.stringify(r, null, 2)).trim().slice(0, 2000);
+    return preview || "Finished successfully.";
+  }
+  if (job.status === "revoked") {
+    return `Declined: ${job.error ?? "cancelled"}`;
+  }
+  const bits = [`Approved but the command failed${exitCode != null ? ` (exit ${exitCode})` : ""}: ${job.error ?? "unknown"}`];
+  if (stderr.trim()) bits.push(stderr.trim().slice(0, 2000));
+  else if (stdout.trim()) bits.push(stdout.trim().slice(0, 2000));
+  return bits.join("\n");
+}
+
+/**
+ * When an edge job settles, patch the in-chat card so it is not stuck on "Approved. Running…".
+ */
+function settleEdgeProposalCard(
+  s: Session,
+  job: {
+    id: string;
+    status: string;
+    error: string | null;
+    result: Record<string, unknown> | null;
+  },
+): void {
+  if (job.status !== "succeeded" && job.status !== "failed" && job.status !== "revoked") return;
+  let found = false;
+  const text = edgeJobOutcomeText(job);
+  const nextStatus: PiProposal["status"] = job.status === "succeeded" ? "done" : "failed";
+  for (const m of s.messages) {
+    for (const p of m.proposals ?? []) {
+      if (p.kind !== "edge" || p.edge?.jobId !== job.id) continue;
+      if (p.status === "declined") continue;
+      p.status = nextStatus;
+      p.result = text;
+      found = true;
+    }
+  }
+  for (const p of s.proposals) {
+    if (p.kind !== "edge" || p.edge?.jobId !== job.id || p.status === "declined") continue;
+    p.status = nextStatus;
+    p.result = text;
+    found = true;
+  }
+  if (!found) return;
+  emit(s, { type: "messages", messages: s.messages });
+  persistChat(s);
+}
+
+/** Ask-mode surface cards still waiting for the person. */
+function pendingAskSurfaces(s: Session): PiProposal[] {
+  return s.messages.flatMap((m) => m.proposals ?? []).filter(isPendingAskSurface);
+}
+
+/**
+ * Forge shows a structured card in the chat (`tools/show-card.mjs` → `POST /api/forge/card`).
+ * Emitted immediately so the person sees it while the turn is still running.
+ */
+export async function showCard(token: string, raw: unknown): Promise<{ shown: true; message: string; id: string }> {
+  const sid = toolTokens.get(token);
+  const s = sid ? sessions.get(sid) : undefined;
+  if (!s) throw httpErr("This key does not belong to an open conversation.", 401);
+  if (!s.abort) throw httpErr("A card can only be shown while Forge is answering a message.", 409);
+  if (s.mode !== "agent") throw httpErr("Cards are for Forge Agent. In Workflow Builder, ask with questions.json.", 403);
+  let surface: PiSurface;
+  try {
+    surface = parseSurface(raw);
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    throw httpErr(`That card is not valid: ${msg}`, 400);
+  }
+  const openAsks = pendingAskSurfaces(s).length;
+  if (surface.mode === "ask" && openAsks >= 3) {
+    throw httpErr("At most three open choice cards at a time. Let the person answer these first.", 409);
+  }
+  const card: PiProposal = {
+    id: randomUUID(),
+    kind: "surface",
+    tool: "show-card",
+    connector: surface.type === "choice" ? "Choice" : "List",
+    action: surface.title,
+    summary: surface.subtitle?.trim() || surface.title,
+    params: {},
+    status: "pending",
+    at: new Date().toISOString(),
+    surface,
+  };
+  // Always visible now (info and ask) — do not wait for end-of-turn splice.
+  const host = [...s.messages].reverse().find((m) => m.role === "assistant" && (m.proposals ?? []).some((p) => p.kind === "surface" && p.status === "pending"));
+  if (host) {
+    host.proposals = [...(host.proposals ?? []), card];
+    emit(s, { type: "messages", messages: s.messages });
+  } else {
+    const msg = {
+      id: randomUUID(),
+      role: "assistant" as const,
+      text: surface.mode === "ask" ? "Pick one below when you are ready." : "",
+      at: card.at,
+      mode: s.mode,
+      proposals: [card],
+    };
+    s.messages.push(msg);
+    emit(s, { type: "message", message: msg });
+  }
+  persistChat(s);
+  return {
+    shown: true,
+    id: card.id,
+    message:
+      surface.mode === "ask"
+        ? "Choice card is in the chat. The person must pick before you continue; do not re-ask in prose."
+        : "List card is in the chat. Keep going — do not restate every row in prose unless a short summary helps.",
+  };
+}
+
 
 /** A connected service's name as people read it ("GitHub"), from the installed piece. */
 async function pieceName(piece: string): Promise<string> {
@@ -3552,6 +3704,78 @@ function clearAccount(workspaceId: string, sessionId: string, piece: string): Pi
  * The person's answer to a proposed change. ⚠ Only the person whose message Forge was answering may decide it, and
  * only once: the stored call runs exactly as shown, through their own connection when they have one.
  */
+
+function actSurface(
+  s: Session,
+  p: PiProposal,
+  update: (patch: Partial<PiProposal>) => void,
+  label: string,
+  person: { subject: string },
+  surfaceAct?: { actionId?: string; selected?: string[] },
+): PiProposal {
+  const surf = p.surface!;
+  if (surf.mode === "ask" || surf.type === "choice") {
+    const selected = surfaceAct?.selected ?? [];
+    if (!selected.length) throw httpErr("Pick at least one option on the card.", 400);
+    const ids = new Set(surf.items.map((i) => i.id));
+    if (selected.some((id) => !ids.has(id))) throw httpErr("That option is not on the card.", 400);
+    if (!surf.multi && selected.length > 1) throw httpErr("Pick only one option.", 400);
+    const titles = selected.map((id) => surf.items.find((i) => i.id === id)!.title);
+    update({
+      status: "done",
+      decidedBy: label,
+      decidedAt: new Date().toISOString(),
+      surface: { ...surf, selected },
+      result: surf.multi ? `Chose: ${titles.join(", ")}` : `Chose: ${titles[0]}`,
+    });
+    s.proposalOutcomes.push(outcomeLine(p));
+    maybeResumeAfterAskSurface(s, label);
+    return p;
+  }
+  // Info list action — agent-defined id/label/payload; resume Forge with that context (no hardcoded handlers).
+  const actionId = surfaceAct?.actionId;
+  if (!actionId) throw httpErr("Choose an action on the card.", 400);
+  const action = (surf.actions ?? []).find((a) => a.id === actionId);
+  if (!action) throw httpErr("That action is not on the card.", 400);
+  const item = action.itemId ? surf.items.find((i) => i.id === action.itemId) : null;
+  const actedPayload = action.payload ?? null;
+  update({
+    status: "done",
+    decidedBy: label,
+    decidedAt: new Date().toISOString(),
+    surface: { ...surf, acted: actionId, actedPayload },
+    result: item ? `${action.label} · ${item.title}` : action.label,
+  });
+  s.proposalOutcomes.push(outcomeLine(p));
+  void person;
+  maybeResumeAfterSurfaceAct(s, label, "action");
+  return p;
+}
+
+/**
+ * Continue Forge after a surface card act. Ask cards wait until all are settled; info actions resume when idle
+ * so Forge gets the action id + payload and continues without a hardcoded handler.
+ */
+function maybeResumeAfterAskSurface(s: Session, label: string): void {
+  maybeResumeAfterSurfaceAct(s, label, "ask");
+}
+
+function maybeResumeAfterSurfaceAct(s: Session, label: string, kind: "ask" | "action"): void {
+  if (pendingAskSurfaces(s).length > 0) return;
+  if (s.abort) return;
+  if (kind === "ask" && s.status !== "awaiting_answers") return;
+  if (kind === "action" && (s.status === "running" || s.testing || s.compacting)) return;
+  const outcomes = s.proposalOutcomes.splice(0);
+  const told =
+    outcomes.length > 0
+      ? outcomes.join("\n") + "\nContinue with that — do not re-ask what they already chose on the card."
+      : kind === "ask"
+        ? "The person answered the choice card(s). Continue."
+        : "The person pressed an action on a card. Continue with that context.";
+  const shown = kind === "ask" ? "(chose on a card)" : "(card action)";
+  void runTurn(s, told, 0, { text: shown, by: { subject: null, name: label } });
+}
+
 async function decideProposal(
   workspaceId: string,
   sessionId: string,
@@ -3561,6 +3785,10 @@ async function decideProposal(
   scope?: GrantScope,
   /** For an `account` card: the connection the person picked. */
   choice?: string,
+  /** For a `surface` card: info action id, or ask selected item ids. */
+  surfaceAct?: { actionId?: string; selected?: string[] },
+  /** Edge Approve card: remember allow/deny for later jobs. */
+  always?: EdgeAlways | null,
 ): Promise<PiProposal> {
   const s = getOrThrow(workspaceId, sessionId);
   const at = s.messages.findIndex((m) => m.proposals?.some((p) => p.id === proposalId));
@@ -3579,6 +3807,16 @@ async function decideProposal(
   };
   if (decision === "decline") {
     if (p.kind === "edge" && p.edge?.jobId) {
+      if (always === "deny") {
+        await applyEdgeAlways(
+          workspaceId,
+          person.subject,
+          person.subject,
+          "deny",
+          p.edge.kind as EdgeJobKind,
+          (p.params ?? {}) as Record<string, unknown>,
+        );
+      }
       await edgeDeviceService.rejectJob(workspaceId, p.edge.jobId, person.subject, false).catch((e) => {
         // Already approved/revoked elsewhere — still mark the card declined.
         if ((e as { statusCode?: number }).statusCode !== 409) throw e;
@@ -3586,9 +3824,23 @@ async function decideProposal(
     }
     update({ status: "declined", decidedBy: label, decidedAt: new Date().toISOString() });
     s.proposalOutcomes.push(outcomeLine(p));
+    if (p.kind === "surface" && p.surface?.mode === "ask") maybeResumeAfterAskSurface(s, label);
     return p;
   }
+  if (p.kind === "surface" && p.surface) {
+    return actSurface(s, p, update, label, person, surfaceAct);
+  }
   if (p.kind === "edge" && p.edge) {
+    if (always === "command" || always === "path_read") {
+      await applyEdgeAlways(
+        workspaceId,
+        person.subject,
+        person.subject,
+        always,
+        p.edge.kind as EdgeJobKind,
+        (p.params ?? {}) as Record<string, unknown>,
+      );
+    }
     update({ status: "running", decidedBy: label, decidedAt: new Date().toISOString() });
     try {
       await edgeDeviceService.approveJob(workspaceId, p.edge.jobId, person.subject, false);
