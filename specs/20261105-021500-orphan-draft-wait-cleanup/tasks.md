@@ -5,3 +5,5 @@
 - [x] T3 Boot wire in `index.ts`
 - [x] T4 Cancel waiting test on session destroy + before new test
 - [x] T5 Tests pinning boot call + orphan cancel vs live expire
+- [x] T6 Stop dumping bg-job stdout into chat; auto-continue Forge on settle
+- [x] T7 Header pill: Needs approve / On your computer while edge work is open

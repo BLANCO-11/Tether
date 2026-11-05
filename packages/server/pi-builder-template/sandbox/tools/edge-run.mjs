@@ -70,7 +70,8 @@ if (!res.ok) {
 console.log(data.message);
 console.log(`job ${data.job.id} status=${data.job.status}`);
 if (data.job.needsApproval) {
-  console.log(">>> Tell the person once: Approve the card that just appeared in this chat.");
+  console.log(">>> Tell them once, briefly: Approve the card in this chat. Foundry continues automatically after that — do not ask them to say okay.");
+} else {
+  console.log(">>> Foundry continues this chat when the job finishes. Do not poll edge-job; do not ask them to say okay.");
 }
-console.log(">>> Job is in the Background panel. Do not call edge-job in a loop — finish your reply.");
 process.exit(0);

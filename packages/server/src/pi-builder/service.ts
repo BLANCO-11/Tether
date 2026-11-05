@@ -282,6 +282,13 @@ type Session = {
   accounts: Record<string, PiAccountChoice>;
   /** What a workflow account card stopped (a test, with its options, or a save): a test runs again once they choose. */
   accountResume?: { kind: "test"; opts: Parameters<typeof verifyAndRun>[2] } | { kind: "save" };
+  /**
+   * Edge jobs that finished while a turn was still running: Forge continues with each result once idle.
+   * Without this, the chat dumps stdout and then sits on Ready until the person says "okay".
+   */
+  pendingEdgeContinues: Array<{ jobId: string; told: string }>;
+  /** Job ids already handed to a continuation turn — never continue the same settle twice. */
+  edgeContinued: Set<string>;
 };
 
 /**
@@ -1899,6 +1906,9 @@ async function runTurn(
     } else if (pendingAskSurfaces(s).length > 0) {
       // Forge showed a choice card and needs a pick before continuing (surface cards, ask mode).
       setStatus(s, "awaiting_answers");
+    } else if (pendingEdgeWork(s)) {
+      // An edge Approve card is open, or a job is running on their computer — not Ready.
+      setStatus(s, "awaiting_answers");
     } else if (open && s.mode === "agent") {
       // A blank question in Forge Agent is not a build to repair: the turn ends, and nothing is tested.
       setStatus(s, wf.steps.length ? "ready" : "idle");
@@ -1946,6 +1956,9 @@ async function runTurn(
   if (followUp) {
     s.lastFixFailure = followUp;
     await runTurn(s, fixPrompt(followUp), fixRound + 1);
+  } else {
+    // Edge jobs that finished mid-turn (or while we were talking) — continue now that we are idle.
+    flushPendingEdgeContinues(s);
   }
 }
 
@@ -2117,6 +2130,8 @@ export const piBuilderService = {
       proposals: [],
       proposalOutcomes: [],
       accounts: chat?.connectionChoices && typeof chat.connectionChoices === "object" && !Array.isArray(chat.connectionChoices) ? (chat.connectionChoices as Record<string, PiAccountChoice>) : {},
+      pendingEdgeContinues: [],
+      edgeContinued: new Set(),
       filesBefore: new Set(),
       refs: chat ? await loadRefs(workspaceId, chat.id).catch(() => []) : [],
       refsMoved: [],
@@ -3046,8 +3061,8 @@ export const piBuilderService = {
     return {
       job: { id: detail.id, status: detail.status, kind: detail.kind, needsApproval },
       message: needsApproval
-        ? "Queued in the background. An Approve card is in this chat — once they Approve, the edge agent runs it. Do NOT poll edge-job in a loop; keep talking. The Background panel and this chat will show the result."
-        : "Queued in the background (job " + detail.id + "). Do NOT poll edge-job in a loop — finish your reply. The Background panel watches it; the result will appear in this chat when done. The edge agent on that computer must be running.",
+        ? "Queued. An Approve card is in this chat. Once they Approve, the job runs on their computer and Foundry continues this chat with the result automatically — do NOT ask them to say okay, and do NOT poll edge-job. Keep your reply short (one line that the card needs Approve)."
+        : "Queued in the background (job " + detail.id + "). Do NOT poll edge-job — finish a short reply. Foundry will continue this chat with the result when the edge agent finishes. Do not ask them to say okay.",
     };
   },
 
@@ -3175,39 +3190,19 @@ export const piBuilderService = {
     return { job: { id: job.id, status: job.status } };
   },
 
-  /** Edge agent finished (or was stopped) — settle the card and say so in chat without blocking a turn. */
+  /**
+   * Edge agent finished (or was stopped): update the Approve card (it already shows the result) and continue Forge
+   * with that result. Do NOT dump stdout into the chat as a fake assistant message — that is why people saw
+   * `_bg-job:…` blobs and then had to say "okay" to make Forge move again.
+   */
   onEdgeJobSettled(job: { id: string; sessionId: string | null; status: string; error: string | null; result: Record<string, unknown> | null; kind: string; payload: Record<string, unknown> }): void {
     if (!job.sessionId) return;
     const s = sessions.get(job.sessionId);
     if (!s) return;
     settleEdgeProposalCard(s, { id: job.id, status: job.status, error: job.error, result: job.result });
-    if (job.status !== "succeeded" && job.status !== "failed" && job.status !== "revoked") return;
-    const tag = `bg-job:${job.id}`;
-    const already = s.messages.some((m) => m.role === "assistant" && typeof m.text === "string" && m.text.includes(tag));
-    const notice = edgeJobOutcomeText(job);
-    const headline =
-      job.status === "succeeded"
-        ? `Background job finished on your computer.`
-        : job.status === "revoked"
-          ? `Background job stopped.`
-          : `Background job failed.`;
-    if (!already) {
-      const msg = {
-        id: randomUUID(),
-        role: "assistant" as const,
-        text: `${headline}
-
-${notice}
-
-_${tag}_`,
-        at: new Date().toISOString(),
-        mode: s.mode,
-      };
-      s.messages.push(msg);
-      emit(s, { type: "message", message: msg });
-      persistChat(s);
-    }
     emit(s, { type: "background", jobId: job.id, status: job.status } as never);
+    if (job.status !== "succeeded" && job.status !== "failed" && job.status !== "revoked") return;
+    queueOrContinueAfterEdge(s, job);
   },
 };
 
@@ -3241,6 +3236,75 @@ function edgeJobAction(kind: EdgeJobKind): string {
   if (kind === "run_command") return "Run a command";
   if (kind === "write_path") return "Write a file";
   return "Read a file";
+}
+
+/** Open edge Approve cards, or jobs already approved and still running on the device. */
+function pendingEdgeWork(s: Session): boolean {
+  return [...s.proposals, ...s.messages.flatMap((m) => m.proposals ?? [])].some(
+    (p) => p.kind === "edge" && (p.status === "pending" || p.status === "running"),
+  );
+}
+
+/** Prompt Forge gets when an edge job settles — full result, not shown as a chat dump. */
+function edgeContinueTold(job: {
+  id: string;
+  status: string;
+  error: string | null;
+  result: Record<string, unknown> | null;
+  kind: string;
+  payload: Record<string, unknown>;
+}): string {
+  const summary = edgeJobSummary(job.kind as EdgeJobKind, job.payload ?? {}, "their computer");
+  const outcome = edgeJobOutcomeText(job);
+  return (
+    `Work on the person's computer finished (${job.status}) for: ${summary}\n\n` +
+    `Result:\n${outcome}\n\n` +
+    `Continue their request with this result. Do not ask them to approve again, and do not ask them to say "okay" — proceed.`
+  );
+}
+
+/**
+ * Continue Forge with an edge result when idle; if a turn is still running, queue for flushPendingEdgeContinues.
+ */
+function queueOrContinueAfterEdge(
+  s: Session,
+  job: {
+    id: string;
+    status: string;
+    error: string | null;
+    result: Record<string, unknown> | null;
+    kind: string;
+    payload: Record<string, unknown>;
+  },
+): void {
+  if (s.edgeContinued.has(job.id)) return;
+  const told = edgeContinueTold(job);
+  if (s.abort || s.testing || s.compacting || s.status === "running") {
+    if (!s.pendingEdgeContinues.some((p) => p.jobId === job.id)) {
+      s.pendingEdgeContinues.push({ jobId: job.id, told });
+    }
+    return;
+  }
+  s.edgeContinued.add(job.id);
+  void runTurn(s, told, 0, {
+    text: "(work on your computer finished)",
+    by: { subject: null, name: "Foundry" },
+  });
+}
+
+function flushPendingEdgeContinues(s: Session): void {
+  if (s.abort || s.testing || s.compacting) return;
+  const next = s.pendingEdgeContinues.shift();
+  if (!next) return;
+  if (s.edgeContinued.has(next.jobId)) {
+    flushPendingEdgeContinues(s);
+    return;
+  }
+  s.edgeContinued.add(next.jobId);
+  void runTurn(s, next.told, 0, {
+    text: "(work on your computer finished)",
+    by: { subject: null, name: "Foundry" },
+  });
 }
 
 /**
@@ -3929,6 +3993,13 @@ async function decideProposal(
     update({ status: "declined", decidedBy: label, decidedAt: new Date().toISOString() });
     s.proposalOutcomes.push(outcomeLine(p));
     if (p.kind === "surface" && p.surface?.mode === "ask") maybeResumeAfterAskSurface(s, label);
+    else if (p.kind === "edge") {
+      // Same as settle: do not leave them saying "okay" after they declined.
+      const told = `The person declined the edge job (${p.summary}). Acknowledge briefly; do not re-propose the same command unless they ask.`;
+      if (!s.abort && !s.testing && !s.compacting) {
+        void runTurn(s, told, 0, { text: "(declined on a card)", by: { subject: null, name: label } });
+      }
+    }
     return p;
   }
   if (p.kind === "surface" && p.surface) {

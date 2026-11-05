@@ -999,6 +999,12 @@ function Workbench_({
                 testResult={testResult}
                 flowId={flowId}
                 workflowName={workflow.name ?? ""}
+                edge={{
+                  needsApprove:
+                    bg.jobs.some((j) => j.status === "awaiting_approval") ||
+                    messages.some((m) => m.proposals?.some((p) => p.kind === "edge" && p.status === "pending")),
+                  onDevice: bg.jobs.some((j) => j.status === "approved" || j.status === "running"),
+                }}
               />
               {/* Testing is the workflow's; Forge Agent does not build one, so the button is Workflow Builder's only. */}
               {mode !== "agent" ? (
@@ -1816,9 +1822,15 @@ function Workbench_({
 }
 
 export type RunTest = "passed" | "failed" | "needs real data" | "refused" | null;
+/** Extra edge signals for the header pill — Background / open Approve cards, not only `status`. */
+export type RunStateEdge = { needsApprove?: boolean; onDevice?: boolean };
+
 /** The header pill's ONE word and dot (2026-11-03): what Forge is doing first, else how the last test went, else Ready. */
-export function runStatePill(status: PiSessionStatus, test: RunTest): { label: string; dot: string } {
+export function runStatePill(status: PiSessionStatus, test: RunTest, edge?: RunStateEdge): { label: string; dot: string } {
   if (status === "running") return { label: "Working…", dot: "bg-accent animate-pulse" };
+  // Edge waits used to leave the pill on Ready while a card needed Approve — people had to keep saying "okay".
+  if (edge?.needsApprove) return { label: "Needs approve", dot: "bg-warn" };
+  if (edge?.onDevice) return { label: "On your computer…", dot: "bg-accent animate-pulse" };
   if (status === "awaiting_answers") return { label: "Needs your answer", dot: "bg-warn" };
   // A session that ended "failed" after a failing test says why (the test), not just that it stopped.
   if (status === "failed" && (test === null || test === "passed")) return { label: "Stopped", dot: "bg-danger" };
@@ -1828,7 +1840,18 @@ export function runStatePill(status: PiSessionStatus, test: RunTest): { label: s
   if (test === "refused") return { label: "Checks refused", dot: "bg-danger" };
   return { label: "Ready", dot: status === "ready" || status === "accepted" ? "bg-ok" : "bg-muted" };
 }
-export const RUN_STATE_LABELS = ["Working…", "Needs your answer", "Stopped", "Test passed", "Test failed", "Needs real data", "Checks refused", "Ready"] as const;
+export const RUN_STATE_LABELS = [
+  "Working…",
+  "Needs approve",
+  "On your computer…",
+  "Needs your answer",
+  "Stopped",
+  "Test passed",
+  "Test failed",
+  "Needs real data",
+  "Checks refused",
+  "Ready",
+] as const;
 
 /** The builder's state as one word, never truncated; the details (including the workflow link) open on click. */
 function RunState({
@@ -1840,6 +1863,7 @@ function RunState({
   testResult,
   flowId,
   workflowName,
+  edge,
 }: {
   open: boolean;
   onToggle: () => void;
@@ -1849,6 +1873,7 @@ function RunState({
   testResult: { ok: boolean; detail: string; runId: string | null; needsRealData?: boolean } | null;
   flowId: string | null;
   workflowName: string;
+  edge?: RunStateEdge;
 }) {
   const test: RunTest =
     testResult == null
@@ -1860,7 +1885,7 @@ function RunState({
           : testResult.needsRealData
             ? "needs real data"
             : "failed";
-  const pill = runStatePill(status, test);
+  const pill = runStatePill(status, test, edge);
   return (
     <div className="relative shrink-0">
       <button

@@ -323,6 +323,8 @@ describe("the run state pill's one word (2026-11-03)", () => {
     expect(runStatePill("ready", "needs real data").dot).toBe("bg-warn");
     expect(runStatePill("running", "failed").label).toBe("Working…");
     expect(runStatePill("ready", null).label).toBe("Ready");
+    expect(runStatePill("ready", null, { needsApprove: true }).label).toBe("Needs approve");
+    expect(runStatePill("ready", null, { onDevice: true }).label).toBe("On your computer…");
   });
 
   it("the workflow link lives in the run state's details, not in the bar", async () => {

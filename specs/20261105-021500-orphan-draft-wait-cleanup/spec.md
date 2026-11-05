@@ -12,3 +12,8 @@ Unsaved Forge draft tests (`flow_id` null, engine slug `pi-adhoc`) pause at appr
 
 ## Out of scope
 Changing Approvals to list flowless gates; Kestra-backed waits.
+
+## Follow-on (same feature): edge background chat
+1. Do not dump background edge job stdout into the chat transcript — the Approve card already shows the result.
+2. When an edge job settles, automatically continue Forge with the result so the person does not have to say "okay".
+3. While an edge Approve card is pending (or the job is running on the device), the header must not say Ready.
