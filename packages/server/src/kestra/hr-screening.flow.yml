@@ -1,0 +1,170 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Phase 1 — the falsifiable flow.
+# archive/kestra-migration/progress/phase-1.md task 1.11
+#
+# HAND-WRITTEN, deliberately. `flow-compiler.service.ts` is Phase 5; building it
+# early to emit this one flow would mean designing the compiler before knowing
+# what a flow looks like, which is the mistake Phase 5 is deferred to avoid.
+#
+# It mirrors 05-lifecycle-and-flows.md §6.1 and exists to answer ONE question:
+#
+#     does a flow of declared steps produce the oracle's answer?
+#
+# If it does not, the migration thesis is wrong and the plan says stop.
+#
+# ── What to notice ───────────────────────────────────────────────────────────
+#
+#   * `period` is a declared INPUT. The worst measured failure — a script that
+#     hardcoded period="2023-10" and emailed 0 of 11 — is not less likely here,
+#     it is inexpressible. There is no literal to hardcode.
+#   * The threshold arrives from a named query with the COALESCE pre-written, so
+#     the "missing COALESCE to a policy default" failure cannot occur either.
+#   * EVERY task that touches a credential is an http.Request at Foundry. Every
+#     task that does not stays in Kestra. That is R2's credential test, visible.
+#   * No task type other than http.Request and core control flow appears. That
+#     is R8 made concrete — one emitted shape, one reachable host.
+# ─────────────────────────────────────────────────────────────────────────────
+id: hr-attendance-screening
+namespace: foundry.default.hr
+
+inputs:
+  - id: period
+    type: STRING
+    defaults: "2026-06"
+
+variables:
+  # Kestra reaches Foundry by compose service name over the internal network.
+  # This is the ONLY host any task in this flow contacts.
+  foundry: "http://server:4000"
+  sender: "hr-bot@acme-hr.example"
+
+tasks:
+  # ── 1. begin — the gate ─────────────────────────────────────────────────────
+  # Kestra initiates scheduled executions now (§5.4), so Foundry has no
+  # pre-flight hook and cannot mint a token up front. Instead the flow asks, and
+  # Foundry checks approval freshness, the manifest fingerprint and the M3
+  # budget before answering. A 403 or 429 here fails the execution at step 1 with
+  # nothing downstream having run.
+  #
+  # This is the one call authenticated with Kestra's own credential rather than
+  # an execution token — because it is the call that mints the token.
+  - id: begin
+    type: io.kestra.plugin.core.http.Request
+    uri: "{{ vars.foundry }}/api/executions/begin"
+    method: POST
+    contentType: application/json
+    headers:
+      Authorization: "Bearer {{ secret('FOUNDRY_CALLBACK') }}"
+    body: |
+      {
+        "namespace": "{{ flow.namespace }}",
+        "flowId": "{{ flow.id }}",
+        "executionId": "{{ execution.id }}",
+        "inputs": { "period": "{{ inputs.period }}" }
+      }
+
+  # ── 2. fetch_policy — a credentialed read ───────────────────────────────────
+  # Needs the foundry_ro DSN, so under R2 it cannot run in Kestra. Note the
+  # request carries no credential of its own: the execution token identifies the
+  # workspace, and Foundry resolves the DSN from that (R3).
+  - id: fetch_policy
+    type: io.kestra.plugin.core.http.Request
+    uri: "{{ vars.foundry }}/api/steps/datasource"
+    method: POST
+    contentType: application/json
+    headers:
+      Authorization: "Bearer {{ json(outputs.begin.body).token }}"
+    body: |
+      {
+        "ref": "hr_demo.policy_thresholds",
+        "stepId": "fetch_policy",
+        "taskrunId": "{{ taskrun.id }}",
+        "params": [{}]
+      }
+
+  # ── 3. screen — the answer ──────────────────────────────────────────────────
+  # `period` is bound, never interpolated into SQL: it travels as a step param
+  # and the named query binds it positionally.
+  - id: screen
+    type: io.kestra.plugin.core.http.Request
+    uri: "{{ vars.foundry }}/api/steps/datasource"
+    method: POST
+    contentType: application/json
+    headers:
+      Authorization: "Bearer {{ json(outputs.begin.body).token }}"
+    body: |
+      {
+        "ref": "hr_demo.attendance_below_threshold",
+        "stepId": "screen",
+        "taskrunId": "{{ taskrun.id }}",
+        "params": [{ "period": "{{ inputs.period }}" }]
+      }
+
+  # ── 4. excluded — reported, never emailed ───────────────────────────────────
+  - id: excluded
+    type: io.kestra.plugin.core.http.Request
+    uri: "{{ vars.foundry }}/api/steps/datasource"
+    method: POST
+    contentType: application/json
+    headers:
+      Authorization: "Bearer {{ json(outputs.begin.body).token }}"
+    body: |
+      {
+        "ref": "hr_demo.attendance_excluded",
+        "stepId": "excluded",
+        "taskrunId": "{{ taskrun.id }}",
+        "params": [{ "period": "{{ inputs.period }}" }]
+      }
+
+  # ── 5. partition — NO CREDENTIAL, so it stays in Kestra (R2) ────────────────
+  # Splits the flagged list into mailable and unmailable. The unmailable one
+  # (a contractor with a NULL work email) must be REPORTED, not silently
+  # dropped and not a crash — §14 T5 is explicit about that.
+  #
+  # This is what "maximise Kestra" looks like in practice: a pure reshape needs
+  # no tenant credential, so shipping it to Foundry would be work we chose to
+  # keep for no reason.
+  - id: partition
+    type: io.kestra.plugin.core.debug.Return
+    format: >
+      {{ json(outputs.screen.body).results[0].data
+         | jq('{mailable: [.[] | select(.work_email != null)], unmailable: [.[] | select(.work_email == null)]}')
+         | first }}
+
+  # ── 6. notify — ONE taskrun for N emails (M1) ───────────────────────────────
+  # Not a ForEach. Each ForEach item would be its own taskrun, i.e. a database
+  # row and a node in the step graph; batching keeps the graph readable and is
+  # the thing that must not be retrofitted later.
+  #
+  # A bouncing recipient comes back as a per-item result, not a step failure —
+  # partial failure is a warning by design.
+  - id: notify
+    type: io.kestra.plugin.core.http.Request
+    uri: "{{ vars.foundry }}/api/steps/tool"
+    method: POST
+    contentType: application/json
+    options:
+      readIdleTimeout: PT120S
+    headers:
+      Authorization: "Bearer {{ json(outputs.begin.body).token }}"
+    body: |
+      {
+        "ref": "mail_send",
+        "stepId": "notify",
+        "taskrunId": "{{ taskrun.id }}",
+        "params": {{ json(outputs.partition.value).mailable
+                     | jq('[.[] | {sender: "hr-bot@acme-hr.example", recipients: [.work_email], subject: ("Attendance below policy — " + .department_code), body: ("Hi " + .full_name + ", your attendance was " + (.attendance_rate|tostring) + "% against a policy minimum of " + (.min_attendance_rate|tostring) + "%.")}]')
+                     | first }}
+      }
+
+  # ── 7. complete — terminal ──────────────────────────────────────────────────
+  # Authenticated with the execution token, which burns itself here.
+  - id: complete
+    type: io.kestra.plugin.core.http.Request
+    uri: "{{ vars.foundry }}/api/executions/{{ json(outputs.begin.body).flowExecutionId }}/complete"
+    method: POST
+    contentType: application/json
+    headers:
+      Authorization: "Bearer {{ json(outputs.begin.body).token }}"
+    body: |
+      { "status": "succeeded" }

@@ -1,0 +1,48 @@
+{
+  "_comment": [
+    "T002 — the LEFT-HAND SIDE of SC-003 (nobody's effective access changes except where a",
+    "decision says it does). Taken 2026-09-12 against the live foundry_parent database on",
+    "localhost:5433, immediately before any RBAC code was written.",
+    "",
+    "READ THE COUNTS, NOT THE ROWS. The rows are empty. An empty snapshot and a snapshot",
+    "nobody took look identical, and only one of them means SC-003 is vacuous on this",
+    "deployment. It is vacuous: there are zero members and zero capability grants across",
+    "eight live workspaces, so 'no member lost access' is trivially true and proves nothing.",
+    "Every task that leans on this diff says so. Do not tick one on a run that had nothing",
+    "to examine.",
+    "",
+    "This also means the 'routes each can reach today' half of T002 is degenerate and is",
+    "recorded as such rather than fabricated: today 106 of the 142 workspace-scoped routes",
+    "carry no authorisation check at all, so the answer for every subject — member or not,",
+    "granted or not — is the same 106 routes. There is no per-subject variation to capture."
+  ],
+  "measured_at": "2026-09-12",
+  "database": "foundry_parent @ localhost:5433",
+  "counts": {
+    "workspace_members": 0,
+    "workspace_member_capabilities": 0,
+    "platform_users": 7,
+    "workspaces_live": 8,
+    "workspaces_soft_deleted": 0
+  },
+  "routes_at_baseline": {
+    "mounted_total": 196,
+    "workspace_scoped": 142,
+    "workspace_scoped_guarded_today": 36,
+    "workspace_scoped_unguarded_today": 106,
+    "deployment_level": 38,
+    "exempt": 16
+  },
+  "workspaces": [
+    { "id": "ab0b0337-f2f1-4ebd-8c1c-c57be0930f07", "name": "HR" },
+    { "id": "d637c2d7-cd51-460c-af3b-13a6351b6002", "name": "HR (alt — swap rehearsal)" },
+    { "id": "a138cc6d-67fd-461c-8ec0-1f8b3e74860c", "name": "Finance" },
+    { "id": "2c73f304-3b83-4b3c-8e3c-f672dadba658", "name": "Legal" },
+    { "id": "068f0475-8392-4b3e-a09d-b1bf7ab30af0", "name": "IT Operations" },
+    { "id": "f3322274-2553-4d3c-945e-e8c4abd820e6", "name": "Customer Support" },
+    { "id": "94d05409-f4f2-4539-bb11-da8a8584554a", "name": "Orders & Fulfilment" },
+    { "id": "7065059b-65a0-4962-bce9-39e3b7f0d41c", "name": "Recruitment" }
+  ],
+  "members": [],
+  "member_capabilities": []
+}

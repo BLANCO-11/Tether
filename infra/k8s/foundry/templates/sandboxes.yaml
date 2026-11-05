@@ -1,0 +1,152 @@
+{{- $sb := .Values.sandbox -}}
+# ── forge: each conversation's Forge as its own Linux user, folder 0700, /proc hidden ──────────────────
+apiVersion: v1
+kind: Service
+metadata:
+  name: forge
+  labels: {{- include "foundry.labels" (dict "root" . "component" "forge") | nindent 4 }}
+spec:
+  selector: {{- include "foundry.selector" (dict "root" . "component" "forge") | nindent 4 }}
+  ports:
+    - { name: host, port: 4100, targetPort: 4100 }
+---
+# ONE replica: uid locks live on the pod's own disk (/var/lib/forge-uids) and the server keeps a
+# connection per chat to forge:4100. Recreate, because two at once would hand out the same uids.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: forge
+  labels: {{- include "foundry.labels" (dict "root" . "component" "forge") | nindent 4 }}
+spec:
+  replicas: 1
+  strategy: { type: Recreate }
+  selector:
+    matchLabels: {{- include "foundry.selector" (dict "root" . "component" "forge") | nindent 6 }}
+  template:
+    metadata:
+      labels: {{- include "foundry.labels" (dict "root" . "component" "forge") | nindent 8 }}
+    spec:
+      {{- with $sb.runtimeClassName }}
+      runtimeClassName: {{ . }}
+      {{- end }}
+      shareProcessNamespace: true
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      containers:
+        - name: forge
+          image: {{ .Values.images.forge }}
+          imagePullPolicy: {{ .Values.pullPolicy }}
+          args: ["host"]
+          securityContext:
+            {{- include "foundry.sandboxSecurity" (dict "caps" (list "SETUID" "SETGID" "CHOWN" "FOWNER" "DAC_OVERRIDE" "KILL" "SYS_ADMIN" "SETPCAP") "appArmor" $sb.appArmorProfile) | nindent 12 }}
+          ports:
+            - { name: host, containerPort: 4100 }
+          env:
+            - { name: FORGE_EGRESS_PROXY, value: "http://forge-egress:3128" }
+            - { name: FORGE_CONVERSATION_MEMORY_BYTES, value: {{ $sb.conversationMemoryBytes | int64 | quote }} }
+            {{- include "foundry.secretEnv" (dict "root" . "keys" .Values.secretKeys.forge) | nindent 12 }}
+          readinessProbe:
+            tcpSocket: { port: 4100 }
+            periodSeconds: 10
+          resources: {{- toYaml .Values.resources.forge | nindent 12 }}
+          volumeMounts:
+            - { name: sandboxes, mountPath: /repo/packages/server/.pi-sandboxes }
+      volumes:
+        - name: sandboxes
+          persistentVolumeClaim: { claimName: foundry-sandboxes }
+---
+# ── forge-egress: the only way out of Forge's network — HTTPS CONNECT to the AI gateway, nothing else ──
+apiVersion: v1
+kind: Service
+metadata:
+  name: forge-egress
+  labels: {{- include "foundry.labels" (dict "root" . "component" "forge-egress") | nindent 4 }}
+spec:
+  selector: {{- include "foundry.selector" (dict "root" . "component" "forge-egress") | nindent 4 }}
+  ports:
+    - { name: proxy, port: 3128, targetPort: 3128 }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: forge-egress
+  labels: {{- include "foundry.labels" (dict "root" . "component" "forge-egress") | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {{- include "foundry.selector" (dict "root" . "component" "forge-egress") | nindent 6 }}
+  template:
+    metadata:
+      labels: {{- include "foundry.labels" (dict "root" . "component" "forge-egress") | nindent 8 }}
+    spec:
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      containers:
+        - name: forge-egress
+          image: {{ .Values.images.forge }}
+          imagePullPolicy: {{ .Values.pullPolicy }}
+          args: ["egress"]
+          securityContext:
+            {{- include "foundry.sandboxSecurity" (dict "caps" (list "SETUID" "SETGID") "appArmor" "") | nindent 12 }}
+          ports:
+            - { name: proxy, containerPort: 3128 }
+          env:
+            {{- include "foundry.secretEnv" (dict "root" . "keys" .Values.secretKeys.forgeEgress) | nindent 12 }}
+          readinessProbe:
+            tcpSocket: { port: 3128 }
+            periodSeconds: 10
+          resources: {{- toYaml .Values.resources.forgeEgress | nindent 12 }}
+---
+# ── flow-runner: runs Forge-built workflows; each run as its own uid in a 0700 directory ─────────────────
+apiVersion: v1
+kind: Service
+metadata:
+  name: flow-runner
+  labels: {{- include "foundry.labels" (dict "root" . "component" "flow-runner") | nindent 4 }}
+spec:
+  selector: {{- include "foundry.selector" (dict "root" . "component" "flow-runner") | nindent 4 }}
+  ports:
+    - { name: http, port: 4006, targetPort: 4006 }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: flow-runner
+  labels: {{- include "foundry.labels" (dict "root" . "component" "flow-runner") | nindent 4 }}
+spec:
+  replicas: 1
+  strategy: { type: Recreate }
+  selector:
+    matchLabels: {{- include "foundry.selector" (dict "root" . "component" "flow-runner") | nindent 6 }}
+  template:
+    metadata:
+      labels: {{- include "foundry.labels" (dict "root" . "component" "flow-runner") | nindent 8 }}
+    spec:
+      {{- with $sb.runtimeClassName }}
+      runtimeClassName: {{ . }}
+      {{- end }}
+      shareProcessNamespace: true
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      # In-flight runs are lost when this pod goes; give a running step time to finish first.
+      terminationGracePeriodSeconds: 120
+      containers:
+        - name: flow-runner
+          image: {{ .Values.images.flowRunner }}
+          imagePullPolicy: {{ .Values.pullPolicy }}
+          securityContext:
+            {{- include "foundry.sandboxSecurity" (dict "caps" (list "SETUID" "SETGID" "CHOWN" "KILL" "SYS_ADMIN" "SETPCAP") "appArmor" $sb.appArmorProfile) | nindent 12 }}
+          ports:
+            - { name: http, containerPort: 4006 }
+          env:
+            - { name: FLOW_RUNNER_RUN_MEMORY_BYTES, value: {{ $sb.runMemoryBytes | int64 | quote }} }
+            {{- include "foundry.secretEnv" (dict "root" . "keys" .Values.secretKeys.flowRunner) | nindent 12 }}
+          readinessProbe:
+            tcpSocket: { port: 4006 }
+            periodSeconds: 10
+          resources: {{- toYaml .Values.resources.flowRunner | nindent 12 }}
+          volumeMounts:
+            - { name: runs, mountPath: /runs }
+      volumes:
+        - name: runs
+          emptyDir: { sizeLimit: 2Gi }

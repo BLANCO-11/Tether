@@ -1,0 +1,102 @@
+# Production pipeline — builds and gates the `prod` branch.
+#
+# Scope: `azure-pipelines.yml` stays the PR-validation pipeline for `main`
+# (trigger: none, pr: main). This file is the prod side: it fires on pushes to
+# `prod` only and carries the deployable build. Staging is verified on a
+# separate local VM and is deliberately not wired to either pipeline.
+#
+# Setup (once, by a project administrator):
+#   1. Azure DevOps > Pipelines > New pipeline > select this repo > Existing
+#      YAML > this file.
+#   2. Create the `prod` branch from `main` when the first release is cut;
+#      the trigger below is inert until it exists.
+#
+# Every step is blocking — no `continueOnError` anywhere. A green run has to
+# mean "shippable"; a step that warns-and-continues would make the run result
+# lie, which is the one thing a prod gate must not do.
+
+trigger:
+  branches:
+    include:
+      - prod
+  batch: true # coalesce rapid pushes into one run
+
+pr: none # PR validation lives in azure-pipelines.yml
+
+pool:
+  vmImage: ubuntu-latest
+
+variables:
+  # Gates compare this push against main. Fallback for the very first run on a
+  # branch with no recorded base: fail loudly rather than silently skip.
+  TARGET_BRANCH: main
+
+steps:
+  - checkout: self
+    fetchDepth: 0 # full history needed for merge-base computation
+
+  - bash: |
+      set -euo pipefail
+      git fetch origin "$(TARGET_BRANCH)"
+      BASE=$(git merge-base "origin/$(TARGET_BRANCH)" HEAD)
+      echo "Scanning $BASE..HEAD for secrets"
+      bash ci/check-secrets.sh range "$BASE..HEAD"
+    displayName: Secret scan (all branches, no exceptions)
+
+
+  - task: NodeTool@0
+    displayName: Use Node 22 (see .nvmrc — D-87)
+    inputs:
+      versionSpec: "22.x"
+
+  - bash: |
+      set -euo pipefail
+      corepack enable
+      pnpm install --frozen-lockfile
+    displayName: Install (pnpm, frozen lockfile)
+
+  - bash: |
+      set -euo pipefail
+      pnpm -r typecheck
+    displayName: Typecheck (all packages)
+
+  - bash: |
+      set -euo pipefail
+      pnpm -r build
+    displayName: Build (all packages)
+
+  - bash: |
+      set -euo pipefail
+      pnpm --filter @foundry/client test
+      bash scripts/ui-honesty-check.sh
+    displayName: "Client gates: test · UI honesty check"
+
+  # `pnpm -r test` is NOT run here, deliberately. packages/server needs a live
+  # Postgres: measured on a DB-less run (2026-09-30) it fails 27 files / 143
+  # tests, because the suites that probe parent/hr_demo/fleet_demo databases do
+  # not all self-skip — some fail on the missing tables instead. A gate that is
+  # red for infrastructure reasons trains people to ignore red, so the server
+  # suite is exercised on the staging VM / local stack, not on this agent.
+  # Everything below is proven to run without services.
+  - bash: |
+      set -euo pipefail
+      pnpm --filter @foundry/flow-edit \
+           --filter @foundry/shared \
+           --filter @foundry/redact \
+           --filter @foundry/ops-api \
+           --filter @foundry/mcp-bridge test
+    displayName: "Unit suites without services (flow-edit, shared, redact, ops-api, mcp-bridge)"
+
+  # .env is gitignored, so a clean agent has none — validate against the
+  # committed template instead. This proves the compose file parses and every
+  # variable it interpolates is declared in .env.example.
+  - bash: |
+      set -euo pipefail
+      docker compose --env-file .env.example -f infra/docker-compose.yml config -q
+    displayName: Compose stack validates (deployable shape)
+
+  - task: PublishBuildArtifacts@1
+    displayName: Publish build output
+    inputs:
+      PathtoPublish: packages/client/.next
+      ArtifactName: client-next

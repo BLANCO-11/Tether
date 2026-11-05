@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+# post-checkout: read-only standards compliance review after a branch switch or
+# clone that changes HEAD. Reviews the incoming range against the project's
+# established standards and REPORTS findings. It never blocks anything.
+#
+# Args (from git): <prev-HEAD> <new-HEAD> <flag>  (flag=1 for branch checkout,
+# 0 for file checkout). We only act on branch checkouts with a real HEAD move.
+#
+# Installed via `git config core.hooksPath .githooks` (done by setup.sh).
+# See ci/check-standards-compliance.sh and docs/STANDARDS.md.
+
+set -uo pipefail
+
+PREV="${1:-}"
+NEW="${2:-}"
+FLAG="${3:-0}"
+
+# Only branch checkouts (flag=1), and only when HEAD actually moved.
+[ "$FLAG" = "1" ] || exit 0
+[ -z "$PREV" ] || [ -z "$NEW" ] && exit 0
+[ "$PREV" = "$NEW" ] && exit 0
+
+ROOT=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0
+[ -x "$ROOT/ci/check-standards-compliance.sh" ] || exit 0
+
+bash "$ROOT/ci/check-standards-compliance.sh" range "$PREV" "$NEW" || true
+exit 0

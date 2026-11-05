@@ -1,0 +1,20 @@
+// ⚠ `typecheck` uses THIS config, not `tsconfig.json`, and the difference is the
+// test file.
+//
+// `tsconfig.json` excludes `src/**/*.test.ts` because a test must not land in
+// `dist`. But `pnpm typecheck` reading the same config would then check every
+// line of this package EXCEPT its 380-line suite — and `vitest` runs through
+// esbuild, which strips types without checking them. So a type error in the
+// suite would be invisible to every gate.
+//
+// That is not hypothetical drift: this module was `packages/client/src/lib/
+// flow-authoring.ts` until foundations Phase 2.1, where the client's own
+// `tsconfig.json` (`include: ["**/*.ts"]`) did typecheck the suite. Mirroring
+// `@foundry/redact`'s two-line config exactly would have quietly dropped that on
+// the way across.
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": { "noEmit": true },
+  "include": ["src/**/*.ts"],
+  "exclude": ["node_modules", "dist"]
+}

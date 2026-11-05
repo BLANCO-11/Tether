@@ -1,0 +1,34 @@
+{
+  // ── The BUILD config. `tsconfig.json` stays the TYPECHECK config. ──────────
+  //
+  // ⚠ Two files, and the split is the whole point. `packages/{shared,redact,
+  // flow-edit}` exclude `src/**/*.test.ts` from their single `tsconfig.json`,
+  // which keeps `dist/` clean — and also means `pnpm typecheck` (a bare
+  // `tsc --noEmit` on that same file) silently stops checking their tests. This
+  // package has 53 test files, several of which READ SOURCE OFF DISK and assert
+  // on what they find; dropping type coverage on those to tidy the build would
+  // trade one silent gap for another.
+  //
+  // So `build` points here and `typecheck` keeps pointing at `tsconfig.json`.
+  // Nothing about what is checked changes; only what is emitted.
+  //
+  // ── What this fixes ───────────────────────────────────────────────────────
+  //
+  // `tsc -p tsconfig.json` was compiling every `*.test.ts` into `dist/`, so:
+  //
+  //   · the SHIPPED SERVER IMAGE carried 73 compiled test files. The Dockerfile
+  //     copies `dist/` wholesale, so test code was in production — including the
+  //     suites that read the source tree and the ones that open Postgres.
+  //   · a `vitest run` from the REPO ROOT (which has no vitest config, so no
+  //     `exclude`) collected `dist/**/*.test.js` as well as `src/**/*.test.ts`
+  //     and reported ~20 failures that were only ever the compiled copies
+  //     resolving their on-disk paths against `dist/` instead of `src/`. Two
+  //     source suites failed alongside them for the same reason — a
+  //     grep-the-tree assertion matching its own compiled twin.
+  //
+  // The per-package command (`pnpm -r test`, what the root `test` script runs)
+  // was never affected: `packages/server/vitest.config.ts` scopes itself to
+  // `src/`. So this was invisible from the command anyone actually runs.
+  "extends": "./tsconfig.json",
+  "exclude": ["node_modules", "dist", "src/**/*.test.ts"]
+}

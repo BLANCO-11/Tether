@@ -1,0 +1,168 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Phase 1 — scenario C: a per-department attendance roll-up, posted to chat.
+# archive/kestra-migration/progress/phase-1.md
+#
+# Hand-written, like A and B. The compiler is Phase 5.
+#
+# ── Why this scenario exists ─────────────────────────────────────────────────
+#
+# A is fan-out, B is fan-in, this is **aggregation** — all rows collapse to one
+# message. Different failure modes live here:
+#
+#   * **The empty department.** Legal has nobody in it. It must appear in the
+#     report with a null rate, not vanish and not read as 0%. An inner join drops
+#     it and nothing complains; the report just has six departments.
+#   * **Divide by zero.** The average of no rows is not 0.
+#   * **Guessed response field names** — the measured failure mode. This flow
+#     resolves the target channel through `chat_list_channels` and matches on the
+#     field the API actually returns, rather than posting to a channel id someone
+#     assumed existed.
+#
+# Note there is no per-employee data in the message. A roll-up is the one HR
+# output that can be posted to a broad channel, and the aggregation is what makes
+# that true — worth keeping in mind before copying this shape.
+# ─────────────────────────────────────────────────────────────────────────────
+id: hr-department-rollup
+namespace: foundry.default.hr
+
+inputs:
+  - id: period
+    type: STRING
+    defaults: "2026-06"
+  - id: channel
+    type: STRING
+    defaults: "#hr-ops"
+
+variables:
+  foundry: "http://server:4000"
+
+tasks:
+  - id: begin
+    type: io.kestra.plugin.core.http.Request
+    uri: "{{ vars.foundry }}/api/executions/begin"
+    method: POST
+    contentType: application/json
+    headers:
+      Authorization: "Bearer {{ secret('FOUNDRY_CALLBACK') }}"
+    body: |
+      {
+        "namespace": "{{ flow.namespace }}",
+        "flowId": "{{ flow.id }}",
+        "executionId": "{{ execution.id }}",
+        "inputs": { "period": "{{ inputs.period }}", "channel": "{{ inputs.channel }}" }
+      }
+
+  - id: rollup
+    type: io.kestra.plugin.core.http.Request
+    uri: "{{ vars.foundry }}/api/steps/datasource"
+    method: POST
+    contentType: application/json
+    headers:
+      Authorization: "Bearer {{ json(outputs.begin.body).token }}"
+    body: |
+      {
+        "ref": "hr_demo.department_attendance_rollup",
+        "stepId": "rollup",
+        "taskrunId": "{{ taskrun.id }}",
+        "params": [{ "period": "{{ inputs.period }}" }]
+      }
+
+  # Resolve the channel against the API rather than assuming it. The measured
+  # failure mode is "guessed response field names" — a generated script writes
+  # `channels[0].id`, gets `undefined`, and posts to a channel named "undefined".
+  - id: channels
+    type: io.kestra.plugin.core.http.Request
+    uri: "{{ vars.foundry }}/api/steps/tool"
+    method: POST
+    contentType: application/json
+    headers:
+      Authorization: "Bearer {{ json(outputs.begin.body).token }}"
+    body: |
+      {
+        "ref": "chat_list_channels",
+        "stepId": "channels",
+        "taskrunId": "{{ taskrun.id }}",
+        "params": [{}]
+      }
+
+  # ── Aggregation and formatting: no credential, so it stays in Kestra (R2) ───
+  #
+  # Matched against the name the API actually returns, not one assumed to exist.
+  # Empty when the requested channel is absent — `summarise` below then builds a
+  # `null` channel and the tool step fails, rather than the flow inventing a
+  # destination.
+  - id: resolve_channel
+    type: io.kestra.plugin.core.debug.Return
+    format: >
+      {{ json(outputs.channels.body).results[0].data.channels
+         | jq('[.[] | select(.name == "' ~ inputs.channel ~ '") | .name] | first')
+         | first }}
+
+  # ── Two Pebble/jq rules this step exists to demonstrate ─────────────────────
+  #
+  # 1. `' ~ inputs.period ~ '`, NOT a nested `{{ inputs.period }}`. Pebble does
+  #    not re-evaluate `{{ }}` inside an expression's string argument — the braces
+  #    reach jq as literal characters and land in the output, with no error
+  #    anywhere. The symptom was a chat message reading "Attendance roll-up for
+  #    {{ inputs.period }}". `~` is Pebble's concatenation operator.
+  #
+  # 2. The ENTIRE `params` array is built here, by jq, because `| first` unwraps a
+  #    jq string into a raw Java string — quotes and escaping gone. So a rendered
+  #    string cannot be dropped into a JSON body: the report's real newlines land
+  #    unescaped and the step dies on `Illegal unquoted character (CTRL-CHAR, code
+  #    10)`, and a channel called `#hr-ops` becomes a bare `#` that reads as a
+  #    comment. Arrays and objects DO render as JSON, so the array is the unit of
+  #    interpolation. Same reasoning as scenario B's `params`.
+  - id: summarise
+    type: io.kestra.plugin.core.debug.Return
+    format: >
+      {{ json(outputs.rollup.body).results[0].data
+         | jq('{
+               org_headcount: ([.[].headcount] | add),
+               org_below: ([.[].below_threshold] | add),
+               empty_departments: [ .[] | select(.headcount == 0) | .department_code ],
+               params: [{
+                 channel: ("' ~ (outputs.resolve_channel.value | trim) ~ '" | select(length > 0)),
+                 author: "foundry-automation",
+                 text: ("Attendance roll-up for ' ~ inputs.period ~ '\n"
+                        + ([ .[] |
+                             if .headcount == 0
+                             then "  " + .department_code + " — no employees"
+                             else "  " + .department_code + " — " + (.headcount|tostring)
+                                  + " staff, avg " + (.avg_attendance_rate|tostring)
+                                  + "%, " + (.below_threshold|tostring) + " below the "
+                                  + (.threshold|tostring) + "% bar"
+                             end ] | join("\n"))
+                        + "\n\nOrg: " + ([.[].headcount] | add | tostring)
+                        + " staff with data, " + ([.[].below_threshold] | add | tostring)
+                        + " below their department threshold.")
+               }]
+             }')
+         | first }}
+
+  - id: post_summary
+    type: io.kestra.plugin.core.http.Request
+    uri: "{{ vars.foundry }}/api/steps/tool"
+    method: POST
+    contentType: application/json
+    options:
+      readIdleTimeout: PT120S
+    headers:
+      Authorization: "Bearer {{ json(outputs.begin.body).token }}"
+    body: |
+      {
+        "ref": "chat_post_message",
+        "stepId": "post_summary",
+        "taskrunId": "{{ taskrun.id }}",
+        "params": {{ json(outputs.summarise.value).params | jq('.') | first }}
+      }
+
+  - id: complete
+    type: io.kestra.plugin.core.http.Request
+    uri: "{{ vars.foundry }}/api/executions/{{ json(outputs.begin.body).flowExecutionId }}/complete"
+    method: POST
+    contentType: application/json
+    headers:
+      Authorization: "Bearer {{ json(outputs.begin.body).token }}"
+    body: |
+      { "status": "succeeded" }

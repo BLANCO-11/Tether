@@ -1,0 +1,408 @@
+{
+    "goal": "get me list of employees along with their calculated absence days.\nabsence days can be of two types, half day absence = 0.5 absence\nfull day absence = 1\n\nhalf day absence = working hours less than 9.5\nfull day absence = working hours less than 4.75\n\nleave days need to be ignored for calculating absence.\n ```",
+    "spec": {
+        "sinks": [
+        ],
+        "values": [
+        ],
+        "wiring": {
+            "paths": [
+            ],
+            "actions": [
+            ]
+        },
+        "covered": [
+            {
+                "by": "Attendance_DB.query.banded_absences",
+                "quote": "get me list of employees along with their calculated absence days"
+            },
+            {
+                "by": "Attendance_DB.query.banded_absences",
+                "quote": "absence days can be of two types"
+            },
+            {
+                "by": "Attendance_DB.query.banded_absences",
+                "quote": "half day absence = 0.5 absence"
+            },
+            {
+                "by": "Attendance_DB.query.banded_absences",
+                "quote": "full day absence = 1"
+            },
+            {
+                "by": "Attendance_DB.query.banded_absences",
+                "quote": "half day absence = working hours less than 9.5"
+            },
+            {
+                "by": "Attendance_DB.query.banded_absences",
+                "quote": "full day absence = working hours less than 4.75"
+            },
+            {
+                "by": "Attendance_DB.query.banded_absences",
+                "quote": "leave days need to be ignored for calculating absence"
+            }
+        ],
+        "missing": null,
+        "sources": [
+            {
+                "ref": "Attendance_DB.query.banded_absences",
+                "quote": "get me list of employees along with their calculated absence days"
+            }
+        ],
+        "summary": {
+            "by": [
+                "employees"
+            ],
+            "over": "Attendance_DB.query.banded_absences",
+            "quote": "get me list of employees along with their calculated absence days",
+            "byWords": [
+                "employees"
+            ],
+            "measures": [
+                {
+                    "fn": "band_count",
+                    "name": "band_count_half_day_absences",
+                    "bands": [
+                        {
+                            "test": "below",
+                            "then": 0.5,
+                            "value": "4.75",
+                            "words": "band 0"
+                        },
+                        {
+                            "test": "at_least",
+                            "then": 1,
+                            "value": "4.75",
+                            "words": "band 1"
+                        }
+                    ],
+                    "field": null,
+                    "words": "half day absences"
+                },
+                {
+                    "fn": "band_count",
+                    "name": "band_count_full_day_absences",
+                    "bands": [
+                        {
+                            "test": "below",
+                            "then": 0.5,
+                            "value": "4.75",
+                            "words": "band 0"
+                        },
+                        {
+                            "test": "at_least",
+                            "then": 1,
+                            "value": "4.75",
+                            "words": "band 1"
+                        }
+                    ],
+                    "field": null,
+                    "words": "full day absences"
+                }
+            ]
+        },
+        "schedule": null,
+        "conditions": [
+        ]
+    },
+    "texts": [
+        "get me list of employees along with their calculated absence days.\nabsence days can be of two types, half day absence = 0.5 absence\nfull day absence = 1\n\nhalf day absence = working hours less than 9.5\nfull day absence = working hours less than 4.75\n\nleave days need to be ignored for calculating absence.\n ```"
+    ],
+    "dropped": [
+    ],
+    "readback": [
+        "Reads: a read written for this automation (Attendance_DB.query.banded_absences) — for “get me list of employees along with their calculated absence days”",
+        "Computes: one row per `employees`, with band_count (as `band_count_half_day_absences`), band_count (as `band_count_full_day_absences`) — for “get me list of employees along with their calculated absence days”",
+        "Runs: when it is started (by you, or by a call to it) — nothing runs it on its own",
+        "Done by the read Attendance_DB.query.banded_absences: “get me list of employees along with their calculated absence days”",
+        "Done by the read Attendance_DB.query.banded_absences: “absence days can be of two types”",
+        "Done by the read Attendance_DB.query.banded_absences: “half day absence = 0.5 absence”",
+        "Done by the read Attendance_DB.query.banded_absences: “full day absence = 1”",
+        "Done by the read Attendance_DB.query.banded_absences: “half day absence = working hours less than 9.5”",
+        "Done by the read Attendance_DB.query.banded_absences: “full day absence = working hours less than 4.75”",
+        "Done by the read Attendance_DB.query.banded_absences: “leave days need to be ignored for calculating absence”"
+    ]
+}
+{
+    "goal": "get me list of employees along with their calculated absence days.\nabsence days can be of two types, half day absence = 0.5 absence\nfull day absence = 1\n\nhalf day absence = working hours less than 9.5\nfull day absence = working hours less than 4.75\n\nleave days need to be ignored for calculating absence.\n ```",
+    "spec": {
+        "sinks": [
+        ],
+        "values": [
+        ],
+        "wiring": {
+            "paths": [
+            ],
+            "actions": [
+            ]
+        },
+        "covered": [
+            {
+                "by": "Attendance_DB.query.banded_absences",
+                "quote": "get me list of employees along with their calculated absence days"
+            },
+            {
+                "by": "Attendance_DB.query.banded_absences",
+                "quote": "absence days can be of two types"
+            },
+            {
+                "by": "Attendance_DB.query.banded_absences",
+                "quote": "half day absence = 0.5 absence"
+            },
+            {
+                "by": "Attendance_DB.query.banded_absences",
+                "quote": "full day absence = 1"
+            },
+            {
+                "by": "Attendance_DB.query.banded_absences",
+                "quote": "half day absence = working hours less than 9.5"
+            },
+            {
+                "by": "Attendance_DB.query.banded_absences",
+                "quote": "full day absence = working hours less than 4.75"
+            },
+            {
+                "by": "Attendance_DB.query.banded_absences",
+                "quote": "leave days need to be ignored for calculating absence"
+            },
+            {
+                "by": "Attendance_DB.query.banded_absences",
+                "quote": "should return a total absence field aswell"
+            }
+        ],
+        "missing": null,
+        "sources": [
+            {
+                "ref": "Attendance_DB.query.banded_absences",
+                "quote": "get me list of employees along with their calculated absence days"
+            }
+        ],
+        "summary": {
+            "by": [
+                "employees"
+            ],
+            "over": "Attendance_DB.query.banded_absences",
+            "quote": "get me list of employees along with their calculated absence days",
+            "byWords": [
+                "employees"
+            ],
+            "measures": [
+                {
+                    "fn": "band_count",
+                    "name": "band_count_half_day_absences",
+                    "bands": [
+                        {
+                            "test": "below",
+                            "then": 0.5,
+                            "value": "4.75",
+                            "words": "band 0"
+                        },
+                        {
+                            "test": "at_least",
+                            "then": 1,
+                            "value": "4.75",
+                            "words": "band 1"
+                        }
+                    ],
+                    "field": null,
+                    "words": "half day absences"
+                },
+                {
+                    "fn": "band_count",
+                    "name": "band_count_full_day_absences",
+                    "bands": [
+                        {
+                            "test": "below",
+                            "then": 0.5,
+                            "value": "4.75",
+                            "words": "band 0"
+                        },
+                        {
+                            "test": "at_least",
+                            "then": 1,
+                            "value": "4.75",
+                            "words": "band 1"
+                        }
+                    ],
+                    "field": null,
+                    "words": "full day absences"
+                }
+            ]
+        },
+        "schedule": null,
+        "conditions": [
+        ]
+    },
+    "texts": [
+        "get me list of employees along with their calculated absence days.\nabsence days can be of two types, half day absence = 0.5 absence\nfull day absence = 1\n\nhalf day absence = working hours less than 9.5\nfull day absence = working hours less than 4.75\n\nleave days need to be ignored for calculating absence.\n ```",
+        "should return a total absence field aswell"
+    ],
+    "dropped": [
+    ],
+    "readback": [
+        "Reads: a read written for this automation (Attendance_DB.query.banded_absences) — for “get me list of employees along with their calculated absence days”",
+        "Computes: one row per `employees`, with band_count (as `band_count_half_day_absences`), band_count (as `band_count_full_day_absences`) — for “get me list of employees along with their calculated absence days”",
+        "Runs: when it is started (by you, or by a call to it) — nothing runs it on its own",
+        "Done by the read Attendance_DB.query.banded_absences: “get me list of employees along with their calculated absence days”",
+        "Done by the read Attendance_DB.query.banded_absences: “absence days can be of two types”",
+        "Done by the read Attendance_DB.query.banded_absences: “half day absence = 0.5 absence”",
+        "Done by the read Attendance_DB.query.banded_absences: “full day absence = 1”",
+        "Done by the read Attendance_DB.query.banded_absences: “half day absence = working hours less than 9.5”",
+        "Done by the read Attendance_DB.query.banded_absences: “full day absence = working hours less than 4.75”",
+        "Done by the read Attendance_DB.query.banded_absences: “leave days need to be ignored for calculating absence”",
+        "Done by the read Attendance_DB.query.banded_absences: “should return a total absence field aswell”"
+    ]
+}
+{
+    "goal": "get me list of employees along with their calculated absence days.\nabsence days can be of two types, half day absence = 0.5 absence\nfull day absence = 1\n\nhalf day absence = working hours less than 9.5\nfull day absence = working hours less than 4.75\n\nleave days need to be ignored for calculating absence.\n ```",
+    "spec": {
+        "sinks": [
+            {
+                "ref": "foundry_email_send",
+                "quote": "email this as a excel report to me"
+            }
+        ],
+        "values": [
+            {
+                "as": "xlsx",
+                "from": "goal",
+                "role": "other",
+                "fills": "foundry_email_send.attach_format",
+                "quote": "excel"
+            },
+            {
+                "from": "requester",
+                "role": "recipient",
+                "fills": "foundry_email_send.to",
+                "quote": "me"
+            }
+        ],
+        "wiring": {
+            "paths": [
+            ],
+            "actions": [
+                {
+                    "path": null,
+                    "takes": "unsaid",
+                    "approve": null
+                }
+            ]
+        },
+        "covered": [
+            {
+                "by": "Attendance_DB.query.banded_absences",
+                "quote": "get me list of employees along with their calculated absence days"
+            },
+            {
+                "by": "Attendance_DB.query.banded_absences",
+                "quote": "absence days can be of two types"
+            },
+            {
+                "by": "Attendance_DB.query.banded_absences",
+                "quote": "half day absence = 0.5 absence"
+            },
+            {
+                "by": "Attendance_DB.query.banded_absences",
+                "quote": "full day absence = 1"
+            },
+            {
+                "by": "Attendance_DB.query.banded_absences",
+                "quote": "half day absence = working hours less than 9.5"
+            },
+            {
+                "by": "Attendance_DB.query.banded_absences",
+                "quote": "full day absence = working hours less than 4.75"
+            },
+            {
+                "by": "Attendance_DB.query.banded_absences",
+                "quote": "leave days need to be ignored for calculating absence"
+            }
+        ],
+        "missing": null,
+        "sources": [
+            {
+                "ref": "Attendance_DB.query.banded_absences",
+                "quote": "get me list of employees along with their calculated absence days"
+            }
+        ],
+        "summary": {
+            "by": [
+                "employees"
+            ],
+            "over": "Attendance_DB.query.banded_absences",
+            "quote": "get me list of employees along with their calculated absence days",
+            "byWords": [
+                "employees"
+            ],
+            "measures": [
+                {
+                    "fn": "band_count",
+                    "name": "band_count_half_day_absences",
+                    "bands": [
+                        {
+                            "test": "below",
+                            "then": 0.5,
+                            "value": "4.75",
+                            "words": "band 0"
+                        },
+                        {
+                            "test": "at_least",
+                            "then": 1,
+                            "value": "4.75",
+                            "words": "band 1"
+                        }
+                    ],
+                    "field": null,
+                    "words": "half day absences"
+                },
+                {
+                    "fn": "band_count",
+                    "name": "band_count_full_day_absences",
+                    "bands": [
+                        {
+                            "test": "below",
+                            "then": 0.5,
+                            "value": "4.75",
+                            "words": "band 0"
+                        },
+                        {
+                            "test": "at_least",
+                            "then": 1,
+                            "value": "4.75",
+                            "words": "band 1"
+                        }
+                    ],
+                    "field": null,
+                    "words": "full day absences"
+                }
+            ]
+        },
+        "schedule": null,
+        "conditions": [
+        ]
+    },
+    "texts": [
+        "get me list of employees along with their calculated absence days.\nabsence days can be of two types, half day absence = 0.5 absence\nfull day absence = 1\n\nhalf day absence = working hours less than 9.5\nfull day absence = working hours less than 4.75\n\nleave days need to be ignored for calculating absence.\n ```",
+        "email this as a excel report to me"
+    ],
+    "dropped": [
+    ],
+    "readback": [
+        "Reads: a read written for this automation (Attendance_DB.query.banded_absences) — for “get me list of employees along with their calculated absence days”",
+        "Does: REAL DELIVERY to a live mailbox (foundry_email_send) — for “email this as a excel report to me”",
+        "Computes: one row per `employees`, with band_count (as `band_count_half_day_absences`), band_count (as `band_count_full_day_absences`) — for “get me list of employees along with their calculated absence days”",
+        "A value: “excel”, from your goal → `attach_format` of foundry_email_send",
+        "Who receives it: you — the person who runs it → `to` of foundry_email_send",
+        "Runs: when it is started (by you, or by a call to it) — nothing runs it on its own",
+        "Done by the read Attendance_DB.query.banded_absences: “get me list of employees along with their calculated absence days”",
+        "Done by the read Attendance_DB.query.banded_absences: “absence days can be of two types”",
+        "Done by the read Attendance_DB.query.banded_absences: “half day absence = 0.5 absence”",
+        "Done by the read Attendance_DB.query.banded_absences: “full day absence = 1”",
+        "Done by the read Attendance_DB.query.banded_absences: “half day absence = working hours less than 9.5”",
+        "Done by the read Attendance_DB.query.banded_absences: “full day absence = working hours less than 4.75”",
+        "Done by the read Attendance_DB.query.banded_absences: “leave days need to be ignored for calculating absence”"
+    ],
+    "decisions": {
+        "port:foundry_email_send#0.body": "employee details",
+        "port:foundry_email_send#0.subject": "monthly emplyee update"
+    }
+}

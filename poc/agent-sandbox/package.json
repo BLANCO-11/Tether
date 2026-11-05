@@ -1,0 +1,23 @@
+{
+  "name": "agent-sandbox-poc",
+  "private": true,
+  "type": "module",
+  "version": "0.0.1",
+  "description": "POC: closed sandbox + Pi + verifier + oracle + openredaction",
+  "scripts": {
+    "build-context": "node scripts/build-context.mjs",
+    "verify": "node verifier/verify.mjs",
+    "run": "node runner/run.mjs",
+    "oracle": "node oracle/check.mjs",
+    "control": "node scripts/restore-golden.mjs && node scripts/run-control.mjs",
+    "clarify:status": "node scripts/clarify.mjs status",
+    "clarify:answer": "node scripts/clarify.mjs answer",
+    "loop:complex": "node scripts/agent-loop.mjs --scenario=complex",
+    "snapshot": "node scripts/snapshot.mjs",
+    "edit:qa": "node scripts/edit-loop.mjs --qa",
+    "edit": "node scripts/edit-loop.mjs"
+  },
+  "dependencies": {
+    "@openredaction/core": "^1.1.5"
+  }
+}

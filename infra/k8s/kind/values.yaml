@@ -1,0 +1,8 @@
+# Overrides for the local kind test. Everything is reached through the ingress on http://localhost:8088.
+public:
+  authUrl: http://localhost:8088
+  wsUrl: ws://localhost:8088
+
+# The kind node's pod subnet is 192.168.0.0/16 and the AI gateway is public, so the default
+# "public addresses only" rule for forge-egress holds here as it would on AKS.
+

@@ -1,0 +1,108 @@
+#!/usr/bin/env bash
+set -euo pipefail
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+SANDBOX="$ROOT/sandbox"
+RESULTS="$ROOT/RESULTS.md"
+PI_BIN="${PI_BIN:-}"
+# shellcheck disable=SC1091
+source "$ROOT/scripts/load-llm-env.sh"
+
+if [[ -z "$PI_BIN" ]]; then
+  if command -v pi >/dev/null 2>&1; then
+    PI_BIN="$(command -v pi)"
+  elif [[ -x /Users/himanshu/.local/node/bin/pi ]]; then
+    PI_BIN=/Users/himanshu/.local/node/bin/pi
+  else
+    echo "pi not found; set PI_BIN" >&2
+    exit 1
+  fi
+fi
+
+if [[ -z "${LLM_API_KEY:-}" || -z "${LLM_BASE_URL:-}" ]]; then
+  echo "LLM_API_KEY and LLM_BASE_URL must be set (from repo .env)" >&2
+  exit 1
+fi
+
+MODEL="${PI_MODEL:-gpt-5.4-mini}"
+MODEL_ID="${MODEL##*/}"
+
+# Materialize models.json with concrete baseUrl (Pi does not expand $LLM_BASE_URL).
+# apiKey stays an env-var *name*; we also pass --api-key for reliability.
+python3 - "$LLM_BASE_URL" "$MODEL_ID" << 'PY'
+import json, sys
+from pathlib import Path
+base, model_id = sys.argv[1], sys.argv[2]
+base = base.rstrip("/")
+if not base.endswith("/v1"):
+    base = base + "/v1"
+models = []
+for mid, name in [
+    (model_id, model_id),
+    ("gpt-6-luna", "GPT 6 Luna"),
+    ("gpt-5.6-luna", "GPT Luna"),
+    ("gpt-5.4-mini", "GPT 5.4 mini"),
+]:
+    if any(m["id"] == mid for m in models):
+        continue
+    models.append({
+        "id": mid, "name": name, "reasoning": False, "input": ["text"],
+        "contextWindow": 128000, "maxTokens": 16384,
+        "cost": {"input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0},
+    })
+cfg = {
+  "providers": {
+    "foundry-gateway": {
+      "api": "openai-completions",
+      "apiKey": "LLM_API_KEY",
+      "baseUrl": base,
+      "headers": {},
+      "models": models,
+    }
+  }
+}
+Path("/Users/himanshu/.pi/agent/models.json").write_text(json.dumps(cfg, indent=2) + "\n")
+print("models.json baseUrl host:", base.split("/")[2])
+PY
+
+echo "Using PI_BIN=$PI_BIN"
+echo "Using provider=foundry-gateway model=$MODEL_ID"
+echo "LLM_BASE_URL host: $(printf '%s' "$LLM_BASE_URL" | sed -E 's#(https?://[^/]+).*#\1#')"
+
+node "$ROOT/scripts/build-context.mjs"
+printf '%s\n' '{"status":"idle","questions":[]}' > "$SANDBOX/questions.json"
+
+START_TS="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+OUT_FILE="$SANDBOX/pi-last-run.log"
+set +e
+(
+  cd "$SANDBOX"
+  "$PI_BIN" --print --no-session \
+    --provider foundry-gateway \
+    --model "$MODEL_ID" \
+    --api-key "$LLM_API_KEY" \
+    --append-system-prompt "$SANDBOX/SYSTEM.md" \
+    "Read GOAL.md and context/README.md and context/schema.json. The goal is ambiguous about customer_email vs billing_email. Write questions.json with status open asking which column to use for notification to (choices: customer_email, billing_email). Do not invent. STOP after writing questions.json — do not edit workflow yet."
+) >"$OUT_FILE" 2>&1
+CODE=$?
+set -e
+END_TS="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+
+{
+  echo ""
+  echo "## Pi spawn — $START_TS"
+  echo ""
+  echo "- PI_BIN: \`$PI_BIN\`"
+  echo "- provider: foundry-gateway / model: $MODEL_ID"
+  echo "- env: LLM_* from repo .env via load-llm-env.sh; --api-key passed; baseUrl materialized"
+  echo "- started: $START_TS / ended: $END_TS"
+  echo "- exit: $CODE"
+  echo "- log: sandbox/pi-last-run.log"
+  echo "- tail: $(tail -n 5 "$OUT_FILE" | tr '\n' ' | ')"
+  echo ""
+} >> "$RESULTS"
+
+echo "Pi exit=$CODE"
+tail -n 30 "$OUT_FILE" || true
+echo "--- questions.json ---"
+cat "$SANDBOX/questions.json"
+exit "$CODE"

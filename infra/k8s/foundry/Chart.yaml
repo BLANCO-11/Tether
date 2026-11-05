@@ -1,0 +1,6 @@
+apiVersion: v2
+name: foundry
+description: Foundry on Kubernetes — server, web, ops-api, forge (+ egress) and flow-runner, translated from infra/docker-compose.yml.
+type: application
+version: 0.1.0
+appVersion: "beta-2.27"

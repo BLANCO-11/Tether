@@ -1,0 +1,13 @@
+-- Hide a revision from the version list without destroying it.
+--
+-- ⚠ A SOFT delete, and the "soft" is the whole design. `flow_revisions` is
+-- insert-only because an approval POINTS at a revision, and that pointer is
+-- what stops approve-once being a blank cheque (D-37). A hard DELETE would
+-- take the row an approval refers to, the model a replay re-runs, and the
+-- `from` side of every diff above it.
+--
+-- So the row stays and only the LIST hides it: `getRevision` is deliberately
+-- not filtered, so replay, diff and the approval record all keep working on a
+-- hidden revision. What the person gets is a shorter list, which is what was
+-- asked for.
+ALTER TABLE "flow_revisions" ADD COLUMN IF NOT EXISTS "hidden_at" timestamp with time zone;

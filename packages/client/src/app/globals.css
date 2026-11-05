@@ -1,0 +1,1889 @@
+/* src/app/globals.css — Tailwind layers + Foundry's design tokens, both themes.
+   Every color in the app comes from the variables here (matched to Foundry-UX-Design.pdf).
+
+   ── HOW THE TWO THEMES ARE ORGANISED (docs/programmes/ui-upgrade D-74, D-75, D-76) ────
+   Dark is the base, because it is what the product shipped before this file grew
+   a second theme: a person who upgrades and has expressed no preference sees no
+   change. Its values are the ORIGINAL ones, unchanged — this programme changes
+   layout, not palette, and re-opening the palette would turn a structural review
+   into an argument about blue.
+
+  The light theme is ivory porcelain: near-white with a warm bias held to 3-6
+  points per channel, so it reads clean and bright rather than sandy. Its accent
+  stays blue (the brand, and already what the app means by "this is a link"),
+  recalibrated to #1D4ED8.
+
+   ⚠ EVERY LIGHT VALUE IS WRITTEN EXACTLY ONCE, in the `--l-*` block below.
+   The two rules that APPLY the light theme (the OS-preference one and the
+   explicit-attribute one) only ever say `--x: var(--l-x)`. CSS has no way to
+   share one declaration block between a media query and an attribute selector,
+   so the application list is unavoidably written twice — but a VALUE cannot
+   drift, because there is only one of it, and `theme.test.ts` asserts the two
+   application lists stay identical.
+
+  ⚠ CONTRAST HERE IS ARITHMETIC, NOT JUDGEMENT. Every light foreground was
+  chosen by computing WCAG ratios against every light ground and taking the
+  worst. The binding pairs are dim on sunken (4.67:1) and the input edge on
+  card (3.19:1, the 3:1 non-text rule).
+  Do not lighten one of these by eye; re-run the table in
+  docs/programmes/ui-upgrade/evidence.md §3 instead. */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  /* A hovered path's pulse: where its dash offset ends one cycle on (set per link, inline). */
+  --pulse-end: 0;
+  /* A hovered path's link: its place along the path (set per link, inline), which orders its fade-in and pulse. */
+  --flow-order: 0;
+  /* Render native form controls (select popups, scrollbars, date pickers) dark. */
+  color-scheme: dark;
+
+  /* Surfaces — deep blue-black, subtle layered panels. */
+  --bg: #0b0d12; /* app background */
+  --surface: #14161d; /* cards, rows */
+  --surface-2: #1b1e26; /* stat tiles, hover, raised */
+  --line: #20242d; /* hairline borders — whispers against --surface, never outlines */
+  --line-2: #313641; /* hover border — was written inline in three places */
+  /* ⚠ THE ONLY BORDER ON A CONTROL WHOSE BOUNDS ARE OTHERWISE UNDEFINED — inputs,
+     selects, textareas, choice cards. The design handoff pack was explicit that it
+     **clears 3:1** where `--line` (a decorative hairline) does not (pack record
+     removed 2026-09-11). So this is an accessibility control and not a shade: a select
+     drawn in `--line` has no perceivable bounds, and the pack's own checklist asked
+     that every border which alone defines a control clears 3:1. */
+  --line-interactive: #6b7280;
+  --sunken: #10131a; /* inset wells: YAML gutters, code blocks, diff panes */
+  --dots: #1e222b; /* the canvas dot grid */
+  --dash: #2b3040; /* dashed outlines: drop targets, empty slots */
+  --shadow: rgba(0, 0, 0, 0.5); /* raised-surface drop shadow */
+  --scrim: rgba(0, 0, 0, 0.6); /* the dim behind a modal */
+  --mask: rgba(11, 13, 18, 0.72); /* the canvas minimap's out-of-view mask */
+  --frost: rgba(20, 22, 29, 0.78);
+  --frost-modal: rgba(20, 22, 29, 0.82);
+  --frost-blur: 12px;
+  --frost-blur-lg: 20px;
+  --lift: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 1px 2px rgba(0, 0, 0, 0.35);
+  /* ── Elevation (2026-10-10): a surface is LIGHTER the higher it sits — in dark mode shadows do not show, so tone
+     carries depth (tonal elevation). The `depth-*` classes read these; they used to make a higher surface MORE
+     transparent, i.e. darker in dark mode — depth pointing the wrong way. `--edge-light` is the top highlight of a
+     raised pane: a whisper in dark (a 72%-white line there read as an embossed outline), bright in light. */
+  --elev-1: #14161d;
+  --elev-2: #191c24;
+  --elev-3: #1e212b;
+  --elev-4: #242833;
+  --edge-light: rgba(255, 255, 255, 0.05);
+  /* ── Card depth: the node card and the summoned step pane read these, not
+     the generic surface/line pair, so both themes segment card-from-ground.
+     Same values as `--surface-2` / `--line-2` / `--shadow` on purpose — the
+     09-03 lock is layout, not palette: border + surface-2 contrast does the
+     segmentation, no hue is re-keyed. Separate NAMES because the roles differ
+     and the themes may diverge later. */
+  --card-bg: #1b1e26;
+  --card-border: #313641;
+  --card-shadow: rgba(0, 0, 0, 0.5);
+
+  /* Text. */
+  --text: #e6e8ec; /* primary */
+  --muted: #8a8f9a; /* secondary */
+  --dim: #868b96; /* faint labels / eyebrows (WCAG AA on --bg) */
+  --muted-soft: rgba(138, 143, 154, 0.5); /* muted, as a hairline or a disabled fill */
+
+  /* Brand blue → indigo. Solid accent for links/steps; gradient for primary actions. */
+  --accent: #4c8dff;
+  --grad: linear-gradient(105deg, #3d9bff 0%, #6366f1 100%);
+  --accent-bg: rgba(76, 141, 255, 0.09); /* selected row, active tab */
+  --accent-bg-2: rgba(76, 141, 255, 0.16); /* its hover / pressed twin */
+  --accent-line: rgba(76, 141, 255, 0.5); /* accent as a border */
+  --accent-soft: rgba(76, 141, 255, 0.8); /* accent as secondary text */
+  --path: #a3e635; /* a condition's path on the canvas — "runs on this path"; a hue no step kind, state or selection uses */
+  --glow: rgba(80, 130, 255, 0.55); /* the primary button's cast light */
+  /* ⚠ Text ON a solid --accent fill, and it FLIPS between the themes — dark's
+     accent is a light blue that needs dark text, light's is a deep blue that
+     needs pale text. It was written as `text-black` on two buttons, which is
+     correct in dark and unreadable in earth. A theme-dependent foreground
+     cannot be a Tailwind literal; it has to be a token. */
+  --on-accent: #0b0d12;
+
+  /* Semantic colors + matching translucent pill backgrounds. */
+  --ok: #34d399;
+  --ok-bg: rgba(52, 211, 153, 0.12);
+  --warn: #fbbf24;
+  --warn-bg: rgba(245, 158, 11, 0.12);
+  --warn-line: rgba(251, 191, 36, 0.36);
+  --orange: #fb923c; /* "changes real data" */
+  --orange-bg: rgba(251, 146, 60, 0.12);
+  --danger: #f87171;
+  --danger-bg: rgba(248, 113, 113, 0.12);
+  --danger-soft: rgba(248, 113, 113, 0.8);
+  --danger-line: rgba(248, 113, 113, 0.34);
+
+  /* ── Alpha-stage chrome. Deliberately NOT --warn (D-86) ───────────────────
+     `--warn` already means "this automation needs your attention". The alpha
+     notice means "this part of Foundry is unfinished". One hue for both makes a
+     permanent product disclaimer and a live incident look identical — and since
+     the disclaimer is on every page, it is the incident that stops being read. */
+  --alpha: #c084fc;
+  --alpha-bg: rgba(192, 132, 252, 0.1);
+  --alpha-line: rgba(192, 132, 252, 0.34);
+
+  /* ── The flow canvas: one colour per step kind ────────────────────────────
+     Kind is the FIRST thing a reviewer reads off a node, so it gets a hue of
+     its own rather than reusing a semantic token: `agent` in `--warn` would be
+     indistinguishable from a paused step, and status is the other axis the same
+     card has to carry. Deliberately not `--accent`, which the app already means
+     "this is a link".
+     ⚠ Colour is never the only carrier — every node also states its kind in
+     words, because a palette of six hues is exactly where colour-alone encoding
+     stops working. */
+  --k-datasource: #58a6ff;
+  --k-transform: #94a3b8;
+  --k-code: #a78bfa;
+  --k-tool: #2dd4bf;
+  --k-approval: #f472b6;
+  --k-agent: #f0b429;
+  --k-llm: #f0b429;
+  --k-http: #fb923c;
+  /* A loop (For each, its output, and the box around what repeats): a hue of its own, so the section that runs once per
+     item reads apart from the steps that run once — the box is tinted with it, never only outlined. */
+  --k-loop: #818cf8;
+  /* An unknown kind: the engine ran a task Foundry holds no pointer for. Drawn,
+     never hidden — a step the UI cannot classify is still a step that ran. */
+  --k-unknown: #6b7280;
+
+  /* RGB triplets of the tokens above, for Tailwind's opacity modifiers
+     (bg-accent/80 etc.). Tailwind can only compose alpha onto a color it can
+     take apart, so these feed `rgb(var(--x-rgb) / <alpha-value>)` in the config.
+     Keep each in sync with its hex twin. */
+  --bg-rgb: 11 13 18;
+  --surface-rgb: 20 22 29;
+  --accent-rgb: 76 141 255;
+  --ok-rgb: 52 211 153;
+  --warn-rgb: 251 191 36;
+  --orange-rgb: 251 146 60;
+  --danger-rgb: 248 113 113;
+
+  /* ── The three measures. A page picks one by ARCHETYPE, never by taste ────
+     Before these existed a page chose its own width — `max-w-5xl` in eleven
+     files, `max-w-4xl` in four, `max-w-3xl` in two, with nothing distinguishing
+     them. `<Page measure>` owns these and no page sets a width again (D-78). */
+  --w-page: 1160px; /* index · detail · console */
+  --w-form: 680px; /* wizard · single-record form */
+  --w-wide: 1440px; /* workbench — a canvas is content, not a column */
+
+  /* ── The motion vocabulary (FR-012) ────────────────────────────────────────
+     Two durations and one easing curve, shared by every transition in the app.
+     `--dur-fast` is hover/active feedback; `--dur-base` is layout movement
+     (panels, tabs, folds). One global rule below disables all of it for anyone
+     who has asked their OS not to animate. */
+  --dur-fast: 120ms;
+  --dur-base: 180ms;
+  --ease: cubic-bezier(0.4, 0, 0.2, 1);
+
+  /* The shell's own bar. A token rather than a class literal because the topbar
+     is `position: sticky` and anything that has to sit BELOW it (the alpha
+     notice, a canvas's own sticky chrome) needs the same number. Two hardcoded
+     52s drift; one token cannot. */
+  --topbar: 56px;
+
+  /* ── SHELL DIMENSIONS, from the design handoff pack ─────────────────────────
+     The pack stated these with their reasons (pack record removed 2026-09-11).
+     ⚠ `--topbar` was **52px** and the pack says **56px**; the value
+     moved and the NAME did not, because an alias (`--topbar-h`) would be a second
+     definition of one number — the exact thing the comment above argues against. Read
+     the pack's `--topbar-h` as this token. */
+
+  --sidebar-w: 240px;
+  --sidebar-collapsed-w: 57px; /* 1px border + 2 x 8px inset + 40px rows: pl-3 (12px) centres a 16px icon exactly */
+  --panel-w: 320px;
+  --consumer-topbar-h: 64px;
+
+  /* Zone 4's right column — see components/layout/MainAside.tsx and the
+     `.main-aside` rule below. ⚠ **A MEASUREMENT, NOT A STATED TOKEN**: the pack
+     stated five content measures and the rail's 240px and did not state this one
+     (pack record removed 2026-09-11; the geometry quarantine note went with it, and
+     the point stands: this must not be mistaken for a specified number). It is declared
+     here rather than on `.main-aside` because `theme.test.ts`
+     requires every `var(--x)` to have a declaration in this block — an undeclared
+     custom property resolves to NOTHING, silently. A caller may override it per
+     instance; this is the default and the only number. */
+  --aside-w: 340px;
+
+  /* ══ THE IVORY PORCELAIN LIGHT PALETTE — every light value, written once ══
+     Declared on :root so it is inert until one of the two rules below points a
+     live token at it. Nothing reads `--l-*` directly; if something does, it has
+     hardcoded the light theme.
+
+     Near-white with a warm bias held to 3-6 points per channel: porcelain, not
+     sand. Ladder (relative luminance): sunken #E5E2DA 0.761, ground #EDEBE4
+     0.830, hover #F4F2EC 0.888, surface #F8F7F2 0.929, card #FDFCF9 0.973.
+     Card-to-ground step 1.163. Every pair was computed, worst case taken; the
+     binding pairs are dim on sunken (4.67:1) and the input edge on card
+     (3.19:1, the 3:1 non-text rule). Do not adjust by eye.
+
+     One accent, and the hue stays blue: the dark theme is blue, so this is a
+     recalibration, not a rebrand. No gradient renders in light: --l-grad is a
+     flat fill under its old name, so .btn-grad, .grad-border and the logo chip
+     keep working with zero component edits. --l-glow is zeroed for the same
+     reason: no outer glow on any light control. */
+  --l-bg: #EDEBE4;
+  --l-surface: #F8F7F2;
+  --l-surface-2: #F4F2EC;
+  --l-line: #DEDBD2;
+  --l-line-2: #D5D2C8;
+  --l-line-interactive: #918E85; /* 3.19:1 on --l-surface — see --line-interactive */
+  --l-sunken: #E5E2DA;
+  --l-dots: #D5D2C8;
+  --l-dash: #918E85;
+  --l-shadow: rgba(45, 40, 32, 0.22);
+  --l-scrim: rgba(30, 27, 22, 0.42);
+  --l-mask: rgba(237, 235, 228, 0.72);
+
+  --l-card-bg: #FDFCF9;
+  --l-card-border: #D5D2C8;
+  --l-card-shadow: rgba(45, 40, 32, 0.22);
+
+  --l-text: #1E1B16;
+  --l-muted: #56514A;
+  --l-dim: #67625A;
+  --l-muted-soft: rgba(86, 81, 74, 0.42);
+
+  --l-accent: #1D4ED8;
+  --l-grad: linear-gradient(105deg, #1D4ED8 0%, #1D4ED8 100%);
+  --l-accent-bg: rgba(29, 78, 216, 0.1);
+  --l-accent-bg-2: rgba(29, 78, 216, 0.18);
+  --l-accent-line: rgba(29, 78, 216, 0.45);
+  --l-accent-soft: rgba(29, 78, 216, 0.8);
+  --l-path: #4d7c0f;
+  --l-glow: rgba(29, 78, 216, 0);
+  --l-on-accent: #FDFCF9;
+
+  --l-ok: #047857;
+  --l-ok-bg: rgba(4, 120, 87, 0.14);
+  --l-warn: #B45309;
+  --l-warn-bg: rgba(180, 83, 9, 0.14);
+  --l-warn-line: rgba(180, 83, 9, 0.38);
+  --l-orange: #8c3a15;
+  --l-orange-bg: rgba(140, 58, 21, 0.13);
+  --l-danger: #BE123C;
+  --l-danger-bg: rgba(190, 18, 60, 0.12);
+  --l-danger-soft: rgba(190, 18, 60, 0.8);
+  --l-danger-line: rgba(190, 18, 60, 0.36);
+
+  --l-k-datasource: #304e7e;
+  --l-k-transform: #307e57;
+  --l-k-code: #26706a;
+  --l-k-tool: #307e7e;
+  --l-k-approval: #7e304a;
+  --l-k-agent: #73307e;
+  --l-k-llm: #73307e;
+  --l-k-http: #7e5030;
+  --l-k-loop: #4338ca;
+  --l-k-unknown: #4A4844;
+
+  --l-alpha: #634786;
+  --l-alpha-bg: rgba(99, 71, 134, 0.1);
+  --l-alpha-line: rgba(99, 71, 134, 0.34);
+
+  /* Frost fills. 0.78 is the lowest alpha at which --l-dim still clears AA over
+     a scrimmed backdrop (0.72 is the hard floor); 0.82 for modals. The blur
+     radii live on :root beside --frost because they are not theme-dependent. */
+  --l-frost: rgba(253, 252, 249, 0.78);
+  --l-frost-modal: rgba(253, 252, 249, 0.82);
+  --l-lift: inset 0 1px 0 rgba(255, 255, 255, 0.5), 0 1px 2px rgba(45, 40, 32, 0.08);
+  --l-elev-1: #f8f7f2;
+  --l-elev-2: #fbfaf6;
+  --l-elev-3: #fdfcf9;
+  --l-elev-4: #ffffff;
+  --l-edge-light: rgba(255, 255, 255, 0.72);
+
+  /* ⚠ The RGB triplets need light values too, or `bg-accent/80` silently keeps
+     the dark blue — Tailwind composes alpha onto the triplet, not onto --accent. */
+  --l-bg-rgb: 237 235 228;
+  --l-surface-rgb: 248 247 242;
+  --l-accent-rgb: 29 78 216;
+  --l-ok-rgb: 4 120 87;
+  --l-warn-rgb: 180 83 9;
+  --l-orange-rgb: 140 58 21;
+  --l-danger-rgb: 190 18 60;
+}
+
+/* ══ APPLYING THE LIGHT THEME ═══════════════════════════════════════════════
+   Two rules, in this order, and the order is the whole design (D-76):
+
+     1. the OS preference, guarded by :not([data-theme="dark"])
+     2. the explicit attribute, last, so a person's choice wins
+
+   ⚠ The guard on rule 1 is load-bearing. Without it, someone on a light-mode OS
+   who explicitly chooses DARK gets light back: a media query and a plain
+   attribute selector have the same specificity, and source order decides.
+
+   ⚠ There is deliberately no `[data-theme="dark"]` block. It would be a third
+   copy of the dark map, and it is unnecessary — the guard above already excludes
+   that case, so :root's own values apply. Adding one is how the dark palette
+   acquires a second definition.
+
+   ⚠ The bodies below are byte-identical and `theme.test.ts` asserts it. If you
+   add a token, add it to BOTH — or the theme is correct only for whoever chose
+   it explicitly, which is the harder bug to notice. */
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    color-scheme: light;
+    --bg: var(--l-bg); --surface: var(--l-surface); --surface-2: var(--l-surface-2);
+    --line: var(--l-line); --line-2: var(--l-line-2); --sunken: var(--l-sunken);
+    --line-interactive: var(--l-line-interactive);
+    --dots: var(--l-dots); --dash: var(--l-dash); --shadow: var(--l-shadow);
+    --scrim: var(--l-scrim); --mask: var(--l-mask);
+    --text: var(--l-text); --muted: var(--l-muted); --dim: var(--l-dim);
+    --elev-1: var(--l-elev-1); --elev-2: var(--l-elev-2); --elev-3: var(--l-elev-3); --elev-4: var(--l-elev-4);
+    --edge-light: var(--l-edge-light);
+    --muted-soft: var(--l-muted-soft);
+    --accent: var(--l-accent); --grad: var(--l-grad);
+    --accent-bg: var(--l-accent-bg); --accent-bg-2: var(--l-accent-bg-2);
+    --accent-line: var(--l-accent-line); --accent-soft: var(--l-accent-soft); --path: var(--l-path);
+    --glow: var(--l-glow); --on-accent: var(--l-on-accent);
+    --ok: var(--l-ok); --ok-bg: var(--l-ok-bg);
+    --warn: var(--l-warn); --warn-bg: var(--l-warn-bg); --warn-line: var(--l-warn-line);
+    --orange: var(--l-orange); --orange-bg: var(--l-orange-bg);
+    --danger: var(--l-danger); --danger-bg: var(--l-danger-bg);
+    --danger-soft: var(--l-danger-soft); --danger-line: var(--l-danger-line);
+    --k-datasource: var(--l-k-datasource); --k-transform: var(--l-k-transform);
+    --k-code: var(--l-k-code); --k-tool: var(--l-k-tool);
+    --k-approval: var(--l-k-approval); --k-agent: var(--l-k-agent);
+    --k-llm: var(--l-k-llm); --k-http: var(--l-k-http); --k-loop: var(--l-k-loop);
+    --k-unknown: var(--l-k-unknown);
+    --alpha: var(--l-alpha); --alpha-bg: var(--l-alpha-bg); --alpha-line: var(--l-alpha-line);
+    --bg-rgb: var(--l-bg-rgb); --surface-rgb: var(--l-surface-rgb); --accent-rgb: var(--l-accent-rgb);
+    --ok-rgb: var(--l-ok-rgb); --warn-rgb: var(--l-warn-rgb);
+    --orange-rgb: var(--l-orange-rgb); --danger-rgb: var(--l-danger-rgb);
+    --card-bg: var(--l-card-bg); --card-border: var(--l-card-border); --card-shadow: var(--l-card-shadow);
+    --lift: var(--l-lift);
+    --frost: var(--l-frost); --frost-modal: var(--l-frost-modal);
+  }
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+  --bg: var(--l-bg); --surface: var(--l-surface); --surface-2: var(--l-surface-2);
+  --line: var(--l-line); --line-2: var(--l-line-2); --sunken: var(--l-sunken);
+  --line-interactive: var(--l-line-interactive);
+  --dots: var(--l-dots); --dash: var(--l-dash); --shadow: var(--l-shadow);
+  --scrim: var(--l-scrim); --mask: var(--l-mask);
+  --text: var(--l-text); --muted: var(--l-muted); --dim: var(--l-dim);
+  --muted-soft: var(--l-muted-soft);
+  --elev-1: var(--l-elev-1); --elev-2: var(--l-elev-2); --elev-3: var(--l-elev-3); --elev-4: var(--l-elev-4);
+  --edge-light: var(--l-edge-light);
+  --accent: var(--l-accent); --grad: var(--l-grad);
+  --accent-bg: var(--l-accent-bg); --accent-bg-2: var(--l-accent-bg-2);
+  --accent-line: var(--l-accent-line); --accent-soft: var(--l-accent-soft); --path: var(--l-path);
+  --glow: var(--l-glow); --on-accent: var(--l-on-accent);
+  --ok: var(--l-ok); --ok-bg: var(--l-ok-bg);
+  --warn: var(--l-warn); --warn-bg: var(--l-warn-bg); --warn-line: var(--l-warn-line);
+  --orange: var(--l-orange); --orange-bg: var(--l-orange-bg);
+  --danger: var(--l-danger); --danger-bg: var(--l-danger-bg);
+  --danger-soft: var(--l-danger-soft); --danger-line: var(--l-danger-line);
+  --k-datasource: var(--l-k-datasource); --k-transform: var(--l-k-transform);
+  --k-code: var(--l-k-code); --k-tool: var(--l-k-tool);
+    --k-approval: var(--l-k-approval); --k-agent: var(--l-k-agent);
+    --k-llm: var(--l-k-llm); --k-http: var(--l-k-http); --k-loop: var(--l-k-loop);
+  --k-unknown: var(--l-k-unknown);
+  --alpha: var(--l-alpha); --alpha-bg: var(--l-alpha-bg); --alpha-line: var(--l-alpha-line);
+  --bg-rgb: var(--l-bg-rgb); --surface-rgb: var(--l-surface-rgb); --accent-rgb: var(--l-accent-rgb);
+  --ok-rgb: var(--l-ok-rgb); --warn-rgb: var(--l-warn-rgb);
+  --orange-rgb: var(--l-orange-rgb); --danger-rgb: var(--l-danger-rgb);
+  --card-bg: var(--l-card-bg); --card-border: var(--l-card-border); --card-shadow: var(--l-card-shadow);
+    --lift: var(--l-lift);
+    --frost: var(--l-frost); --frost-modal: var(--l-frost-modal);
+}
+
+/* ── ZONE 4's TWO-COLUMN SHAPE — see components/layout/MainAside.tsx ──────────
+   The work on the left, a summary of it on the right. `S-01`, `S-21`, `S-24` and
+   `S-62` in the design pack are all this shape, and four pages each writing their
+   own `grid-template-columns` is four numbers free to drift — the same argument
+   `ui-honesty-check.sh` makes about row grids, one level up.
+
+   ⚠ `--aside-w`'s default is a MEASUREMENT off a 1440–1920px capture, not a token
+   the pack states (`reference/geometry.md § 10`). It is a property so the caller
+   can say what it read; the TEMPLATE has one definition.
+
+   ⚠ Single column below 1024px, with the aside falling after the main column,
+   because the aside summarises it. */
+@media (min-width: 1024px) {
+  .main-aside {
+    grid-template-columns: minmax(0, 1fr) var(--aside-w);
+  }
+}
+
+html,
+body {
+  height: 100%;
+}
+:root {
+  /* Font stacks (self-hosted via @fontsource; system fallbacks if unavailable). */
+  --font-sans: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", monospace;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── The one reduced-motion kill switch (FR-012) ─────────────────────────────
+   A single global rule, not a per-animation opt-out. Any transition or
+   animation is one of the two durations in `--dur-fast`/`--dur-base`; when the
+   OS says "reduce motion", both collapse to effectively nothing. This supersedes
+   the older per-keyframe rules below, which are kept for the specific cases they
+   already named and now read as documentation of the same decision. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Thin dark scrollbars to match the shell. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--line) transparent;
+}
+
+/* Native <select> option popup — keep it on-theme (browsers render it white by default). */
+select option,
+select optgroup {
+  background: var(--surface);
+  color: var(--text);
+}
+
+/* Primary action fill — gradient with glow in dark; flat --l-grad with zeroed
+   --l-glow in light, so the same class renders a solid button with no glow. */
+.btn-grad {
+  background: var(--grad);
+  box-shadow: 0 4px 20px -6px var(--glow);
+}
+
+/* The one card that "glows" (Home's primary door): gradient hairline border. */
+
+/* The one primary treatment: flat accent fill, on-accent text that flips with
+   the theme, and a whisper of lift — inset top light plus a short tinted drop.
+   Deliberately NOT a gradient and NOT a glow: depth reads from the edge light,
+   not from decoration. */
+.btn-primary {
+  background: var(--accent);
+  color: var(--on-accent);
+  box-shadow: var(--lift);
+}
+
+/* ── Frost: translucent panes, only where content passes beneath ─────────────
+   Opacity is derived from contrast, not taste: 0.78 is the lowest alpha at
+   which --dim text still clears AA over a scrimmed backdrop (0.72 is the hard
+   floor; nothing goes below it). Blur is small and fixed. The edge highlight
+   is what reads as a pane rather than a smudge.
+   Opt-in only: nothing solid today becomes translucent by default, and frost
+   never nests, never touches text, inputs, rows, nodes, or anything inside a
+   scrolling container. */
+
+/* ── React Flow, reconciled with the design tokens ───────────────────────────
+   The library ships a light-first stylesheet with its own CSS variables. Rather
+   than overriding rules one by one — which breaks silently on a minor upgrade —
+   we re-point its variables at ours. Anything the library adds later inherits
+   the theme instead of arriving white.
+   `@xyflow/react/dist/style.css` is imported by `components/flow/FlowCanvas.tsx`
+   and nothing else, so this block is dead weight on every page that has no
+   canvas; it is a handful of variable declarations, which is cheaper than a
+   second global stylesheet to keep in sync. */
+.react-flow {
+  --xy-background-color: transparent;
+  /* A link is something to SEE, not a hairline: `--line` (a decorative border) does not clear 3:1 on the canvas and made every
+     link barely visible; `--line-interactive` is the token for what must be perceived. */
+  --xy-edge-stroke: var(--line-interactive);
+  --xy-edge-stroke-width: 1.5;
+  --xy-edge-stroke-selected: var(--accent);
+  --xy-controls-button-background-color: var(--surface-2);
+  --xy-controls-button-background-color-hover: var(--line);
+  --xy-controls-button-color: var(--muted);
+  --xy-controls-button-color-hover: var(--text);
+  --xy-controls-button-border-color: var(--line);
+  --xy-minimap-background-color: var(--surface);
+  --xy-minimap-mask-background-color-props: var(--mask);
+  --xy-node-border-radius: 12px;
+  --xy-attribution-background-color: transparent;
+}
+
+/* The library's default node chrome — we draw our own card, so its box must not
+   show through as a second border behind ours. */
+.react-flow__node-step {
+  background: transparent;
+  border: 0;
+  padding: 0;
+  width: auto;
+  font-size: inherit;
+  color: inherit;
+}
+
+/* Connection handles exist for React Flow's edge routing. In the read-only
+   canvas they are not interactive and must not look it. */
+.canvas-readonly .react-flow__handle {
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* ── The editable canvas (Stage 5) ─────────────────────────────────────────
+   Outside `.canvas-readonly` the handles are the affordance: this is where you
+   drag from to connect two steps. Larger than the library's default because the
+   node is 232×76 and a 6px target on a card that size is a miss most times.
+
+   ⚠ They are HIDDEN until the node is hovered or selected (the Langflow read:
+   a clean card at rest, the anchors appear when the card is the one being
+   worked on). They stay hit-testable while hidden — an invisible 10px grab
+   point — so a drag that starts on the node's edge still connects without the
+   dot having to be perfectly under the cursor. The `.canvas-readonly` rule
+   above keeps them dead on read-only surfaces. */
+.react-flow__handle {
+  width: 10px;
+  height: 10px;
+  border: 2px solid var(--bg);
+  background: var(--muted);
+  opacity: 0;
+  transition:
+    background 0.12s,
+    transform 0.12s,
+    opacity 0.12s;
+}
+.react-flow__node:hover .react-flow__handle,
+.react-flow__node.selected .react-flow__handle,
+/* The two handles involved in a connection in flight — the one being dragged
+   FROM and the valid targets it can land on — must be visible mid-gesture
+   even if the cursor left the card. */
+.react-flow__handle.connectingfrom,
+.react-flow__handle.connectingto,
+.react-flow__handle:hover {
+  background: var(--accent);
+  opacity: 1;
+  transform: scale(1.25);
+}
+/* The line drawn while a connection is in flight. */
+.react-flow__connectionline path,
+.react-flow__connection-path {
+  stroke: var(--accent);
+  stroke-width: 2;
+  stroke-dasharray: 4 3;
+}
+/* A selected edge is about to be deletable with Backspace — say so in colour. */
+.react-flow__edge.selected path {
+  stroke: var(--danger);
+  stroke-width: 2;
+}
+
+/* ── The selected/hovered edge's delete affordance (2026-08-14) ───────────
+   A small circular button at the curve's midpoint, portaled by
+   `EdgeLabelRenderer` so it sits above the nodes. Danger-bordered at rest,
+   filled on hover — the same danger vocabulary the card's own delete button
+   uses. Sizes are fixed regardless of zoom so the button stays a button.
+
+   ⚠ The portal container needs to beat `elevateEdgesOnSelect`: a selected
+   edge gets an inline z-index of 9999 (above nodes AND this container), and
+   its invisible 20px-wide interaction path would swallow the button's clicks.
+   10000 keeps the affordance on top of an elevated edge while the edge itself
+   still draws above the nodes it passes under. */
+.react-flow__edgelabel-renderer {
+  z-index: 10000;
+}
+.edge-delete-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  border: 1px solid var(--danger-line);
+  background: var(--surface);
+  color: var(--danger);
+  cursor: pointer;
+  box-shadow: 0 4px 12px -4px var(--shadow);
+  transition:
+    background var(--dur-fast) var(--ease),
+    color var(--dur-fast) var(--ease),
+    transform var(--dur-fast) var(--ease);
+}
+.edge-delete-btn:hover {
+  background: var(--danger);
+  color: var(--on-accent);
+  transform: scale(1.1);
+}
+
+.react-flow__controls-button {
+  border-bottom: 1px solid var(--line);
+}
+
+/* The library's own focus ring is a light-theme blue. Match the app's. */
+.react-flow__node:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+  border-radius: 12px;
+}
+
+/* An edge on the highlighted path, and one dimmed out of it. Driven by a class
+   on the edge rather than inline style so the two states are legible here
+   together — hover highlighting whose "off" state is invisible reads as the
+   graph having lost its edges. */
+.react-flow__edge.edge-dim path {
+  opacity: 0.3;
+}
+.react-flow__edge.edge-lit path {
+  stroke: var(--accent);
+  opacity: 1;
+}
+
+/* A live run's edges crawl. Purely a liveness cue: it says the picture is
+   current, which is the one thing a static screenshot of a running flow cannot.
+   Stopped for anyone who has asked their OS not to animate. */
+.react-flow__edge.edge-running path {
+  stroke: var(--accent);
+  stroke-dasharray: 5 4;
+  animation: canvas-flow 0.7s linear infinite;
+}
+@keyframes canvas-flow {
+  to {
+    stroke-dashoffset: -18;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .react-flow__edge.edge-running path {
+    animation: none;
+  }
+}
+/* Entry/exit edges are drawn, not authored: dashed and dim so an unfed root's
+   start line never reads as a wire somebody placed — and placing it placed
+   nothing, so it carries no delete affordance either (see FlowCanvas). */
+.react-flow__edge.edge-boundary path {
+  stroke-dasharray: 3 4;
+  opacity: 0.55;
+}
+/* ⚠ The hover states must beat the rule above, and at equal specificity the
+   later rule wins — so without these the Start/End links never lit on hover
+   and never dimmed with the rest. Lit, they take the accent but stay dashed:
+   still drawn, not authored. */
+.react-flow__edge.edge-boundary.edge-lit path {
+  stroke: var(--accent);
+  opacity: 1;
+}
+.react-flow__edge.edge-boundary.edge-dim path {
+  opacity: 0.2;
+}
+/* A condition's exit (phase C): WHEN a step runs, not what it reads — SOLID, in its own colour (`--path`), apart from a data link
+   by colour alone. Not the accent: blue on this canvas is selection and a variable chip, and a path drawn in it read as selected
+   (reported 2026-09-30). ⚠ Never dashed: on this canvas a dash means DRAWN, NOT AUTHORED (Start/End, a pending link's preview, a connection
+   in flight, a running step), and a condition's exit is authored — dashed, it read as one more of those (reported 2026-09-30). */
+.react-flow__edge.edge-path path {
+  stroke: var(--path);
+}
+.react-flow__edge.edge-path.edge-dim path {
+  opacity: 0.35;
+}
+/* The hovered path's links FLOW: the line itself stays SOLID and lit, and a short glowing streak (`.edge-pulse`, a second path
+   drawn over it) travels source → target. Each link fades in, and its pulse starts, after the ones before it (`--flow-order`, its
+   source's place along the path), so the wave reads from start to finish. Off-path links keep the dim rule above. Last so it
+   wins over `.edge-boundary`'s dash at equal specificity. */
+.react-flow__edge path.react-flow__edge-path {
+  transition: opacity 220ms ease, stroke 220ms ease;
+}
+.react-flow__edge.edge-flowing path.react-flow__edge-path {
+  stroke: var(--accent);
+  stroke-width: 2;
+  stroke-dasharray: none;
+  opacity: 0.85;
+  animation: edge-flow-in 360ms ease-out both;
+  animation-delay: calc(var(--flow-order, 0) * 90ms);
+}
+.react-flow__edge path.edge-pulse {
+  stroke: color-mix(in srgb, var(--accent) 55%, white);
+  stroke-width: 3;
+  stroke-linecap: round;
+  /* The dash, its gap, the cycle and each link's slot are set per link (`pulseTiming`): ONE pulse travels the whole path, handed
+     on from link to link, and the offset moves one whole period per cycle, so the loop has no seam. Linear, so it never stalls. */
+  filter: drop-shadow(0 0 4px var(--accent)) drop-shadow(0 0 2px var(--accent));
+  pointer-events: none;
+  animation-name: edge-pulse-run;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+}
+@keyframes edge-flow-in {
+  from { opacity: 0; }
+  to { opacity: 0.85; }
+}
+@keyframes edge-pulse-run {
+  to { stroke-dashoffset: var(--pulse-end); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .react-flow__edge.edge-flowing path.react-flow__edge-path { animation: none; opacity: 1; }
+  .react-flow__edge path.edge-pulse { display: none; }
+}
+/* Ephemeral test pulsating — subtle Claude-style: 2s pulse, bg-accent/5, not 0.9s */
+.node-testing-pulse {
+  border-color: var(--accent) !important;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 12%, transparent), 0 0 12px color-mix(in srgb, var(--accent) 8%, transparent);
+  animation: node-pulse 2s ease-in-out infinite;
+  background: color-mix(in srgb, var(--accent) 5%, var(--surface));
+}
+@keyframes node-pulse {
+  0%, 100% { box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 12%, transparent), 0 0 8px color-mix(in srgb, var(--accent) 6%, transparent); }
+  50% { box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 8%, transparent), 0 0 16px color-mix(in srgb, var(--accent) 10%, transparent); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .node-testing-pulse { animation: none; }
+}
+/* ── Suggestion arrow nudge ───────────────────────────────────────────────
+   The suggestions disclosure arrow is accent-coloured and large enough to
+   read; it ROTATES open (one glyph, transform transition) instead of swapping
+   glyphs. While suggestions sit unopened its COLOUR pulses (opacity stays put
+   — the arrow never ghosts). Still once opened. */
+
+/* The suggestion list glides open/closed (grid-rows 0fr ⇄ 1fr) instead of
+   popping in — always mounted, height animates. */
+/* Closed: no border line, no gap — the row reads as just the disclosure. */
+
+/* ── The canvas context menu (2026-08-13) ─────────────────────────────────
+   The menu is a `pane` (bg-surface, border-line, rounded, shadow-raised) —
+   the mock's `.menu` anatomy (docs/ui-mock/index.html) — with one shared item
+   class. Text-sm to match the app's menus; the danger item keeps its own hue
+   so Delete reads as destructive before it is pressed. */
+.menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text);
+  font-size: 13px;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.menu-item:hover {
+  background: var(--surface-2);
+}
+.menu-item:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
+}
+.menu-item.text-danger {
+  color: var(--danger);
+}
+.menu-item.text-danger:hover {
+  color: var(--danger);
+  background: var(--danger-bg);
+}
+
+/* The armed-link modes (context-menu Connect/Reroute): the mode's subject
+   node and the hovered candidate get rings so the pending edge has two named
+   ends before the click. Colour is never the only carrier — the mode banner
+   above the graph says in words what the next click does. */
+.react-flow__node.node-link-source .react-flow__node-step,
+.react-flow__node.node-link-target .react-flow__node-step {
+  box-shadow: 0 0 0 2px var(--accent);
+}
+.react-flow__node.node-link-source {
+  cursor: crosshair;
+}
+/* A node mid-drag (B3.4): the dashed ring says "held", and the chip in the
+   canvas corner names the drop coordinates. Dashed, never solid — solid is
+   the armed-link ring above, and a drag is not a pending link. */
+.react-flow__node.node-dragging .react-flow__node-step {
+  box-shadow: 0 0 0 2px var(--accent);
+  outline: 2px dashed var(--accent);
+  outline-offset: 3px;
+}
+.react-flow__edge.edge-link-preview path {
+  stroke: var(--accent);
+  stroke-width: 2;
+  opacity: 0.9;
+}
+
+/* A palette row is dragging over the canvas — the dashed drop-target ring. */
+.flow-canvas.canvas-drop-target {
+  outline: 2px dashed var(--accent);
+  outline-offset: -6px;
+}
+
+/* The indeterminate generation bar on /flows/new. Indeterminate because the
+   number of fragment calls is unknown until the draft names its `code` steps —
+   see the Progress docblock. */
+@keyframes canvas-sweep {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(300%); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .animate-\[canvas-sweep_1\.4s_ease-in-out_infinite\] { animation: none; width: 100%; opacity: 0.4; }
+}
+/* ── Canvas ground — `.dot-grid` (flows/02 § Canvas layout, S-07) ────────────
+   20px radial dot grid in `--line-2` / `var(--line)`. The builder's canvas and
+   S-29's step grid both sit on it — spatial view ground vs card grid ground,
+   same texture. Pack states it as "This is canvas ground: a spatial view of a
+   workflow" (`02-design-language.md:172`). */
+.dot-grid {
+  background-color: var(--surface);
+  background-image: radial-gradient(var(--line) 1px, transparent 1px);
+  background-size: 20px 20px;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   The workbench — ui-upgrade Phase 6.1, D-105.
+
+   An input pane beside a canvas pane, one grid, four variants. It FOLDS to a
+   single column rather than squeezing: a canvas narrower than three nodes is
+   worse than a canvas under the input (I-72), and a graph zoomed until it is
+   unreadable is not an error state — it produces no warning and looks
+   deliberate (I-88 is the record of that shipping).
+
+   ⚠ Mobile-first, so the FOLDED layout is the default and each variant opts
+   into its columns at its own min-width. That ordering matters: a new variant
+   with no breakpoint folds, which is the safe direction. A max-width version
+   would leave it side-by-side at every width, which is the failure.
+
+   ⚠ **The numbers below are DERIVED and `lib/workbench.test.ts` proves
+   it.** They are `PANES[variant] + MIN_CANVAS_W + SHELL_CHROME` from
+   `lib/workbench.ts` — 904px of canvas, the panes beside it, and the 120px the
+   collapsed rail (56px, pack 04, D-146 updated) and page padding take first. A media query is static
+   text so the computed value cannot be interpolated here; the test parses this
+   file and compares. Change a pane width or NODE_W and it goes red.
+   ══════════════════════════════════════════════════════════════════════════ */
+.workbench {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  border: 1px solid var(--line);
+  /* 12px — `borderRadius.lg` in tailwind.config.ts, the same value `rounded-lg`
+     resolves to. There is no `--radius` token; the two other rules in this file
+     write the literal too. */
+  border-radius: 12px;
+  background: var(--surface);
+  /* Collapse/expand glides via the shared transition below (2-track ⇄ 2-track
+     interpolates; a 2-track ⇄ 3-track change could not animate — the closed
+     rules keep the track count for this reason). */
+}
+
+/* ⚠ No `min-height` on the grid, deliberately. The canvas brings its own height
+   from its DENSITY (D-102), which is the one place a canvas's height is decided;
+   a minimum here as well would be a second owner, and the two would disagree the
+   first time a density changed — leaving a band of empty surface nobody chose. */
+
+.wb-pane {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  /* Folded: the panes stack, so they are divided horizontally. */
+  border-bottom: 1px solid var(--line);
+}
+.wb-pane:last-child { border-bottom: 0; }
+
+@media (min-width: 1424px) {
+  .workbench.wb-compose { grid-template-columns: 400px minmax(0, 1fr); }
+  .workbench.wb-compose .wb-pane { border-bottom: 0; border-right: 1px solid var(--line); }
+  .workbench.wb-compose .wb-pane:last-child { border-right: 0; }
+}
+
+/* ⚠ The chat inspector is a STATE, not a second variant — same fold (the
+   breakpoint is derived from the base 400px chat pane), the inspector's 296px
+   column appearing only while a node is selected. See `PANES.chat`.
+   720 = D-13 rev.2: chat sits BESIDE the canvas in every desktop viewport
+   (including narrow embedded previews); only mobile folds.
+   ⚠ `grid-template-rows: minmax(0, 1fr)` pins the single row to the grid's
+   own height (the immersive `body.wb` height is `calc(100vh - topbar)`), so
+   the panes get a definite height and their bodies scroll INTERNALLY. Without
+   it an auto row grows to the tallest pane's content — the manual palette is
+   ~1900px of catalogue rows — which clips every pane at the viewport bottom
+   and leaves the palette's lower rows unreachable. */
+@media (min-width: 708px) {
+  /* ⚠ TWO COLUMNS, NOT THREE (canvas-2026-09-02 CD-5). The third was a 320px
+     inspector held whether or not a step was selected — resident chrome whose
+     resting state was a "Details" placeholder (CX-009), in the mode that is the
+     DEFAULT. The step panel is an overlay on the canvas pane now, so it costs
+     no column and the canvas does not resize when it opens. */
+  .workbench.wb-chat { grid-template-columns: var(--chat-w, 400px) minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); }
+  .workbench.wb-chat.with-inspector { grid-template-columns: var(--chat-w, 400px) minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); }
+  .workbench.wb-chat.with-output { grid-template-columns: var(--chat-w, 400px) minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); }
+  .workbench.wb-chat.with-inspector.with-output { grid-template-columns: var(--chat-w, 400px) minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); }
+  .workbench.wb-chat .wb-pane { border-bottom: 0; border-right: 1px solid var(--line); }
+  .workbench.wb-chat .wb-pane:last-child { border-right: 0; }
+}
+@media (min-width: 628px) {
+  .workbench.wb-builder { grid-template-columns: minmax(0, 1fr) 320px; grid-template-rows: minmax(0, 1fr); }
+  .workbench.wb-builder.with-output { grid-template-columns: minmax(0, 1fr) 320px; grid-template-rows: minmax(0, 1fr); }
+  .workbench.wb-builder.panel-collapsed { grid-template-columns: minmax(0, 1fr); }
+  .workbench.wb-builder.panel-collapsed.with-output { grid-template-columns: minmax(0, 1fr); }
+  .workbench.wb-builder .wb-pane { border-bottom: 0; border-right: 1px solid var(--line); }
+  .workbench.wb-builder .wb-pane:last-child { border-right: 0; }
+}
+@media (max-width: 707px) {
+  .workbench.wb-chat.with-output { display: flex; flex-direction: column; }
+  .workbench.wb-chat.with-output .wb-pane[data-output-drawer] {
+    border-top: 1px solid var(--line);
+    border-right: 0;
+    max-height: 50vh;
+    width: 100% !important;
+  }
+}
+@media (max-width: 627px) {
+  .workbench.wb-builder.with-output,
+  .workbench.wb-builder { display: flex; flex-direction: column; }
+  .workbench.wb-builder [data-inspector],
+  .workbench.wb-builder.with-output [data-inspector] {
+    border-top: 1px solid var(--line);
+    border-right: 0;
+    max-height: 50vh;
+    width: 100% !important;
+  }
+}
+
+/* 800 = D-13 rev.2: palette+inspector beside the canvas in every desktop
+   viewport; only mobile folds. Same pinned row as the chat variant — the
+   palette content must never dictate the grid's height (see above). */
+@media (min-width: 788px) {
+  .workbench.wb-inspector { grid-template-columns: 196px minmax(0, 1fr) 268px; grid-template-rows: minmax(0, 1fr); }
+  .workbench.wb-inspector .wb-pane { border-bottom: 0; border-right: 1px solid var(--line); }
+  .workbench.wb-inspector .wb-pane:last-child { border-right: 0; }
+}
+
+@media (min-width: 1070px) {
+  .workbench.wb-canvasOnly { grid-template-columns: 46px minmax(0, 1fr); }
+  .workbench.wb-canvasOnly .wb-pane { border-bottom: 0; border-right: 1px solid var(--line); }
+  .workbench.wb-canvasOnly .wb-pane:last-child { border-right: 0; }
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   The visual system — Phase 2b, task 2b.2 (D-162). One anatomy the three mode
+   surfaces compose from, never from per-surface literals. 2b.3 (manual builder
+   + DAG) and 2b.4 (flow/run pages) build on these classes; the mode briefs in
+   `plans/frontend-2026-08-12/phase-2b-mode-surfaces/decisions.md` (D-159/160/161)
+   say how each surface uses them.
+
+   The card/pane idiom used to be spelled `rounded-lg border border-line p-4`
+   (some with `bg-surface`) in a dozen files, so "the same panel" could drift
+   between surfaces. One class each for the box and the section head.
+
+   ⚠ I-167 — these live in `@layer components` so Tailwind utilities (which sit
+   in the later `utilities` layer) can still override them. `.pane` as unlayered
+   CSS would silently beat a `hover:bg-surface-2` utility on the same element —
+   interactive panes could never respond to hover. `@layer components` is exactly
+   the layer a reusable component class belongs in.
+   ══════════════════════════════════════════════════════════════════════════ */
+@layer components {
+  .pane {
+    border-radius: 12px;
+    border: 1px solid var(--line);
+    background: var(--surface);
+  }
+  .pane-head {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--dim);
+  }
+  /* ── Card / pane separation (workflow-UX redesign) ─────────────────────
+     The node card and the summoned step pane read the `--card-*` role tokens
+     rather than the generic surface/line pair, so both themes segment
+     card-from-ground instead of going bland. Opaque on purpose: band 2 of
+     the depth scale below is translucent, which over the canvas dot grid
+     reads as noise rather than depth. Placed BEFORE the status rules so a
+     build state still wins over surface — and the selected `border-accent`
+     utility (utilities layer) wins over both. */
+  .node-card {
+    background: var(--card-bg);
+    border-color: var(--card-border);
+    box-shadow: 0 10px 28px -14px var(--card-shadow);
+  }
+  .step-pane {
+    background: var(--card-bg);
+    border-color: var(--card-border);
+    box-shadow: 0 16px 40px -16px var(--card-shadow);
+  }
+
+  /* ── Node-card status language (Langflow, D-161) ───────────────────────
+     A node's border/ring encodes its build state — ready, busy, needs attention.
+     Composed from the semantic tokens (`--ok`/`--alpha`/`--warn`) so a status
+     can never invent a hue the app does not already mean. Applied by 2b.3's node
+     card. */
+  .node-status-ok { border-color: var(--ok); box-shadow: 0 0 0 1px var(--ok); }
+  .node-status-busy { border-color: var(--alpha); box-shadow: 0 0 0 1px var(--alpha); }
+  .node-status-attn { border-color: var(--warn); box-shadow: 0 0 0 1px var(--warn); }
+
+  /* ── Edge build-state colouring (Langflow, D-161) ──────────────────────
+     An edge can carry its step's run/validation state rather than always being
+     neutral `--line`. Same vocabulary as the node statuses above. */
+  .react-flow__edge.edge-ok path { stroke: var(--ok); }
+  .react-flow__edge.edge-attn path { stroke: var(--warn); }
+
+  /* ── 7-layer depth/glass scale (chat builder) ──────────────────────────
+     Each step raises translucency, blur and shadow together. z-index is set
+     at the call site (it is contextual). Bands: 1 ground · 2 card · 3 pane ·
+     4 controls · 5 sticky head · 6 overlay · 7 floating. */
+  /* Each level LIGHTER than the one below (tonal elevation, --elev-*); the blurred levels stay nearly opaque so the
+     tone, not what shows through, is what reads. Shadows remain for light mode, where they show. */
+  .depth-1 { background: var(--elev-1); }
+  .depth-2 { background: var(--elev-2); box-shadow: 0 4px 16px -10px var(--shadow); }
+  .depth-3 { background: var(--elev-2); box-shadow: 0 6px 20px -12px var(--shadow); }
+  .depth-4 {
+    background: color-mix(in srgb, var(--elev-3) 94%, transparent);
+    -webkit-backdrop-filter: blur(6px);
+    backdrop-filter: blur(6px);
+    box-shadow: inset 0 1px 0 var(--edge-light), 0 2px 10px -6px var(--shadow);
+  }
+  .depth-5 {
+    background: color-mix(in srgb, var(--elev-3) 94%, transparent);
+    -webkit-backdrop-filter: blur(12px);
+    backdrop-filter: blur(12px);
+    box-shadow: inset 0 1px 0 var(--edge-light), 0 4px 18px -10px var(--shadow);
+  }
+  .depth-6 {
+    background: color-mix(in srgb, var(--elev-4) 94%, transparent);
+    -webkit-backdrop-filter: blur(12px);
+    backdrop-filter: blur(12px);
+    box-shadow: inset 0 1px 0 var(--edge-light), 0 16px 40px -16px var(--shadow);
+  }
+  .depth-7 {
+    background: color-mix(in srgb, var(--elev-4) 96%, transparent);
+    -webkit-backdrop-filter: blur(16px);
+    backdrop-filter: blur(16px);
+    box-shadow: inset 0 1px 0 var(--edge-light), 0 24px 56px -20px var(--shadow);
+  }
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+   Loading skeletons — footprint-stable (mock D-16)
+   The skeleton occupies the EXACT footprint of the content that is coming;
+   a spinner that reflows the layout is a jump, not a wait. Rendered via
+   `components/ui/Skeleton.tsx`; the bars here are the shared shape.
+   Widths cycle wide/mid/narrow (42/26/14%) so a table reads as rows, not a
+   solid slab. `prefers-reduced-motion` kills the shimmer.
+   ════════════════════════════════════════════════════════════════════════ */
+@layer components {
+  .skel-bar {
+    height: 14px;
+    border-radius: 4px;
+    background: var(--surface-2);
+    position: relative;
+    overflow: hidden;
+  }
+  .skel-bar::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    transform: translateX(-100%);
+    background: linear-gradient(90deg, transparent, var(--line), transparent);
+    animation: skel-shimmer 1.2s var(--ease) infinite;
+  }
+  @keyframes skel-shimmer {
+    100% { transform: translateX(100%); }
+  }
+  .skel-bar:nth-child(3n + 1) { width: 42%; }
+  .skel-bar:nth-child(3n + 2) { width: 26%; }
+  .skel-bar:nth-child(3n + 3) { width: 14%; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .skel-bar::after { animation: none; }
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+   Creation surfaces are immersive workbenches (mock `body.wb`, D-27)
+   The mock's /flows/new workbenches own the whole surface under the topbar:
+   the shell inset and scroll go away, the alpha disclosure hides (the rail
+   logo carries the Alpha tag in the mock), and the workbench grid fills the
+   viewport height. The folds still apply — the columns are the design, the
+   fold is the narrow-window exit (D-13). Toggled by the page's own effect,
+   exactly the way the mock's router toggles `body.wb`.
+   ════════════════════════════════════════════════════════════════════════ */
+body.wb .shell-scroll { overflow: hidden; }
+body.wb main { height: 100%; padding: 0; }
+body.wb .workbench {
+  height: calc(100vh - var(--topbar));
+  border: 0;
+  border-radius: 0;
+  background: var(--bg);
+}
+body.wb .workbench .flow-canvas { border: 0; border-radius: 0; }
+
+/* ⚠ The builder route carries a breadcrumb + mode-toggle bar ABOVE its
+   workbench, which `/flows/new` does not. So `body.wb`'s flat
+   `height: calc(100vh - var(--topbar))` would push the workbench past the
+   viewport by exactly that bar's height. Here the ROUTE owns a definite height
+   and the workbench fills what is left of it — which is what makes the grid's
+   `minmax(0, 1fr)` row resolve, and therefore what lets React Flow measure a
+   viewport at first paint instead of only after a resize (`UXI-022`). */
+/* Builder route owns viewport height ( breadcrumb + workbench ); workbench fills remainder via flex, not double calc */
+.builder-route { min-height: calc(100vh - var(--topbar)); display: flex; flex-direction: column; }
+body.wb .builder-route { height: calc(100vh - var(--topbar)); display: flex; flex-direction: column; }
+.builder-route .workbench { flex: 1 1 0; min-height: 0; height: 100%; }
+body.wb .builder-route .workbench { flex: 1 1 0; min-height: 0; height: 100%; }
+/* Chat workbench standalone (e.g. /flows/new compose) also fills via flex parent — no extra calc half */
+.workbench.wb-chat { flex: 1 1 0; min-height: 0; height: 100%; }
+/* ── Premium smooth transitions for creation — viewTransition + fallback (200ms ease premium feel) ───
+   Approach -> chat/canvas, chat <-> manual, builder toggles: viewTransition when available,
+   else CSS opacity/translate 200ms. Workbench panes + canvas container animate. */
+.workbench, .wb-pane, .flow-canvas {
+  transition: opacity 200ms var(--ease), transform 200ms var(--ease), border-color 200ms var(--ease), background-color 200ms var(--ease), grid-template-columns 200ms var(--ease);
+}
+/* Fallback for browsers without viewTransition — Workbench/Compose container fades */
+@supports not (view-transition-name: root) {
+  [style*="viewTransitionName"] {
+    animation: foundry-panel-in 200ms var(--ease) both;
+  }
+  @keyframes foundry-panel-in {
+    from { opacity: 0; transform: translateY(4px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+}
+/* View Transitions API — 200ms ease, premium feel per design.md motion */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 200ms;
+  animation-timing-function: var(--ease);
+}
+::view-transition-old(workbench),
+::view-transition-new(workbench),
+::view-transition-old(approach-cards),
+::view-transition-new(approach-cards),
+::view-transition-old(compose-panel),
+::view-transition-new(compose-panel) {
+  animation-duration: 200ms;
+  animation-timing-function: var(--ease);
+}
+@media (prefers-reduced-motion: reduce) {
+  .workbench, .wb-pane, .flow-canvas, [style*="viewTransitionName"] {
+    transition-duration: 0.001ms !important;
+    animation-duration: 0.001ms !important;
+  }
+}
+/* ── Collapsible panes (D-28) ─────────────────────────────────────────────
+   A closed pane collapses to a 36px rail — the grid column shrinks, the pane
+   renders only the vertical expand button. Combined with the with-inspector
+   state and the manual palette, so each side pane closes independently.
+   Same media blocks as the base variants so the fold rules stay the floor. */
+.pane-rail {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  height: 100%;
+  width: 100%;
+  border: 0;
+  background: var(--surface);
+  color: var(--muted);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  transition: background var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
+}
+.pane-rail:hover { background: var(--surface-2); color: var(--text); }
+.pane-rail span {
+  writing-mode: vertical-rl;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 10px;
+}
+
+@media (min-width: 720px) {
+  /* ⚠ TWO TRACKS, not three. The inspector is an overlay inside the canvas
+     pane (CD-5), not a grid child — these rules still reserved its old
+     resident 320px/36px column, so collapsing the chat left a void on the
+     right and the page read as shifted left. The chat rail keeps its 36px. */
+  .workbench.wb-chat.chat-closed { grid-template-columns: 36px minmax(0, 1fr); }
+  .workbench.wb-chat.with-inspector.chat-closed { grid-template-columns: 36px minmax(0, 1fr); }
+  .workbench.wb-chat.with-inspector.inspector-closed { grid-template-columns: var(--chat-w, 400px) minmax(0, 1fr); }
+  .workbench.wb-chat.with-inspector.chat-closed.inspector-closed { grid-template-columns: 36px minmax(0, 1fr); }
+  /* Output drawer toggle — collapses to 36px rail when output-closed, mirrors chat/inspector. 4-pane when inspector + output both open. */
+  .workbench.wb-chat.with-output.output-closed { grid-template-columns: var(--chat-w, 400px) minmax(0, 1fr) 36px; }
+  .workbench.wb-chat.chat-closed.with-output.output-closed { grid-template-columns: 36px minmax(0, 1fr) 36px; }
+  .workbench.wb-chat.with-inspector.with-output { grid-template-columns: var(--chat-w, 400px) minmax(0, 1fr) 296px 320px; }
+  .workbench.wb-chat.with-inspector.with-output.output-closed { grid-template-columns: var(--chat-w, 400px) minmax(0, 1fr) 296px 36px; }
+  .workbench.wb-chat.with-inspector.with-output.inspector-closed { grid-template-columns: var(--chat-w, 400px) minmax(0, 1fr) 36px 320px; }
+  .workbench.wb-chat.with-inspector.with-output.inspector-closed.output-closed { grid-template-columns: var(--chat-w, 400px) minmax(0, 1fr) 36px 36px; }
+  .workbench.wb-chat.with-inspector.with-output.chat-closed { grid-template-columns: 36px minmax(0, 1fr) 296px 320px; }
+  .workbench.wb-chat.with-inspector.with-output.chat-closed.output-closed { grid-template-columns: 36px minmax(0, 1fr) 296px 36px; }
+  .workbench.wb-chat.with-inspector.with-output.chat-closed.inspector-closed { grid-template-columns: 36px minmax(0, 1fr) 36px 320px; }
+  .workbench.wb-chat.with-inspector.with-output.chat-closed.inspector-closed.output-closed { grid-template-columns: 36px minmax(0, 1fr) 36px 36px; }
+}
+/* ⚠ `.wb-builder.panel-collapsed` HAD NO RULE, and `BuilderShell` has been
+   passing the class since it was written (`UXI-021`). The pane was unmounted on
+   "Hide panel" while the grid kept reserving its 400px column, so the canvas did
+   not expand and a 400px empty band appeared instead — the control looked broken
+   rather than absent. Its siblings two rules up (`.chat-closed`,
+   `.inspector-closed`) are the pattern it was missing. */
+@media (min-width: 720px) {
+  .workbench.wb-builder.panel-collapsed { grid-template-columns: minmax(0, 1fr); }
+}
+@media (min-width: 800px) {
+  .workbench.wb-inspector.palette-closed { grid-template-columns: 36px minmax(0, 1fr) 268px; }
+  .workbench.wb-inspector.inspector-closed { grid-template-columns: 196px minmax(0, 1fr) 36px; }
+  .workbench.wb-inspector.palette-closed.inspector-closed { grid-template-columns: 36px minmax(0, 1fr) 36px; }
+}
+
+/* ── Palette group accordion (D-28): a collapsible group head, sub-group
+   headers indented under it. Chevron rotates on the fast duration. */
+
+/* ── Chat content — ChatGPT/Claude smooth entrance ─────── */
+@keyframes chatIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes claudeDots {
+  0%, 80%, 100% { transform: translateY(0); opacity: 0.3; }
+  40% { transform: translateY(-4px); opacity: 1; }
+}
+@keyframes typing {
+  from { width: 0; }
+  to { width: 100%; }
+}
+/* ── Thinking indicator: the avatar breathes while the reply is in flight. The
+   braille glyph already spins via JS frames; the ring pulse is the second,
+   slower motion. Reduced-motion keeps the words and drops both motions. */
+
+/* ── Forge's working line (2026-10-11): one sentence in the reply's own type, a light sweeping across it — no caps,
+   no dots, no spinner glyph. Reduced motion keeps the sentence still. */
+.think-shimmer {
+  background: linear-gradient(90deg, var(--muted) 0%, var(--muted) 40%, var(--text) 50%, var(--muted) 60%, var(--muted) 100%);
+  background-size: 250% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: think-shimmer 2.2s linear infinite;
+}
+@keyframes think-shimmer {
+  from { background-position: 100% 0; }
+  to { background-position: -150% 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .think-shimmer { animation: none; color: var(--muted); background: none; }
+}
+/* ── The working line's phrases (2026-10-29, ThinkingBlock.tsx `WorkingLine`): both texts share one grid cell, so the
+   new one comes in exactly where the old one leaves. Out: lifts and dissolves into a blur. In: rises from below, comes
+   into focus, and a soft edge reveals it left to right. Reduced motion: the text simply changes. */
+.wl-stage { display: grid; overflow: hidden; }
+.wl-stage > span { grid-area: 1 / 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wl-out { animation: wl-out 380ms cubic-bezier(.4, 0, .6, 1) forwards; pointer-events: none; }
+.wl-in {
+  animation: wl-in 620ms cubic-bezier(.16, 1, .3, 1) both;
+  -webkit-mask-image: linear-gradient(90deg, #000 45%, transparent 65%);
+  mask-image: linear-gradient(90deg, #000 45%, transparent 65%);
+  -webkit-mask-size: 300% 100%;
+  mask-size: 300% 100%;
+}
+@keyframes wl-out {
+  from { opacity: 1; transform: translateY(0); filter: blur(0); }
+  to { opacity: 0; transform: translateY(-0.55em); filter: blur(4px); }
+}
+@keyframes wl-in {
+  from { opacity: 0; transform: translateY(0.55em); filter: blur(5px); -webkit-mask-position: 100% 0; mask-position: 100% 0; }
+  60% { opacity: 1; filter: blur(0); }
+  to { opacity: 1; transform: translateY(0); filter: blur(0); -webkit-mask-position: 0 0; mask-position: 0 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .wl-out { display: none; }
+  .wl-in { animation: none; -webkit-mask-image: none; mask-image: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .animate-\[chatIn_180ms_ease\] { animation: none; }
+}
+/* ── A reply is written out as it arrives (2026-10-03, `stream-reveal.tsx`): a soft cursor at the leading edge of the words,
+   and each block (a list row, a section, the starter chips) rising in as the text reaches it. Reduced motion: no clock runs. */
+
+/* ── Route-change entrance: one 180ms slide-fade per page. Opacity +
+   translateY are compositor-only — no layout, no paint, no jank on
+   low-end machines. Skipped for the immersive workbench (it owns its
+   view-transition) and under reduced-motion. */
+.page-enter {
+  animation: page-enter 180ms ease-out;
+}
+@keyframes page-enter {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+body.wb .page-enter {
+  animation: none;
+  /* ⚠ Load-bearing: `body.wb main` is `height: 100%` and the workbench below
+   * is `h-full` — this wrapper sits between them, so without its own height
+   * the chain collapses and the workbench paints zero pixels (black hole
+   * under the Draft bar). Flex column + min-height: 0 keeps the handoff. */
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+@media (prefers-reduced-motion: reduce) {
+  .page-enter { animation: none; }
+}
+
+/* ── The flow being BUILT (phase 4, D-247; `lib/canvas-reveal.ts`) ─────────────
+   ⚠ The entrance animates the INDIVIDUAL `translate`/`scale` properties, never
+   `transform`: React Flow positions every node by `transform` on this same
+   wrapper, and a keyframe on it would teleport the card to the origin. The
+   per-element delay arrives inline (`animation-delay`) and overrides only the
+   delay here. */
+@keyframes fc-node-in {
+  from { opacity: 0; translate: 0 10px; scale: 0.96; }
+  to   { opacity: 1; translate: 0 0;    scale: 1; }
+}
+.react-flow__node.fc-node-enter {
+  animation: fc-node-in 380ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+/* A link draws itself from its source. 1600 is longer than any edge a canvas
+   of this size lays out, so the dash covers the whole path. */
+@keyframes fc-edge-draw {
+  0%   { stroke-dashoffset: 1600; opacity: 0; }
+  12%  { opacity: 1; }
+  100% { stroke-dashoffset: 0; opacity: 1; }
+}
+.react-flow__edge.fc-edge-enter .react-flow__edge-path {
+  stroke-dasharray: 1600;
+  animation: fc-edge-draw 560ms cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+/* The outline stage: chosen, not yet wired. Dashed and a little quiet, with a
+   slow light passing over — and it turns solid in place when the wiring lands
+   (`node-card` already transitions). */
+.fc-node-sketch .node-card {
+  border-style: dashed;
+  opacity: 0.88;
+}
+.fc-node-sketch .node-card::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(100deg, transparent 30%, rgb(255 255 255 / 0.07) 50%, transparent 70%);
+  background-size: 250% 100%;
+  animation: fc-sketch-sheen 1.8s ease-in-out infinite;
+}
+@keyframes fc-sketch-sheen {
+  from { background-position: 120% 0; }
+  to   { background-position: -120% 0; }
+}
+.fc-building-bar > div {
+  animation: canvas-sweep 1.4s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .react-flow__node.fc-node-enter,
+  .react-flow__edge.fc-edge-enter .react-flow__edge-path,
+  .fc-node-sketch .node-card::after,
+  .fc-building-bar > div {
+    animation: none !important;
+  }
+  .react-flow__edge.fc-edge-enter .react-flow__edge-path { stroke-dasharray: none; }
+}
+
+/* A loop's box on the canvas (phase F): a tinted panel with a header strip — the steps inside run once per item. color-mix, because
+   Tailwind cannot put an opacity on a hex CSS variable (the old `bg-[color:var(--k-transform)]/5` drew no fill at all). */
+.loop-frame {
+  /* Light, and mostly opaque: a step outside the loop that passes behind the box shows through it faded — the box is its own space. */
+  background: color-mix(in srgb, color-mix(in srgb, var(--k-loop) 5%, var(--bg)) 86%, transparent);
+  border: 1.5px solid color-mix(in srgb, var(--k-loop) 30%, transparent);
+}
+.loop-frame[data-tone="warn"] { border-color: color-mix(in srgb, var(--warn) 60%, transparent); }
+.loop-frame[data-tone="danger"] { border-color: color-mix(in srgb, var(--danger) 60%, transparent); }
+.loop-frame-head {
+  background: color-mix(in srgb, var(--k-loop) 10%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--k-loop) 22%, transparent);
+  color: var(--k-loop);
+}
+
+/* ── Forge canvas (PiFlowCanvas, 2026-10-11) ──────────────────────────────────────────────────────────────────
+   Named ports, data links, loop frames. Small, quiet port dots; links outside every loop sit UNDER the frames so
+   they read faded where they pass behind one. */
+.pic-canvas {
+  background-color: var(--bg);
+  background-image: radial-gradient(var(--dots) 1px, transparent 1px);
+  background-size: 22px 22px;
+  cursor: grab;
+}
+.pic-canvas:active { cursor: grabbing; }
+.pic-world { position: relative; transform-origin: 0 0; transition: transform 0.22s cubic-bezier(0.2, 0.8, 0.2, 1); will-change: transform; }
+.pic-canvas.panning { cursor: grabbing; }
+.pic-wires { position: absolute; left: 0; top: 0; overflow: visible; pointer-events: none; z-index: 1; }
+.pic-wires.back { z-index: 0; }
+.pic-wire { fill: none; stroke-width: 1.6; transition: stroke-width 0.15s, opacity 0.15s; }
+.pic-wire.data { stroke: color-mix(in srgb, var(--accent) 65%, transparent); }
+.pic-wire.path { stroke: color-mix(in srgb, var(--path) 70%, transparent); }
+.pic-wire.order { stroke: var(--dim); stroke-dasharray: 4 5; opacity: 0.55; }
+.pic-wire.hot { stroke-width: 2.6; opacity: 1; }
+.pic-wlabel { font: 500 10.5px var(--font-mono, ui-monospace, monospace); fill: var(--muted); }
+.pic-wlabel-bg { fill: var(--bg); }
+
+.pic-frame {
+  position: absolute; z-index: 1; pointer-events: none;
+  border: 1.5px dashed color-mix(in srgb, var(--k-loop) 40%, var(--line));
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--k-loop) 4%, color-mix(in srgb, var(--bg) 80%, transparent));
+  backdrop-filter: blur(1.5px);
+}
+.pic-frame-label {
+  position: absolute; top: -11px; left: 16px; max-width: calc(100% - 32px);
+  padding: 0 8px; background: var(--bg); color: var(--k-loop);
+  font-size: 11.5px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+.pic-node {
+  position: absolute; z-index: 2; width: 244px; cursor: pointer; user-select: none;
+  border-radius: 12px; background: var(--card-bg); border: 1px solid var(--card-border);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.08), 0 8px 24px -16px var(--card-shadow);
+  transition: border-color 0.15s, box-shadow 0.2s, transform 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.pic-node:hover { border-color: var(--accent-line); transform: translateY(-1px); }
+.pic-node.sel { border-color: var(--accent); box-shadow: 0 0 0 4px var(--accent-bg), 0 10px 30px -14px var(--card-shadow); }
+.pic-node:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.pic-head { display: flex; gap: 10px; align-items: flex-start; padding: 11px 12px 10px; }
+.pic-ico { flex: none; display: grid; place-items: center; width: 26px; height: 26px; border-radius: 8px; }
+.k-code .pic-ico { background: color-mix(in srgb, var(--k-code) 15%, transparent); color: var(--k-code); }
+.k-approval .pic-ico { background: color-mix(in srgb, var(--k-approval) 15%, transparent); color: var(--k-approval); }
+.k-branch .pic-ico { background: color-mix(in srgb, var(--path) 15%, transparent); color: var(--path); }
+.k-io .pic-ico { background: var(--sunken); color: var(--muted); }
+.pic-title {
+  font-size: 13px; line-height: 1.35; font-weight: 500; color: var(--text);
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+.pic-sub { margin-top: 2px; font: 11px var(--font-mono, ui-monospace, monospace); color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.pic-ports { border-top: 1px solid var(--line); padding: 4px 0 8px; }
+.pic-ptitle { padding: 5px 12px 2px; font-size: 10px; font-weight: 500; letter-spacing: 0.07em; text-transform: uppercase; color: var(--dim); }
+.pic-port {
+  position: relative; display: flex; align-items: center; gap: 6px; width: 100%;
+  padding: 2px 12px; font: 11px var(--font-mono, ui-monospace, monospace); color: var(--muted);
+  background: none; border: 0; text-align: left;
+}
+.pic-port > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pic-port.in, .pic-port.out { cursor: help; }
+.pic-port.in:hover, .pic-port.out:hover { color: var(--text); background: color-mix(in srgb, var(--accent) 7%, transparent); }
+.pic-port.out { justify-content: flex-end; }
+.pic-port.in::before, .pic-port.out::after {
+  content: ""; position: absolute; top: 50%; width: 6px; height: 6px; border-radius: 50%;
+  background: color-mix(in srgb, var(--accent) 50%, var(--card-bg)); box-shadow: 0 0 0 2px var(--card-bg);
+  transform: translateY(-50%); transition: background 0.15s;
+}
+.pic-port.in::before { left: -4px; }
+.pic-port.out::after { right: -4px; }
+.pic-port.path { font-family: inherit; font-size: 11.5px; color: var(--text); padding: 3px 12px; justify-content: flex-start; }
+.pic-port.path b { color: var(--path); font-weight: 600; flex: none; }
+.pic-port.path::after { background: color-mix(in srgb, var(--path) 55%, var(--card-bg)); }
+.pic-node:hover .pic-port.in::before, .pic-node:hover .pic-port.out::after,
+.pic-node.sel .pic-port.in::before, .pic-node.sel .pic-port.out::after { background: var(--accent); }
+.pic-node:hover .pic-port.path::after, .pic-node.sel .pic-port.path::after { background: var(--path); }
+.pic-port.hidden { height: 0; padding: 0; overflow: hidden; }
+.pic-port.more { font-family: inherit; color: var(--dim); cursor: pointer; }
+.pic-port.more:hover { color: var(--accent); }
+.pic-port.set { color: var(--text); }
+.pic-port.set .v { margin-left: auto; color: var(--dim); max-width: 55%; }
+
+.pic-tip {
+  position: absolute; z-index: 20; pointer-events: none; max-width: 260px;
+  padding: 6px 9px; border-radius: 8px; background: var(--text); color: var(--bg);
+  font-size: 11.5px; line-height: 1.4; animation: pic-tip-in 0.12s ease-out;
+}
+@keyframes pic-tip-in { from { opacity: 0; transform: translateY(4px); } }
+.pic-zoom, .pic-legend {
+  position: absolute; bottom: 14px; display: flex; align-items: center;
+  background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 10px;
+}
+.pic-zoom { left: 14px; gap: 2px; padding: 3px; }
+.pic-zoom button { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 7px; color: var(--muted); }
+.pic-zoom button:hover { background: var(--sunken); color: var(--text); }
+.pic-legend { right: 14px; gap: 14px; padding: 7px 12px; font-size: 11.5px; color: var(--muted); }
+.pic-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.pic-legend i { width: 18px; border-top: 2px solid var(--accent); }
+.pic-legend i.p { border-top-color: var(--path); }
+.pic-legend i.o { border-top: 2px dashed var(--dim); }
+@media (prefers-reduced-motion: reduce) {
+  .pic-world, .pic-node, .pic-wire { transition: none; }
+}
+
+/* ── Forge's right pane (PiSidePane, 2026-10-11): floats inside the canvas with a margin on every side ───────── */
+.pis-pane {
+  position: absolute; top: 12px; right: 12px; bottom: 12px; z-index: 15; width: min(440px, calc(100% - 24px));
+  display: flex; flex-direction: column; min-height: 0; overflow: hidden;
+  background: var(--surface); border: 1px solid var(--card-border); border-radius: 14px;
+  box-shadow: 0 24px 60px -28px var(--shadow), 0 2px 8px -4px var(--shadow);
+  transform: translateX(calc(100% + 24px)); opacity: 0;
+  transition: transform 0.32s cubic-bezier(0.2, 0.8, 0.2, 1), opacity 0.2s, width 0.32s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.pis-pane.open { transform: none; opacity: 1; }
+.pis-pane.wide { width: min(760px, calc(100% - 24px)); }
+/* The explorer (2026-10-28): the files in the canvas's column on their own, the canvas folded. It fills the column. */
+/* The Files view's ONE bar (2026-10-28): the list's head and the open file's toolbar sit in the same 44px row, so
+   the pane has a single bar under the page's own, not three. */
+.pis-bar { flex: none; display: flex; align-items: center; gap: 8px; height: 44px; padding: 0 8px 0 10px; border-bottom: 1px solid var(--line); background: var(--surface); }
+.pis-tree { display: flex; flex-direction: column; min-height: 0; overflow: hidden; padding: 0; }
+.pis-tree > .pis-bar { background: transparent; }
+.pis-tree-scroll { flex: 1; min-height: 0; overflow-y: auto; padding: 4px 0 12px; }
+.pis-name { display: inline-flex; align-items: center; gap: 7px; min-width: 0; font-size: 12.5px; }
+.pis-meta { flex: none; margin-left: 4px; font-size: 11px; color: var(--dim); }
+.pis-sep { width: 1px; height: 18px; margin: 0 4px; background: var(--line); }
+.pis-pick { display: inline-flex; align-items: center; gap: 7px; max-width: 100%; min-width: 0; height: 30px; padding: 0 8px; border-radius: 7px; font-size: 13px; font-weight: 500; color: var(--text); }
+.pis-pick:hover, .pis-pick[aria-expanded="true"] { background: var(--surface-2); }
+.pis-count { flex: none; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: var(--sunken); font-size: 10.5px; line-height: 18px; text-align: center; color: var(--muted); }
+.pis-menu { position: absolute; top: calc(100% + 6px); left: 0; z-index: 30; width: min(420px, 80vw); max-height: 60vh; overflow-y: auto; padding: 4px 0 0; background: var(--surface); border: 1px solid var(--card-border); border-radius: 10px; box-shadow: 0 18px 44px -20px var(--shadow), 0 2px 6px -3px var(--shadow); }
+.pis-mrow { display: flex; align-items: center; gap: 6px; height: 34px; margin: 0 4px; padding: 0 4px 0 8px; border-radius: 6px; font-size: 12.5px; color: var(--text); }
+.pis-mrow:hover { background: var(--surface-2); }
+.pis-mrow.on { background: var(--accent-bg); }
+/* Full screen (2026-10-28), like a file preview in Google Drive: the app dimmed and blurred behind, the controls light on
+   the dark, the file a large card in the middle. The colours are fixed, not themed: the backdrop is dark in both. */
+@keyframes pis-full-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes pis-card-in { from { opacity: 0; transform: scale(0.985); } to { opacity: 1; transform: none; } }
+.pis-full { position: fixed; inset: 0; z-index: 60; display: flex; flex-direction: column; background: rgba(8, 10, 14, 0.82); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); animation: pis-full-in 160ms ease-out; }
+.pis-full > .pis-bar { height: 56px; padding: 0 18px 0 22px; background: transparent; border-bottom: 0; color: #f4f5f7; pointer-events: none; }
+.pis-full > .pis-bar > * { pointer-events: auto; }
+.pis-full > .pis-bar .pis-name .truncate { color: #f4f5f7; font-size: 14px; font-weight: 500; }
+.pis-full .pis-bar .pis-x { color: rgba(255, 255, 255, 0.75); }
+.pis-full .pis-bar .pis-x:hover { color: #fff; background: rgba(255, 255, 255, 0.12); }
+.pis-full .pis-bar .pis-sep { background: rgba(255, 255, 255, 0.2); }
+.pis-full .pis-bar .pis-seg { background: rgba(255, 255, 255, 0.1); }
+.pis-full .pis-bar .pis-seg button { color: rgba(255, 255, 255, 0.7); }
+.pis-full .pis-bar .pis-seg button:hover { color: #fff; }
+.pis-full .pis-bar .pis-seg button.on { background: rgba(255, 255, 255, 0.18); color: #fff; box-shadow: none; }
+.pis-full-card { flex: 1; min-height: 0; display: flex; flex-direction: column; margin: 0 clamp(16px, 4vw, 64px) clamp(16px, 3vh, 40px); overflow: hidden; border-radius: 12px; background: var(--surface); box-shadow: 0 30px 80px -20px rgba(0, 0, 0, 0.6); animation: pis-card-in 200ms cubic-bezier(0.2, 0.8, 0.2, 1); }
+@media (prefers-reduced-motion: reduce) { .pis-full, .pis-full-card { animation: none; } }
+/* The explorer's pieces (2026-10-28): a narrower list that can be hidden, groups within it, one toolbar over the file. */
+.pis-files.tree-shut { grid-template-columns: minmax(0, 1fr); }
+.pis-pane.docked .pis-files:not(.tree-shut) { grid-template-columns: clamp(190px, 22%, 260px) minmax(0, 1fr); }
+.pis-tree-sub { padding: 8px 14px 3px; font-size: 11px; color: var(--dim); }
+.pis-x.on { color: var(--accent); background: var(--accent-bg); }
+.pis-seg { display: inline-flex; padding: 2px; gap: 2px; border-radius: 7px; background: var(--sunken); }
+.pis-seg button { height: 24px; padding: 0 9px; border-radius: 5px; font-size: 12px; color: var(--muted); }
+.pis-seg button:hover { color: var(--text); }
+.pis-seg button.on { background: var(--surface); color: var(--text); box-shadow: 0 1px 2px var(--shadow); }
+.pis-pane.docked, .pis-pane.docked.wide { inset: 0; width: auto; border-width: 0 0 0 1px; border-radius: 0; box-shadow: none; transform: none; }
+.pis-head { display: flex; align-items: flex-start; gap: 10px; padding: 12px 10px 10px 14px; border-bottom: 1px solid var(--line); }
+.pis-ico { flex: none; display: grid; place-items: center; width: 26px; height: 26px; border-radius: 8px; background: var(--sunken); color: var(--muted); }
+.pis-k-step { color: var(--k-code); }
+.pis-k-approval { color: var(--k-approval); }
+.pis-k-branch { color: var(--path); }
+.pis-k-loop { color: var(--k-loop); }
+.pis-title { font-size: 13.5px; font-weight: 600; line-height: 1.35; color: var(--text); }
+.pis-sub { margin-top: 1px; font: 11px var(--font-mono, ui-monospace, monospace); color: var(--dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pis-x { flex: none; display: grid; place-items: center; width: 28px; height: 28px; border-radius: 7px; color: var(--muted); }
+.pis-x:hover { background: var(--sunken); color: var(--text); }
+.pis-tabs { display: flex; gap: 2px; padding: 4px 10px 0; border-bottom: 1px solid var(--line); overflow-x: auto; }
+.pis-tab {
+  display: inline-flex; align-items: center; gap: 6px; white-space: nowrap;
+  padding: 8px 9px 9px; margin-bottom: -1px; font-size: 12.5px; color: var(--muted);
+  border-bottom: 2px solid transparent; transition: color 0.15s, border-color 0.15s;
+}
+.pis-tab:hover { color: var(--text); }
+.pis-tab.on { color: var(--text); border-bottom-color: var(--accent); }
+.pis-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--muted); }
+.pis-dot.ok { background: var(--ok); }
+.pis-dot.bad { background: var(--danger); }
+.pis-body { min-height: 0; flex: 1; overflow-y: auto; animation: pis-in 0.18s ease-out; }
+@keyframes pis-in { from { opacity: 0; transform: translateY(3px); } }
+
+/* Files — laid out like a code editor's explorer: a slim header, a folder tree, the open file as a tab. */
+.pis-fhead { display: flex; align-items: center; gap: 10px; height: 44px; padding: 0 8px 0 14px; border-bottom: 1px solid var(--line); }
+.pis-files { display: grid; grid-template-columns: clamp(220px, 34%, 300px) minmax(0, 1fr); min-height: 0; flex: 1; }
+.pis-tree { overflow-y: auto; padding: 6px 0 12px; border-right: 1px solid var(--line); background: color-mix(in srgb, var(--sunken) 45%, var(--surface)); }
+.pis-tree-label { padding: 8px 14px 6px; font-size: 10.5px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--dim); }
+.pis-row {
+  display: flex; align-items: center; gap: 8px; width: 100%; height: 28px; padding-right: 10px;
+  font-size: 12.5px; color: var(--muted); text-align: left; border-left: 2px solid transparent;
+}
+.pis-row:hover { background: color-mix(in srgb, var(--text) 5%, transparent); color: var(--text); }
+.pis-row.on { background: var(--accent-bg); color: var(--text); border-left-color: var(--accent); }
+.pis-row.dir { color: var(--text); }
+/* A chat file's row: the name owns it; the actions fade in over its end on hover or focus, on the row's own tone. */
+.pis-crow { position: relative; padding-right: 0; }
+.pis-acts {
+  position: absolute; right: 0; top: 0; bottom: 0; display: flex; align-items: center; gap: 2px; padding: 0 6px 0 18px;
+  background: linear-gradient(to right, transparent, var(--pis-row-bg, var(--surface)) 14px);
+  opacity: 0; pointer-events: none; transition: opacity 0.12s;
+}
+.pis-crow:hover .pis-acts, .pis-crow:focus-within .pis-acts, .pis-crow.armed .pis-acts { opacity: 1; pointer-events: auto; }
+.pis-tree { --pis-row-bg: color-mix(in srgb, var(--sunken) 45%, var(--surface)); }
+.pis-crow:hover { --pis-row-bg: color-mix(in srgb, var(--text) 5%, color-mix(in srgb, var(--sunken) 45%, var(--surface))); }
+.pis-crow.on { --pis-row-bg: color-mix(in srgb, var(--accent) 9%, color-mix(in srgb, var(--sunken) 45%, var(--surface))); }
+.pis-chev { flex: none; color: var(--dim); transition: transform 0.15s; }
+.pis-chev.open { transform: rotate(90deg); }
+.pis-guide { border-left: 1px solid color-mix(in srgb, var(--line) 80%, transparent); }
+.pis-glyph { flex: none; display: inline-grid; place-items: center; min-width: 16px; height: 14px; padding: 0 2px; border-radius: 3px; font: 600 8.5px var(--font-mono, ui-monospace, monospace); color: var(--dim); }
+.pis-glyph.py { color: #4b8bbe; background: color-mix(in srgb, #4b8bbe 14%, transparent); }
+.pis-glyph.img { color: #a78bfa; background: color-mix(in srgb, #a78bfa 14%, transparent); }
+.pis-glyph.pdf { color: var(--danger); background: color-mix(in srgb, var(--danger) 12%, transparent); }
+.pis-glyph.sheet { color: var(--ok); background: color-mix(in srgb, var(--ok) 12%, transparent); }
+.pis-glyph.doc { color: #60a5fa; background: color-mix(in srgb, #60a5fa 14%, transparent); }
+.pis-glyph.json { color: var(--warn); background: color-mix(in srgb, var(--warn) 12%, transparent); }
+.pis-glyph.web { color: #f97316; background: color-mix(in srgb, #f97316 13%, transparent); }
+.pis-glyph.code { color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); }
+.pis-glyph.md { color: var(--muted); background: color-mix(in srgb, var(--muted) 12%, transparent); }
+.pis-st { margin-left: auto; flex: none; font: 600 10.5px var(--font-mono, ui-monospace, monospace); }
+.pis-st.m { color: var(--warn); }
+.pis-st.a { color: var(--ok); }
+.pis-st.live { animation: pis-pulse 1.2s ease-in-out infinite; }
+@keyframes pis-pulse { 50% { opacity: 0.35; } }
+.pis-removed { margin: 10px 14px 0; font-size: 11px; color: var(--dim); }
+.pis-code-wrap { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+.pis-tabbar { display: flex; align-items: stretch; gap: 10px; height: 38px; border-bottom: 1px solid var(--line); background: color-mix(in srgb, var(--sunken) 45%, var(--surface)); }
+.pis-tabfile {
+  display: inline-flex; align-items: center; gap: 6px; padding: 0 14px; margin-bottom: -1px;
+  font-size: 12.5px; color: var(--text); background: var(--sunken); border-right: 1px solid var(--line); border-top: 2px solid var(--accent);
+}
+.pis-tabbar > :not(.pis-tabfile) { align-self: center; }
+.pis-tabfile { min-width: 0; max-width: 60%; }
+.pis-crumbs { padding: 5px 14px; font-size: 11.5px; color: var(--dim); background: var(--sunken); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pis-code { flex: 1; min-height: 0; overflow: auto; margin: 0; padding: 4px 0 16px; background: var(--sunken); font: 12px/1.7 var(--font-mono, ui-monospace, monospace); color: var(--text); }
+.pis-code > div { padding: 0 16px 0 0; white-space: pre; }
+.pis-code .ln { display: inline-block; width: 44px; padding-right: 14px; text-align: right; color: var(--dim); opacity: 0.7; user-select: none; }
+.pis-code .add { background: color-mix(in srgb, var(--ok) 12%, transparent); box-shadow: inset 2px 0 0 var(--ok); }
+.pis-code .add .ln { color: var(--ok); opacity: 1; }
+@media (prefers-reduced-motion: reduce) {
+  .pis-pane, .pis-body { transition: none; animation: none; }
+}
+
+/* ── Forge's chat (2026-10-11): one continuous conversation on the page's own background, the composer floating
+   over it with the messages fading out beneath — no band behind the input. */
+.pi-chat { background: var(--bg); }
+.pi-dock {
+  position: absolute; left: 0; right: 0; bottom: 0; z-index: 5;
+  padding: 40px 16px 14px;
+  background: linear-gradient(to bottom, transparent, var(--bg) 46%);
+  pointer-events: none;
+}
+.pi-dock > * { pointer-events: auto; }
+.pi-composer {
+  border-radius: 16px; padding: 12px 12px 10px 14px;
+  background: var(--surface); border: 1px solid var(--line-interactive);
+  box-shadow: 0 10px 32px -14px var(--shadow);
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.pi-composer:focus-within {
+  border-color: var(--accent-line);
+  box-shadow: 0 0 0 4px var(--accent-bg), 0 10px 32px -14px var(--shadow);
+}
+.pi-mark {
+  display: grid; place-items: center; flex: none; width: 22px; height: 22px; margin-top: 1px;
+  border-radius: 7px; background: linear-gradient(140deg, var(--accent), #8b5cf6);
+  color: #fff; font-size: 11px; font-weight: 600; user-select: none;
+}
+
+/* ── Forge canvas: the hover flow (same as the compiled builder's) ──────────────────────────────────────────────
+   Hovering a card lights its path — everything upstream and downstream — and one glowing pulse travels it from start
+   to finish; everything off the path dims. ⚠ Keep this block on its own: it was lost once when a neighbouring block
+   was rewritten (beta-2.25.1), and PiFlowCanvas.test.tsx cannot see CSS. */
+.pic-node.dim { opacity: 0.45; }
+.pic-node { transition: border-color 0.15s, box-shadow 0.2s, transform 0.2s cubic-bezier(0.2, 0.8, 0.2, 1), opacity 0.2s; }
+.pic-world .pic-node:active { cursor: grabbing; }
+.pic-wire.dim { opacity: 0.18; }
+.pic-wire.flowing {
+  stroke: var(--accent); stroke-width: 2; stroke-dasharray: none; opacity: 0.85;
+  animation: edge-flow-in 360ms ease-out both; animation-delay: calc(var(--flow-order, 0) * 90ms);
+}
+.pic-wire.path.flowing { stroke: var(--path); }
+.pic-pulse {
+  stroke: color-mix(in srgb, var(--accent) 55%, white); stroke-width: 3; stroke-linecap: round;
+  filter: drop-shadow(0 0 4px var(--accent)) drop-shadow(0 0 2px var(--accent));
+  animation-name: edge-pulse-run; animation-timing-function: linear; animation-iteration-count: infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .pic-wire.flowing { animation: none; opacity: 1; }
+  .pic-pulse { display: none; }
+}
+
+/* The chat's connection line (2026-10-11): shown only while a dropped live connection is being retried. */
+.pi-link {
+  position: absolute; top: 10px; left: 50%; z-index: 6; transform: translateX(-50%);
+  display: inline-flex; align-items: center; gap: 8px; padding: 5px 12px; border-radius: 999px;
+  background: var(--surface); border: 1px solid var(--card-border); box-shadow: 0 6px 18px -10px var(--shadow);
+  font-size: 12px; color: var(--muted); animation: pis-in 0.18s ease-out;
+}
+.pi-link-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--warn); animation: pis-pulse 1.2s ease-in-out infinite; }
+
+/* ── The left rail (Sidebar.tsx, 2026-10-11) ──────────────────────────────────────────────────────────────────
+   A frosted rail: a faint tone that fades into the page's ground, rows in near-full text colour, and the page you
+   are on as a FROSTED pill — translucent top-level surface, blurred, a hairline and a 1px top-edge highlight.
+   Layout and the collapse animation stay in Tailwind in the component; this block owns tone and row states. */
+@media (min-width: 1024px) {
+  .lg\:rail-surface {
+    background: linear-gradient(180deg, color-mix(in srgb, var(--elev-2) 70%, var(--bg)) 0%, var(--bg) 100%);
+  }
+}
+.rail-item {
+  border: 1px solid transparent;
+  color: color-mix(in srgb, var(--text) 84%, var(--muted));
+  font-weight: 450;
+  letter-spacing: 0.01em;
+  transition: background-color 150ms ease, border-color 150ms ease, color 150ms ease, box-shadow 150ms ease,
+    transform 120ms ease;
+}
+.rail-item .rail-icon { opacity: 0.85; transition: opacity 150ms ease, color 150ms ease; }
+.rail-item:hover { background: color-mix(in srgb, var(--text) 5%, transparent); color: var(--text); }
+.rail-item:hover .rail-icon { opacity: 1; }
+.rail-item:active { transform: scale(0.985) translateY(0.5px); }
+.rail-item[aria-current="page"] {
+  background: color-mix(in srgb, var(--elev-4) 78%, transparent);
+  -webkit-backdrop-filter: blur(14px) saturate(150%);
+  backdrop-filter: blur(14px) saturate(150%);
+  border-color: color-mix(in srgb, var(--text) 9%, transparent);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, #fff 7%, transparent), 0 3px 8px -4px var(--shadow);
+  color: var(--text);
+  font-weight: 500;
+}
+.rail-item[aria-current="page"] .rail-icon { opacity: 1; color: var(--accent); }
+/* Collapsed, a group heading's words fade and a hairline fades in through it while the heading shrinks to a thin
+   divider row — on the rail's own 280ms curve, so the rows below glide up with the width rather than jump. */
+.rail-group-label {
+  position: relative; color: var(--dim); font-size: 11.5px; font-weight: 500; letter-spacing: 0.01em;
+  transition: color 150ms ease;
+}
+.rail-group-label::after {
+  content: ""; position: absolute; left: 12px; right: 12px; top: 50%;
+  border-top: 1px solid var(--line); opacity: 0; transition: opacity 200ms ease;
+}
+@media (min-width: 1024px) {
+  .lg\:is-collapsed.rail-group-label { color: transparent; }
+  .lg\:is-collapsed.rail-group-label::after { opacity: 1; transition-delay: 100ms; }
+}
+.rail-sub { color: var(--muted); border-radius: 6px; transition: background-color 150ms ease, color 150ms ease; }
+.rail-sub:hover { background: color-mix(in srgb, var(--text) 5%, transparent); color: var(--text); }
+.rail-sub[aria-current="page"] { background: color-mix(in srgb, var(--text) 7%, transparent); color: var(--text); font-weight: 500; }
+.rail-dot {
+  position: absolute; top: -2px; right: -3px; width: 7px; height: 7px; border-radius: 999px;
+  background: var(--warn); box-shadow: 0 0 0 2px var(--bg);
+}
+@media (prefers-reduced-motion: reduce) {
+  .rail-item, .rail-item .rail-icon, .rail-sub, .rail-group-label, .rail-group-label::after { transition: none; }
+  .rail-item:active { transform: none; }
+}
+
+/* ── Overlays: the drawer slides in, a modal rises (Drawer.tsx, Modal.tsx — 2026-10-11) ──────────────────────
+   Entrance only; closing unmounts. The pane slide is the design doc's 320ms curve, the modal its 180ms enter. */
+@keyframes overlay-slide-in { from { opacity: 0; transform: translateX(24px); } to { opacity: 1; transform: none; } }
+@keyframes overlay-pop-in { from { opacity: 0; transform: translateY(4px) scale(0.985); } to { opacity: 1; transform: none; } }
+.overlay-slide { animation: overlay-slide-in 320ms cubic-bezier(.2,.8,.2,1) both; }
+.overlay-pop { animation: overlay-pop-in 180ms ease-out both; }
+@media (prefers-reduced-motion: reduce) {
+  .overlay-slide, .overlay-pop { animation: none; }
+}
+
+/* ── A live indicator (dashboard "Running now", 2026-10-11): a dot that breathes while the thing is running ─── */
+@keyframes live-dot { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+.live-dot { animation: live-dot 1.6s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) { .live-dot { animation: none; } }
+
+/* The canvas hidden (2026-10-13): the conversation takes the width, the canvas keeps a 36px rail on the right, the
+   mirror of `.chat-closed`. The conversation's column stays a readable width, centred, instead of running the page. */
+@media (min-width: 720px) {
+  .workbench.wb-chat.canvas-closed,
+  .workbench.wb-chat.with-inspector.canvas-closed { grid-template-columns: minmax(0, 1fr) 36px; }
+  .workbench.wb-chat.canvas-closed .pi-wide { padding-left: max(24px, calc((100% - 860px) / 2)); padding-right: max(24px, calc((100% - 860px) / 2)); }
+}
+
+/* Dragging the chat's width (ChatResizer, 2026-10-13): the grid follows the pointer, so its 200ms column
+   transition is off, and nothing on the page is selected by the drag. */
+body.chat-resizing .workbench, body.chat-resizing .wb-pane { transition: none; }
+body.chat-resizing { user-select: none; cursor: col-resize; }
+
+/* The Forge workbench's columns ANIMATE between chat, canvas and both (2026-10-13). A grid column list only
+   interpolates when both states have the same number of tracks of the same kind, and `400px minmax(0,1fr)` →
+   `minmax(0,1fr) 36px` does not, so switching to Forge Agent (which folds the canvas) made the chat jump. Every state
+   here is two lengths that add up to the whole width, so the existing 200ms column transition carries it. The doubled
+   class outranks the shared `wb-chat` rules above, which other workbenches still use. */
+@media (min-width: 708px) {
+  .workbench.wb-chat.forge-wb.forge-wb { grid-template-columns: var(--chat-w, 400px) calc(100% - var(--chat-w, 400px)); }
+  .workbench.wb-chat.forge-wb.forge-wb.chat-closed { grid-template-columns: 36px calc(100% - 36px); }
+  .workbench.wb-chat.forge-wb.forge-wb.canvas-closed { grid-template-columns: calc(100% - 36px) 36px; }
+  .workbench.wb-chat.forge-wb.forge-wb.explorer-open { grid-template-columns: var(--chat-w, 400px) calc(100% - var(--chat-w, 400px)); }
+  .workbench.wb-chat.forge-wb.forge-wb.explorer-open.chat-closed { grid-template-columns: 36px calc(100% - 36px); }
+  .workbench.wb-chat.forge-wb .pi-wide { transition: padding 200ms var(--ease); }
+}
+body.chat-resizing .pi-wide { transition: none; }
+@media (prefers-reduced-motion: reduce) {
+  .workbench.wb-chat.forge-wb, .workbench.wb-chat.forge-wb .pi-wide { transition: none; }
+}
+
+/* Files pane on a small screen: the tree narrows, then stacks above the code so neither is squeezed to nothing. */
+@media (max-width: 520px) {
+  .pis-files { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 38%) minmax(0, 1fr); }
+  .pis-tree { border-right: 0; border-bottom: 1px solid var(--line); }
+}
+
+/* The rail's list on a short screen (720p): tighter rows and headings so it usually fits unscrolled. Its scrollbar is
+   HIDDEN (the list still scrolls): a scrollbar that takes width narrows the rows and pulls every icon off-centre, and
+   reserving its space does the same thing permanently. Nothing here toggles with the collapse, so nothing jumps. */
+.rail-nav { scrollbar-width: none; }
+.rail-nav::-webkit-scrollbar { display: none; }
+@media (max-height: 760px) {
+  .rail-nav .rail-item { height: 32px; }
+  .rail-nav .rail-group-label:not(.lg\:is-collapsed) { height: 30px; }
+}
+
+/* Forge Agent's confirm cards (ProposalCard, 2026-10-28): one calm card — the eyebrow, the line, the exact values in a
+   two-column list, long values (a file) folded to their first lines, and the outcome as a tinted line with a link to
+   where it can be seen, the service's raw answer folded under it. */
+.pc-card { display: flex; flex-direction: column; gap: 12px; padding: 16px 18px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); }
+.pc-eyebrow { font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--dim); }
+.pc-values { display: grid; grid-template-columns: minmax(72px, max-content) minmax(0, 1fr); gap: 7px 18px; padding: 12px 14px; border-radius: 10px; background: color-mix(in srgb, var(--sunken) 55%, transparent); font-size: 12.5px; }
+.pc-values dt { color: var(--dim); line-height: 1.6; }
+.pc-values dd { min-width: 0; margin: 0; color: var(--text); font: 12.5px/1.6 var(--font-mono, ui-monospace, monospace); }
+.pc-values.sans dd { font: 12.5px/1.55 var(--font-sans, inherit); }
+.pc-tag { display: inline-flex; align-items: center; height: 18px; padding: 0 7px; border-radius: 9px; background: var(--surface-2); font-size: 10.5px; color: var(--muted); }
+.pc-long { min-width: 0; }
+.pc-code { position: relative; margin: 0; max-height: calc(1.6em * 6); overflow: hidden; white-space: pre-wrap; word-break: break-word; font: 12px/1.6 var(--font-mono, ui-monospace, monospace); color: var(--text); }
+.pc-code.compact { max-height: calc(1.6em * 2); }
+.pc-code:not(.open)::after { content: ""; position: absolute; inset: auto 0 0 0; height: 2.4em; background: linear-gradient(to bottom, transparent, color-mix(in srgb, var(--sunken) 55%, var(--surface))); pointer-events: none; }
+.pc-code.open { max-height: 26rem; overflow: auto; }
+.pc-more { margin-top: 4px; font: 500 11.5px var(--font-sans, inherit); color: var(--accent); }
+.pc-more:hover { text-decoration: underline; }
+.pc-table { max-height: 18rem; overflow: auto; border-radius: 10px; background: color-mix(in srgb, var(--sunken) 55%, transparent); }
+.pc-outcome { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; border-radius: 10px; font-size: 12.5px; border: 1px solid transparent; }
+.pc-outcome.ok { background: color-mix(in srgb, var(--ok) 9%, transparent); border-color: color-mix(in srgb, var(--ok) 22%, transparent); color: var(--text); }
+.pc-outcome.warn { background: color-mix(in srgb, var(--warn) 9%, transparent); border-color: color-mix(in srgb, var(--warn) 22%, transparent); color: var(--text); }
+.pc-outcome.danger { background: color-mix(in srgb, var(--danger) 8%, transparent); border-color: color-mix(in srgb, var(--danger) 22%, transparent); color: var(--danger); }
+.pc-fact { display: inline-flex; gap: 5px; align-items: baseline; padding: 1px 8px; border-radius: 6px; background: color-mix(in srgb, var(--surface) 70%, transparent); font-size: 11.5px; }
+.pc-open { flex: none; font-weight: 500; color: var(--accent); }
+.pc-open:hover { text-decoration: underline; }
+.pc-raw summary { cursor: pointer; width: max-content; font-size: 11.5px; color: var(--muted); }
+.pc-raw summary:hover { color: var(--text); }
+.pc-raw pre { margin: 6px 0 0; max-height: 12rem; overflow: auto; white-space: pre-wrap; word-break: break-all; font: 11.5px/1.55 var(--font-mono, ui-monospace, monospace); color: var(--muted); }
+/* "Which GitHub should Forge use?" — one quiet tile per connection; the whole tile is the choice. */
+.pc-accounts { display: grid; grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr)); gap: 8px; }
+.pc-account { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: color-mix(in srgb, var(--sunken) 45%, transparent); font-size: 12.5px; text-align: left; transition: border-color 120ms, background 120ms; }
+.pc-account:hover:not(:disabled) { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 6%, transparent); }
+.pc-account:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.pc-account:disabled { opacity: 0.6; cursor: default; }
+/* The chat's accounts, under the message box: which connection each service goes through, with Change. */
+
+
+/* A connector's page (apps/[piece], 2026-10-28): two quiet lists of connections — the workspace's and yours — and the
+   actions grouped by what they do to the service, each a compact row with a switch; a save bar only when changed. */
+.conn-list { display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+.conn-list > li + li { border-top: 1px solid var(--line); }
+.conn-empty { padding: 12px 14px; border: 1px dashed var(--line); border-radius: 12px; font-size: 12.5px; color: var(--muted); }
+.conn-signin { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 12px; background: color-mix(in srgb, var(--sunken) 45%, transparent); }
+.act-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.act-seg { display: inline-flex; padding: 2px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface); }
+.act-seg button { height: 26px; padding: 0 10px; border-radius: 7px; font-size: 12px; color: var(--muted); }
+.act-seg button[aria-pressed="true"] { background: var(--surface-2); color: var(--text); font-weight: 500; }
+.act-group { display: flex; flex-direction: column; gap: 8px; }
+.act-group-head, .act-group > summary { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; }
+.act-group > summary { cursor: pointer; list-style: none; }
+.act-group > summary::-webkit-details-marker { display: none; }
+.act-group > summary::before { content: "▸"; font-size: 10px; color: var(--dim); transition: transform 120ms; }
+.act-group[open] > summary::before { transform: rotate(90deg); }
+.act-group-title { font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--dim); }
+.act-count { font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.act-note { font-size: 11.5px; color: var(--dim); }
+.act-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 22rem), 1fr)); gap: 6px; }
+.act-row { display: flex; align-items: center; gap: 12px; min-width: 0; padding: 9px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); transition: border-color 120ms, background 120ms; }
+.act-row.on { border-color: color-mix(in srgb, var(--accent) 40%, var(--line)); background: color-mix(in srgb, var(--accent) 5%, var(--surface)); }
+.act-desc { display: block; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 12px; color: var(--muted); }
+.act-switch { appearance: none; flex: none; position: relative; width: 30px; height: 18px; border-radius: 9px; background: var(--line); cursor: pointer; transition: background 120ms; }
+.act-switch::after { content: ""; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%; background: var(--surface); box-shadow: 0 1px 2px rgb(0 0 0 / 0.2); transition: transform 120ms; }
+.act-switch:checked { background: var(--accent); }
+.act-switch:checked::after { transform: translateX(12px); }
+.act-switch:disabled { cursor: default; opacity: 0.45; }
+.act-switch:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.act-savebar { position: sticky; bottom: 12px; z-index: 5; display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 10px 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); box-shadow: 0 6px 24px rgb(0 0 0 / 0.12); }

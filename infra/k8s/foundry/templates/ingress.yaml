@@ -1,0 +1,44 @@
+{{- if .Values.ingress.enabled }}
+# One entry point. The browser talks to `web` (which proxies the API with the parent key server-side),
+# opens the progress socket on /ws (server :4001), and outside callers reach the two public trigger
+# receivers on /api/triggers (server :4000). Nothing else — ops-api, forge, flow-runner and Postgres
+# have no route from outside.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: foundry
+  labels: {{- include "foundry.labels" (dict "root" . "component" "ingress") | nindent 4 }}
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-read-timeout: {{ .Values.ingress.wsTimeoutSeconds | quote }}
+    nginx.ingress.kubernetes.io/proxy-send-timeout: {{ .Values.ingress.wsTimeoutSeconds | quote }}
+    nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+    {{- with .Values.ingress.tls.clusterIssuer }}
+    cert-manager.io/cluster-issuer: {{ . }}
+    {{- end }}
+    {{- with .Values.ingress.annotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  ingressClassName: {{ .Values.ingress.className }}
+  {{- if .Values.ingress.tls.enabled }}
+  {{- if not .Values.ingress.host }}{{ fail "ingress.tls.enabled needs ingress.host" }}{{ end }}
+  tls:
+    - hosts: [{{ .Values.ingress.host | quote }}]
+      secretName: {{ .Values.ingress.tls.secretName }}
+  {{- end }}
+  rules:
+    - {{- with .Values.ingress.host }}
+      host: {{ . }}
+      {{- end }}
+      http:
+        paths:
+          - path: /ws
+            pathType: Prefix
+            backend: { service: { name: server, port: { number: 4001 } } }
+          - path: /api/triggers
+            pathType: Prefix
+            backend: { service: { name: server, port: { number: 4000 } } }
+          - path: /
+            pathType: Prefix
+            backend: { service: { name: web, port: { number: 4002 } } }
+{{- end }}

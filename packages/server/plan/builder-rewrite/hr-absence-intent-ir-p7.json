@@ -1,0 +1,103 @@
+{
+  "at": "2026-10-06T20:37:11.822Z",
+  "model": "gpt-6-luna",
+  "intentIr": true,
+  "kestraReachable": true,
+  "cases": 6,
+  "byStatus": {
+    "incomplete": 3,
+    "complete": 3
+  },
+  "fileBackedPresent": false,
+  "rows": [
+    {
+      "id": "RW-HR-A01",
+      "workspace": "HR",
+      "status": "incomplete",
+      "questions": 0,
+      "calls": 1,
+      "seconds": 26,
+      "readbackSigs": [
+        "reads: a read written for this automation (attendance_db.query.banded_absences) — for “from the data”|computes: one row per `for_each_employee`, with band_count (as `band_count_half_day_absence_full_day_abse`) — for “calculate the absence days — for half day absence equals 0.5 and for full day it is 1”|the threshold: “0”, from your goal|the threshold: “9.5”, from your goal|runs: when it is started (by you, or by a call to it) — nothing runs it on its own|done by the read attendance_db.query.band"
+      ],
+      "collateralHints": 0,
+      "fileBacked": false,
+      "unmet": [
+        "the goal says “0” (threshold), and nothing built here uses it",
+        "the goal says “9.5” (threshold), and nothing built here uses it"
+      ]
+    },
+    {
+      "id": "RW-HR-A02",
+      "workspace": "HR",
+      "status": "complete",
+      "questions": 0,
+      "calls": 1,
+      "seconds": 17,
+      "readbackSigs": [
+        "reads: a read written for this automation (attendance_db.query.banded_absences) — for “for each employee show half-day absences, full-day absences, and total absence days”|computes: one row per `employee`, with band_count (as `band_count_half_day_absences`), band_count (as `band_count_full_day_absences`), band_count (as `band_count_total_absence_days`) — for “for each employee show half-day absences, full-day absences, and total absence days”|runs: when it is started (by you, or by a call to it)"
+      ],
+      "collateralHints": 0,
+      "fileBacked": false
+    },
+    {
+      "id": "RW-HR-A03",
+      "workspace": "HR",
+      "status": "incomplete",
+      "questions": 0,
+      "calls": 1,
+      "seconds": 21,
+      "readbackSigs": [
+        "reads: a read written for this automation (attendance_db.query.banded_absences) — for “hours worked bands”|does: real delivery to a live mailbox (foundry_email_send) — for “email me every employee”|computes: one row per `emp_id` and `employee_emp_name`, with band_count `hours_worked` (as `band_count_hours_worked`) — for “total absence days (half at 0.5 plus full at 1, from hours worked bands 0–4.74 full and 4.75–9.49 half, with 9.5 a full day present)”|who receives it: you — the person who runs "
+      ],
+      "collateralHints": 0,
+      "fileBacked": false,
+      "unmet": [
+        "action 0 is in an earlier clause than condition 0 but runs on it"
+      ]
+    },
+    {
+      "id": "RW-HR-A04",
+      "workspace": "HR",
+      "status": "complete",
+      "questions": 0,
+      "calls": 2,
+      "seconds": 35,
+      "readbackSigs": [
+        "reads: a read written for this automation (attendance_db.query.banded_absences) — for “daily hours worked”|computes: one row per `employee_dept`, with band_count `hours_worked` (as `band_count_hours_worked`) — for “by department, sum each employee's half-day and full-day absences from daily hours worked using the 4.75 / 4.74 / 9.5 bands, and list department name with total absences”|runs: when it is started (by you, or by a call to it) — nothing runs it on its own|done by the read attendance_db."
+      ],
+      "collateralHints": 0,
+      "fileBacked": false
+    },
+    {
+      "id": "RW-HR-A05",
+      "workspace": "HR",
+      "status": "incomplete",
+      "questions": 1,
+      "calls": 2,
+      "seconds": 30,
+      "readbackSigs": [
+        "reads: a read written for this automation (attendance_db.query.banded_absences) — for “emp id, name, half day absences, full day absences and total absences for last week”|does: real delivery to a live mailbox (foundry_email_send) — for “email me a csv of emp id, name, half day absences, full day absences and total absences for last week”|computes: one row per `emp_id` and `name`, with band_count (as `band_count_half_day_absences_full_day_abs`), how many rows (as `count`) — for “emp id, name, ha",
+        "reads: a read written for this automation (attendance_db.query.banded_absences) — for “emp id, name, half day absences, full day absences and total absences for last week”|does: real delivery to a live mailbox (foundry_email_send) — for “email me a csv of emp id, name, half day absences, full day absences and total absences for last week”|computes: one row per `emp_id` and `name`, with band_count (as `band_count_half_day_absences_full_day_abs`), how many rows (as `count`) — for “emp id, name, ha"
+      ],
+      "collateralHints": 0,
+      "fileBacked": false,
+      "unmet": [
+        "the input “last week” is used by nothing built"
+      ]
+    },
+    {
+      "id": "RW-HR-A06",
+      "workspace": "HR",
+      "status": "complete",
+      "questions": 0,
+      "calls": 1,
+      "seconds": 5,
+      "readbackSigs": [
+        "reads: each row of the table `leave_applied` (attendance_db.table.main.leave_applied) — for “absence report”|runs: when it is started (by you, or by a call to it) — nothing runs it on its own"
+      ],
+      "collateralHints": 0,
+      "fileBacked": false
+    }
+  ]
+}

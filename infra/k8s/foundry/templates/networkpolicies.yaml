@@ -1,0 +1,156 @@
+{{- if .Values.networkPolicies.enabled }}
+{{- $np := .Values.networkPolicies -}}
+{{- $root := . -}}
+# compose's `internal: true` networks, as NetworkPolicies. ⚠ They only work where the cluster's network
+# plugin enforces them (Calico, Cilium, Azure CNI powered by Cilium); elsewhere they are accepted and
+# silently ignored, so infra/k8s/kind/check.sh proves each one with a probe that must FAIL.
+#
+#   forge        in: server :4100            out: server :4000, forge-egress :3128, DNS
+#   forge-egress in: forge :3128             out: HTTPS to public addresses, DNS
+#   flow-runner  in: server :4006            out: server :4000, DNS
+#   ops-api      in: server :4004            out: Postgres, internet (LLM provider), DNS
+#   web          out: server :4000/:4001, HTTPS to public addresses (Entra sign-in), DNS
+#   postgres     in: server, ops-api :5432
+#   connector         in: server :4010         out: connector-egress :3128, DNS              (plugins.enabled)
+#   connector-egress  in: connector :3128      out: plugins.egressPorts to public addresses, DNS
+# server keeps open egress, as compose's `default` network did. web does not: it holds the parent key but no
+# database credential, and an EXTERNAL database (Azure) has no in-cluster policy of its own to refuse it.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: forge
+spec:
+  podSelector:
+    matchLabels: {{- include "foundry.selector" (dict "root" $root "component" "forge") | nindent 6 }}
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from: {{- include "foundry.np.from" (dict "root" $root "component" "server") | nindent 8 }}
+      ports: [{ protocol: TCP, port: 4100 }]
+  egress:
+    - to: {{- include "foundry.np.from" (dict "root" $root "component" "server") | nindent 8 }}
+      ports: [{ protocol: TCP, port: 4000 }]
+    - to: {{- include "foundry.np.from" (dict "root" $root "component" "forge-egress") | nindent 8 }}
+      ports: [{ protocol: TCP, port: 3128 }]
+    {{- include "foundry.np.dns" $np | nindent 4 }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: forge-egress
+spec:
+  podSelector:
+    matchLabels: {{- include "foundry.selector" (dict "root" $root "component" "forge-egress") | nindent 6 }}
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from: {{- include "foundry.np.from" (dict "root" $root "component" "forge") | nindent 8 }}
+      ports: [{ protocol: TCP, port: 3128 }]
+  egress:
+    - to:
+        - ipBlock:
+            cidr: {{ $np.egressCidr }}
+            except: {{ toJson $np.egressExcept }}
+      ports: [{ protocol: TCP, port: 443 }]
+    {{- include "foundry.np.dns" $np | nindent 4 }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: flow-runner
+spec:
+  podSelector:
+    matchLabels: {{- include "foundry.selector" (dict "root" $root "component" "flow-runner") | nindent 6 }}
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from: {{- include "foundry.np.from" (dict "root" $root "component" "server") | nindent 8 }}
+      ports: [{ protocol: TCP, port: 4006 }]
+  egress:
+    - to: {{- include "foundry.np.from" (dict "root" $root "component" "server") | nindent 8 }}
+      ports: [{ protocol: TCP, port: 4000 }]
+    {{- include "foundry.np.dns" $np | nindent 4 }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: ops-api
+spec:
+  podSelector:
+    matchLabels: {{- include "foundry.selector" (dict "root" $root "component" "ops-api") | nindent 6 }}
+  policyTypes: [Ingress]
+  ingress:
+    - from: {{- include "foundry.np.from" (dict "root" $root "component" "server") | nindent 8 }}
+      ports: [{ protocol: TCP, port: 4004 }]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: web
+spec:
+  podSelector:
+    matchLabels: {{- include "foundry.selector" (dict "root" $root "component" "web") | nindent 6 }}
+  policyTypes: [Egress]
+  egress:
+    - to: {{- include "foundry.np.from" (dict "root" $root "component" "server") | nindent 8 }}
+      ports: [{ protocol: TCP, port: 4000 }, { protocol: TCP, port: 4001 }]
+    - to:
+        - ipBlock:
+            cidr: {{ $np.egressCidr }}
+            except: {{ toJson $np.egressExcept }}
+      ports: [{ protocol: TCP, port: 443 }]
+    {{- include "foundry.np.dns" $np | nindent 4 }}
+{{- if .Values.plugins.enabled }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: connector
+spec:
+  podSelector:
+    matchLabels: {{- include "foundry.selector" (dict "root" $root "component" "connector") | nindent 6 }}
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from: {{- include "foundry.np.from" (dict "root" $root "component" "server") | nindent 8 }}
+      ports: [{ protocol: TCP, port: 4010 }]
+  egress:
+    - to: {{- include "foundry.np.from" (dict "root" $root "component" "connector-egress") | nindent 8 }}
+      ports: [{ protocol: TCP, port: 3128 }]
+    {{- include "foundry.np.dns" $np | nindent 4 }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: connector-egress
+spec:
+  podSelector:
+    matchLabels: {{- include "foundry.selector" (dict "root" $root "component" "connector-egress") | nindent 6 }}
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from: {{- include "foundry.np.from" (dict "root" $root "component" "connector") | nindent 8 }}
+      ports: [{ protocol: TCP, port: 3128 }]
+  egress:
+    - to:
+        - ipBlock:
+            cidr: {{ $np.egressCidr }}
+            except: {{ toJson $np.egressExcept }}
+      ports:
+        {{- range $root.Values.plugins.egressPorts }}
+        - { protocol: TCP, port: {{ . }} }
+        {{- end }}
+    {{- include "foundry.np.dns" $np | nindent 4 }}
+{{- end }}
+{{- if .Values.postgres.inCluster }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: postgres
+spec:
+  podSelector:
+    matchLabels: {{- include "foundry.selector" (dict "root" $root "component" "postgres") | nindent 6 }}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        {{- include "foundry.np.from" (dict "root" $root "component" "server") | nindent 8 }}
+        {{- include "foundry.np.from" (dict "root" $root "component" "ops-api") | nindent 8 }}
+      ports: [{ protocol: TCP, port: 5432 }]
+{{- end }}
+{{- end }}

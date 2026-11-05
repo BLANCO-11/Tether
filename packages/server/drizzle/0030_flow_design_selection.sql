@@ -1,0 +1,37 @@
+-- platform-coherence Phase 3.3 · I-105 — what an automation was designed against.
+--
+-- Until now the drafter was handed the ENTIRE workspace catalogue, with the
+-- prompt line `CALLABLE STEPS — the complete set. Anything not listed does not
+-- exist.` There was no way to say "use this database and these three tools", and
+-- nowhere to keep the answer if there had been.
+--
+-- ⚠ **It is stored on the FLOW, not on the revision, and that is a choice worth
+-- stating.** A revision is an immutable snapshot of the MODEL — what the
+-- automation does — and approval binds to it (§6.5). A selection is design-time
+-- intent about what the automation may reach for; it is not part of what runs,
+-- it does not compile to YAML, and it must not move a ref fingerprint. Putting
+-- it on the revision would make editing the scope produce a new revision,
+-- which would read as a behaviour change to the approval screen and would
+-- suspend nothing while looking like it might.
+--
+-- ⚠ **NULL is a real value and is not "everything was chosen".** It means nobody
+-- chose — the flow was designed against the whole workspace, or predates this
+-- column. Backfilled to NULL for exactly that reason: writing the current
+-- catalogue into every existing row would record a decision nobody made, and
+-- three months from now nothing could tell the difference between a deliberate
+-- scope and a migration's guess. Same rule as 0026's `created_by_kind` and
+-- 0029's `requested_by_kind`, both of which backfilled `unknown` rather than
+-- asserting a plausible value.
+--
+-- Shape: {"datasourceIds": [uuid, ...], "toolRefs": ["mail_send", ...]}
+--
+-- ⚠ Datasources by ID, tools by NAME. A tool's name IS its ref — the identifier
+-- a flow model carries and what `unknownRefs()` compares against — so an id here
+-- would need translating on every read and could not be grepped against a flow's
+-- own steps. A datasource has no such ref (a step names `<datasource>.<query>`),
+-- and its name is renameable while its id is not; storing the renameable half
+-- would silently drop a datasource from an automation's scope the day somebody
+-- tidied its name.
+
+ALTER TABLE "flows"
+  ADD COLUMN IF NOT EXISTS "design_selection" jsonb;

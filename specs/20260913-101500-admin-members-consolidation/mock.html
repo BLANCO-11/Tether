@@ -1,0 +1,682 @@
+<title>Members &amp; Access Mock</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Inter:wght@400;500;600&display=swap">
+<style>
+  /* ── The app's own tokens, copied from packages/client/src/app/globals.css so
+       this mock reads as the product rather than as a wireframe. Dark only:
+       the mock is a layout proposal, not a theme proposal. ─────────────────── */
+  :root {
+    --bg: #0b0d12;
+    --surface: #14161d;
+    --surface-2: #1b1e26;
+    --line: #20242d;
+    --line-2: #313641;
+    --line-interactive: #6b7280;
+    --sunken: #10131a;
+    --scrim: rgba(0,0,0,.6);
+    --text: #e6e8ec;
+    --muted: #8a8f9a;
+    --dim: #868b96;
+    --accent: #4c8dff;
+    --accent-bg: rgba(76,141,255,.09);
+    --accent-bg-2: rgba(76,141,255,.16);
+    --accent-line: rgba(76,141,255,.5);
+    --on-accent: #0b0d12;
+    --ok: #34d399;
+    --ok-bg: rgba(52,211,153,.12);
+    --warn: #fbbf24;
+    --warn-bg: rgba(245,158,11,.12);
+    --warn-line: rgba(251,191,36,.36);
+    --danger: #f87171;
+    --danger-bg: rgba(248,113,113,.12);
+
+    --sans: Inter, system-ui, -apple-system, "Segoe UI", sans-serif;
+    --mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+    color-scheme: dark;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    font-size: 14px;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap { max-width: 1240px; margin: 0 auto; padding-inline: 20px; padding-block: 0 72px; }
+
+  /* ── mock chrome (not part of the product) ─────────────────────────── */
+  .mockbar {
+    border-bottom: 1px solid var(--line);
+    padding-block: 22px 16px;
+    display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 16px;
+  }
+  .mockbar h1 {
+    font-size: 17px; font-weight: 600; margin: 0; letter-spacing: -.01em;
+  }
+  .mockbar .tag {
+    font-family: var(--mono); font-size: 10px; letter-spacing: .12em;
+    text-transform: uppercase; color: var(--warn);
+    border: 1px solid var(--warn-line); background: var(--warn-bg);
+    padding: 2px 7px; border-radius: 3px;
+  }
+  .mockbar p { margin: 0; color: var(--muted); font-size: 12.5px; max-width: 70ch; }
+
+  .screen { margin-top: 34px; }
+  .screen > .screen-label {
+    font-family: var(--mono); font-size: 10.5px; letter-spacing: .12em;
+    text-transform: uppercase; color: var(--dim); margin-bottom: 10px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .screen > .screen-label::after {
+    content: ""; flex: 1; height: 1px; background: var(--line);
+  }
+
+  /* ── product primitives ────────────────────────────────────────────── */
+  .page-header { padding-block: 18px 14px; display: grid; gap: 4px; }
+  .page-header .eyebrow {
+    font-family: var(--mono); font-size: 10.5px; letter-spacing: .12em;
+    text-transform: uppercase; color: var(--dim);
+  }
+  .page-header h2 { margin: 0; font-size: 20px; font-weight: 600; letter-spacing: -.012em; }
+  .page-header p { margin: 0; color: var(--muted); font-size: 13px; }
+
+  .panel { border: 1px solid var(--line); background: var(--surface); border-radius: 8px; overflow: hidden; }
+  .panel > header {
+    display: flex; align-items: center; gap: 8px;
+    border-bottom: 1px solid var(--line); padding: 11px 16px;
+  }
+  .panel > header h3 { margin: 0; font-size: 13.5px; font-weight: 600; }
+  .panel > header .count { margin-left: auto; font-size: 12px; color: var(--muted); }
+  .panel > .body { padding: 16px; display: grid; gap: 14px; }
+  .panel > footer {
+    border-top: 1px solid var(--line); padding: 11px 16px;
+    font-size: 11.5px; color: var(--muted);
+  }
+
+  .chip {
+    border: 1px solid var(--line); background: var(--surface-2);
+    border-radius: 999px; padding: 1px 9px; font-size: 11.5px; color: var(--muted);
+  }
+  .pill { border-radius: 999px; padding: 1px 9px; font-size: 11.5px; display: inline-block; }
+  .pill.admin { background: var(--accent-bg-2); color: var(--accent); border: 1px solid var(--accent-line); }
+  .pill.approver { background: var(--warn-bg); color: var(--warn); border: 1px solid var(--warn-line); }
+  .pill.author { background: var(--surface-2); color: var(--muted); border: 1px solid var(--line-2); }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+  thead th {
+    text-align: left; font-weight: 400; font-size: 10.5px; letter-spacing: .1em;
+    text-transform: uppercase; color: var(--dim);
+    padding: 9px 16px; border-bottom: 1px solid var(--line);
+  }
+  tbody td { padding: 11px 16px; border-bottom: 1px solid var(--line); }
+  tbody tr:last-child td { border-bottom: 0; }
+  tbody tr { cursor: pointer; }
+  tbody tr:hover { background: var(--surface-2); }
+  tbody tr[aria-selected="true"] { background: var(--accent-bg); }
+
+  .who { display: flex; align-items: center; gap: 11px; min-width: 0; }
+  .avatar {
+    width: 30px; height: 30px; border-radius: 999px; flex: none;
+    background: var(--accent-bg-2); color: var(--accent);
+    display: grid; place-items: center; font-size: 11px; font-weight: 600;
+  }
+  .who .lines { display: grid; min-width: 0; }
+  .who .email { font-weight: 500; font-size: 13.5px; }
+  .who .sub { font-family: var(--mono); font-size: 11px; color: var(--muted); }
+
+  label.field { display: grid; gap: 6px; font-size: 12.5px; font-weight: 500; }
+  .control, select, input[type="text"] {
+    height: 34px; width: 100%; border-radius: 6px;
+    border: 1px solid var(--line-interactive);
+    background: var(--bg); color: var(--text);
+    padding: 0 10px; font: inherit; font-size: 13px;
+  }
+  .btn {
+    height: 32px; padding: 0 13px; border-radius: 6px; font: inherit;
+    font-size: 13px; font-weight: 500; cursor: pointer;
+    border: 1px solid var(--line-2); background: var(--surface-2); color: var(--text);
+  }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+  .btn:focus-visible, .tab:focus-visible, tbody tr:focus-visible {
+    outline: 2px solid var(--accent); outline-offset: 2px;
+  }
+
+  /* ── tabs ──────────────────────────────────────────────────────────── */
+  .tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--line); }
+  .tab {
+    appearance: none; border: 0; background: none; color: var(--muted);
+    font: inherit; font-size: 13.5px; padding: 9px 14px; cursor: pointer;
+    border-bottom: 2px solid transparent; margin-bottom: -1px;
+  }
+  .tab:hover { color: var(--text); }
+  .tab[aria-selected="true"] { color: var(--accent); border-bottom-color: var(--accent); }
+  .tab .url { font-family: var(--mono); font-size: 10px; color: var(--dim); margin-left: 6px; }
+  .tabpanes > div { display: none; padding-top: 18px; }
+  .tabpanes > div.on { display: grid; gap: 16px; }
+
+  /* ── multi-select ──────────────────────────────────────────────────── */
+  .ms { position: relative; }
+  .ms > button {
+    text-align: left; display: flex; align-items: center; gap: 8px; cursor: pointer;
+  }
+  .ms > button .caret { margin-left: auto; color: var(--muted); }
+  .ms .menu {
+    position: absolute; z-index: 20; top: calc(100% + 4px); left: 0; right: 0;
+    border: 1px solid var(--line-2); background: var(--surface);
+    border-radius: 6px; padding: 5px; box-shadow: 0 10px 30px rgba(0,0,0,.5);
+    max-height: 232px; overflow: auto;
+  }
+  .ms[data-open="false"] .menu { display: none; }
+  .ms .menu label {
+    display: flex; align-items: center; gap: 9px; padding: 6px 8px;
+    border-radius: 4px; font-size: 13px; cursor: pointer;
+  }
+  .ms .menu label:hover { background: var(--surface-2); }
+  .ms .menu hr { border: 0; border-top: 1px solid var(--line); margin: 5px 2px; }
+
+  /* ── drawer ────────────────────────────────────────────────────────── */
+  .stage { position: relative; }
+  .scrim {
+    position: absolute; inset: 0; background: var(--scrim); border-radius: 8px;
+    opacity: 0; pointer-events: none; transition: opacity .16s;
+  }
+  .stage[data-drawer="open"] .scrim { opacity: 1; pointer-events: auto; }
+  .drawer {
+    position: absolute; top: 0; right: 0; bottom: 0; width: min(420px, 88%);
+    border: 1px solid var(--line-2); border-radius: 8px;
+    background: var(--surface); box-shadow: -14px 0 40px rgba(0,0,0,.5);
+    display: flex; flex-direction: column;
+    transform: translateX(104%); transition: transform .18s ease;
+  }
+  .stage[data-drawer="open"] .drawer { transform: none; }
+  .drawer > header {
+    display: flex; align-items: flex-start; gap: 10px;
+    border-bottom: 1px solid var(--line); padding: 13px 16px;
+  }
+  .drawer > header .x {
+    margin-left: auto; background: none; border: 0; color: var(--muted);
+    font-size: 17px; line-height: 1; cursor: pointer; padding: 2px 4px;
+  }
+  .drawer .scroll { overflow: auto; padding: 16px; display: grid; gap: 15px; }
+  .drawer > footer {
+    border-top: 1px solid var(--line); padding: 11px 16px;
+    display: flex; gap: 8px; justify-content: flex-end;
+  }
+
+  .access { display: grid; gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+  .access .row {
+    background: var(--surface); padding: 7px 11px; display: flex; align-items: center; gap: 9px;
+    font-size: 12.5px;
+  }
+  .access .row .key { font-family: var(--mono); font-size: 11.5px; }
+  .access .row .src { margin-left: auto; font-size: 10.5px; color: var(--dim); }
+  .access .row.granted .key { color: var(--text); }
+  .access .row.role .src { color: var(--accent); }
+  .access .row.not { opacity: .55; }
+  .access .group {
+    background: var(--sunken); padding: 5px 11px; font-family: var(--mono);
+    font-size: 9.5px; letter-spacing: .12em; text-transform: uppercase; color: var(--dim);
+  }
+
+  .note {
+    border-left: 3px solid var(--warn); background: var(--warn-bg);
+    padding: 9px 13px; font-size: 12px; border-radius: 0 5px 5px 0;
+  }
+  .note.blue { border-left-color: var(--accent); background: var(--accent-bg); }
+  .note.gone { border-left-color: var(--danger); background: var(--danger-bg); }
+  .note strong { font-weight: 600; }
+
+  .strike { text-decoration: line-through; color: var(--dim); }
+
+  .cols { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
+
+  @media (max-width: 640px) {
+    .tab .url { display: none; }
+    .drawer { width: 100%; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    * { transition: none !important; }
+  }
+</style>
+
+<div class="wrap">
+
+  <div class="mockbar">
+    <h1>Members &amp; access — proposed layout</h1>
+    <span class="tag">Mock · nothing built</span>
+    <p>A static sketch for review. The tabs, the member drawer and the workspace picker all
+      work so the interaction can be judged; every name, role and permission below is
+      invented. Read <code>spec.md</code> beside this file for what actually moves.</p>
+  </div>
+
+  <!-- ════════════════════════════════════════════════════════════════ -->
+  <section class="screen">
+    <div class="screen-label">Screen 1 — /admin/members</div>
+
+    <div class="page-header">
+      <div class="eyebrow">Admin</div>
+      <h2>Members &amp; dynamic roles</h2>
+      <p>Who can do what — in this workspace, and across the deployment.</p>
+    </div>
+
+    <div class="tabs" role="tablist" aria-label="Access views">
+      <button class="tab" role="tab" aria-selected="true" data-pane="members">
+        Members <span class="url">?tab=members</span>
+      </button>
+      <button class="tab" role="tab" aria-selected="false" data-pane="roles">
+        Roles &amp; permissions <span class="url">?tab=roles</span>
+      </button>
+      <button class="tab" role="tab" aria-selected="false" data-pane="platform">
+        Platform roles <span class="url">?tab=platform</span>
+      </button>
+    </div>
+
+    <div class="tabpanes">
+
+      <!-- ── MEMBERS ────────────────────────────────────────────────── -->
+      <div class="on" data-pane="members" role="tabpanel">
+
+        <div class="stage" data-drawer="closed">
+          <div class="panel">
+            <header>
+              <h3>Members</h3>
+              <span class="chip">Finance</span>
+              <span class="count">3 members</span>
+            </header>
+            <table>
+              <thead>
+                <tr><th>Member</th><th>Role</th><th aria-hidden></th></tr>
+              </thead>
+              <tbody id="member-rows">
+                <tr tabindex="0" data-email="ada@example.com" data-sub="oid-7f21c9" data-role="admin">
+                  <td><span class="who"><span class="avatar">AD</span><span class="lines"><span class="email">ada@example.com</span><span class="sub">oid-7f21c9</span></span></span></td>
+                  <td><span class="pill admin">admin</span></td>
+                  <td style="text-align:right;color:var(--muted)">›</td>
+                </tr>
+                <tr tabindex="0" data-email="grace@example.com" data-sub="oid-3b8e04" data-role="approver">
+                  <td><span class="who"><span class="avatar">GR</span><span class="lines"><span class="email">grace@example.com</span><span class="sub">oid-3b8e04</span></span></span></td>
+                  <td><span class="pill approver">approver</span></td>
+                  <td style="text-align:right;color:var(--muted)">›</td>
+                </tr>
+                <tr tabindex="0" data-email="liam@example.com" data-sub="oid-92da61" data-role="author">
+                  <td><span class="who"><span class="avatar">LI</span><span class="lines"><span class="email">liam@example.com</span><span class="sub">oid-92da61</span></span></span></td>
+                  <td><span class="pill author">author</span></td>
+                  <td style="text-align:right;color:var(--muted)">›</td>
+                </tr>
+              </tbody>
+            </table>
+            <footer>
+              A role decides what someone may do here; it is not proof of who they are.
+              Anything holding this deployment's identity signing secret can present any
+              identity, so treat a role as “granted access”, not as a verified person.
+            </footer>
+          </div>
+
+          <div class="scrim" data-close></div>
+
+          <!-- the drawer -->
+          <aside class="drawer" role="dialog" aria-label="Member access">
+            <header>
+              <div>
+                <div style="font-weight:600" id="d-email">ada@example.com</div>
+                <div class="sub" style="font-family:var(--mono);font-size:11px;color:var(--muted)" id="d-sub">oid-7f21c9</div>
+              </div>
+              <button class="x" data-close aria-label="Close">✕</button>
+            </header>
+
+            <div class="scroll">
+              <label class="field">
+                Role in Finance
+                <select id="d-role">
+                  <option>author</option>
+                  <option>approver</option>
+                  <option selected>admin</option>
+                </select>
+              </label>
+              <p style="margin:0;font-size:11.5px;color:var(--muted)">
+                A role is one preset. Custom roles are held <em>alongside</em> it and are
+                granted on the Roles tab — which is why they are not in this list.
+              </p>
+
+              <div class="note" id="d-lastadmin">
+                <strong>This is the workspace's last admin.</strong> Demoting them would
+                leave it with members and nobody able to grant a role. Promote another
+                admin first.
+              </div>
+
+              <div>
+                <div style="font-size:12.5px;font-weight:500;margin-bottom:7px">Accesses</div>
+                <div class="access">
+                  <div class="group">From the role</div>
+                  <div class="row granted role"><span class="key">flows.read</span><span class="src">via admin</span></div>
+                  <div class="row granted role"><span class="key">flows.write</span><span class="src">via admin</span></div>
+                  <div class="row granted role"><span class="key">members.grant</span><span class="src">via admin</span></div>
+                  <div class="group">Added for this person</div>
+                  <div class="row granted"><span class="key">realdata.use</span><span class="src">granted</span></div>
+                  <div class="group">Not held</div>
+                  <div class="row not"><span class="key">breakglass.activate</span><span class="src">—</span></div>
+                </div>
+                <p style="margin:7px 0 0;font-size:11.5px;color:var(--muted)">
+                  An access is the role bundle plus anything added here. A grant only ever
+                  adds — there is no deny.
+                </p>
+                <p style="margin:7px 0 0;font-size:11.5px;color:var(--muted)">
+                  <strong style="color:var(--text)">Workspace access only.</strong> A
+                  platform role is not held in a workspace, so it is neither shown nor
+                  changed here — see the Platform roles tab.
+                </p>
+              </div>
+            </div>
+
+            <footer>
+              <button class="btn" data-close>Cancel</button>
+              <button class="btn primary">Save role</button>
+            </footer>
+          </aside>
+        </div>
+
+        <div class="note">
+          <strong>The page gate changes with this too.</strong> It currently reads
+          <code>capabilities.includes("admin")</code> — which is <strong>always false</strong>,
+          because migration 0065 dropped <code>admin</code> as a capability. The page is
+          super-admin-only in practice. Since this change deletes the other member panel, a
+          workspace admin holding <code>members.grant</code> would be left nowhere to manage
+          their own members. The gate becomes <code>members.read</code>, and each control
+          below gates on its own permission.
+        </div>
+
+        <div class="note blue">
+          <strong>What changed.</strong> The 420px capability column is gone. It used to sit
+          there empty whenever nobody was selected; now the table is full width and the
+          editor arrives on click.
+        </div>
+
+        <!-- local accounts -->
+        <div class="panel">
+          <header><h3>Local accounts</h3><span class="count">unchanged</span></header>
+          <div class="body">
+            <p style="margin:0;color:var(--muted);font-size:12.5px">
+              Usernames and passwords for people with no directory identity. Stays on this
+              tab — it is about people.
+            </p>
+          </div>
+        </div>
+
+        <!-- bulk assign -->
+        <div class="panel">
+          <header><h3>Assign across workspaces</h3></header>
+          <div class="body">
+            <p style="margin:0;color:var(--muted);font-size:12.5px">
+              One person, one role, several workspaces at once. Each workspace is assigned
+              independently — a failure in one does not undo the others.
+            </p>
+
+            <div class="cols">
+              <label class="field">Person who has signed in
+                <select>
+                  <option>Choose someone who has signed in…</option>
+                  <option selected>ada@example.com</option>
+                  <option>grace@example.com</option>
+                </select>
+              </label>
+              <label class="field">Role in each workspace
+                <select><option>author</option><option>approver</option><option selected>admin</option></select>
+              </label>
+            </div>
+
+            <div class="cols">
+              <label class="field">Email <input type="text" value="ada@example.com"></label>
+              <label class="field">Identity subject <input type="text" value="oid-7f21c9"></label>
+            </div>
+
+            <!-- ⚠ the change: checkboxes → one multi-select -->
+            <div>
+              <div style="font-size:12.5px;font-weight:500;margin-bottom:6px">Workspaces</div>
+              <div class="ms" id="ws-picker" data-open="false">
+                <button class="control" aria-haspopup="listbox" aria-expanded="false" id="ws-summary">
+                  <span id="ws-label">3 of 4 selected</span><span class="caret">▾</span>
+                </button>
+                <div class="menu" role="listbox" aria-multiselectable="true">
+                  <label><input type="checkbox" id="ws-all"> Select all</label>
+                  <hr>
+                  <label><input type="checkbox" class="ws" checked> Finance</label>
+                  <label><input type="checkbox" class="ws" checked> Customer Support</label>
+                  <label><input type="checkbox" class="ws" checked> Orders &amp; Fulfilment</label>
+                  <label><input type="checkbox" class="ws"> Recruitment</label>
+                </div>
+              </div>
+              <p style="margin:7px 0 0;font-size:11.5px;color:var(--muted)">
+                Eight workspaces used to be eight checkboxes filling the panel. Still a
+                multi-select — a single-select would delete the only reason this panel
+                exists.
+              </p>
+            </div>
+
+            <div style="display:flex;justify-content:flex-end">
+              <button class="btn primary" id="ws-submit">Assign in 3 workspaces</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── ROLES ──────────────────────────────────────────────────── -->
+      <div data-pane="roles" role="tabpanel">
+        <div class="note blue">
+          <strong>Moved here from <code>/organization/roles</code>,</strong> which is deleted
+          rather than left unlinked — a page with no door is the defect closed last week.
+        </div>
+
+        <div class="panel">
+          <header><h3>Roles in Finance</h3><span class="count">3 built-in · 1 custom</span></header>
+          <div class="body">
+            <div class="access">
+              <div class="row"><span class="key">author</span><span class="src">built-in · 19 permissions</span></div>
+              <div class="row"><span class="key">approver</span><span class="src">built-in · 23 permissions</span></div>
+              <div class="row"><span class="key">admin</span><span class="src">built-in · 38 permissions</span></div>
+            </div>
+
+            <div class="panel" style="background:var(--sunken)">
+              <header><h3>Release manager</h3><span class="count">2 people</span></header>
+              <div class="body">
+                <p style="margin:0;font-family:var(--mono);font-size:11.5px;color:var(--muted)">
+                  flows.approve · flows.arm · runs.replay
+                </p>
+                <div class="access">
+                  <div class="row"><span class="key">grace@example.com</span><span class="src">Remove</span></div>
+                  <div class="row"><span class="key">liam@example.com</span><span class="src">Remove</span></div>
+                </div>
+                <div style="display:flex;gap:8px;align-items:center">
+                  <select style="max-width:230px"><option>Add somebody…</option><option>ada@example.com</option></select>
+                  <button class="btn">Add</button>
+                  <button class="btn" style="margin-left:auto">Retire</button>
+                </div>
+                <p style="margin:0;font-size:11.5px;color:var(--muted)">
+                  A custom role is held <strong>alongside</strong> a member's preset, never
+                  instead of it.
+                </p>
+              </div>
+            </div>
+
+            <div><button class="btn primary">Compose a role</button></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── PLATFORM ───────────────────────────────────────────────── -->
+      <div data-pane="platform" role="tabpanel">
+        <div class="note">
+          <strong>This tab is gated on <code>platform.users.read</code></strong>, read through
+          <code>canPlatform</code> — not <code>useCan</code>, which answers from the workspace
+          union and would say “denied” for a super admin holding all eleven. A workspace admin
+          who is not a platform user does not see this tab at all.
+        </div>
+
+        <div class="note blue">
+          <strong>This is the only place a platform-role holder appears.</strong> The member
+          drawer shows workspace access alone — a platform role is not granted in a
+          workspace, and showing it on a tenant-scoped screen would imply it could be
+          changed there.
+        </div>
+
+        <div class="panel">
+          <header><h3>Who holds a platform role</h3></header>
+          <div class="body">
+            <div class="access">
+              <div class="row"><span class="key">ada@example.com</span><span class="src">platform-admin · Remove</span></div>
+            </div>
+            <div class="cols">
+              <label class="field">Person
+                <select><option>Choose a person…</option><option>grace@example.com</option></select>
+              </label>
+              <label class="field">Role
+                <select><option>Choose a role…</option><option>Platform administrator</option><option>Auditor</option><option>Support</option></select>
+              </label>
+            </div>
+            <div style="display:flex;justify-content:flex-end"><button class="btn primary">Assign</button></div>
+            <div class="note">
+              A platform administrator cannot see a tenant's data, but <strong>can give
+              themselves the ability to</strong> — and that grant is recorded with their name
+              on it. Shown only for a role that carries <code>platform.members.grant</code>.
+            </div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <header><h3>The roles</h3></header>
+          <div class="body">
+            <div class="access">
+              <div class="row"><span class="key">platform-admin</span><span class="src">built-in · 11 of 11 · 1 person</span></div>
+              <div class="row"><span class="key">support</span><span class="src">built-in · 4 · 0 people</span></div>
+              <div class="row"><span class="key">auditor</span><span class="src">built-in · 1 · 0 people</span></div>
+            </div>
+            <p style="margin:0;font-size:11.5px;color:var(--muted)">
+              Super admin is not on this list because it is not a role — it is an allowlist in
+              the API server's environment, which is what makes it the one authority that
+              cannot be handed out from inside the product.
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ════════════════════════════════════════════════════════════════ -->
+  <section class="screen">
+    <div class="screen-label">Screen 2 — /organization, after</div>
+
+    <div class="page-header">
+      <h2>Manage Workspaces</h2>
+      <p>Each workspace has its own credentials, data sources and automations.</p>
+    </div>
+
+    <div class="note gone">
+      <strong>Removed from this page:</strong>
+      <span class="strike">Roles and permissions link</span> ·
+      <span class="strike">Platform roles link</span> ·
+      <span class="strike">Members</span> ·
+      <span class="strike">People who have signed in</span>
+      — all four now live on <code>/admin/members</code>.
+    </div>
+
+    <div class="panel" style="margin-top:16px">
+      <header><h3>Workspaces</h3><span class="count">4</span></header>
+      <table>
+        <tbody>
+          <tr><td><span class="who"><span class="avatar">FI</span><span class="lines"><span class="email">Finance</span><span class="sub">3 members</span></span></span></td><td style="text-align:right;color:var(--muted)">Rename · Delete</td></tr>
+          <tr><td><span class="who"><span class="avatar">CS</span><span class="lines"><span class="email">Customer Support</span><span class="sub">0 members</span></span></span></td><td style="text-align:right;color:var(--muted)">Rename · Delete</td></tr>
+          <tr><td><span class="who"><span class="avatar">OR</span><span class="lines"><span class="email">Orders &amp; Fulfilment</span><span class="sub">0 members</span></span></span></td><td style="text-align:right;color:var(--muted)">Rename · Delete</td></tr>
+        </tbody>
+      </table>
+      <footer>
+        The four access states stay: super admin · signed in but not one · none configured ·
+        <strong>could not be checked</strong>. The last one must never read as either answer.
+      </footer>
+    </div>
+  </section>
+
+  <!-- ════════════════════════════════════════════════════════════════ -->
+  <section class="screen">
+    <div class="screen-label">The one behaviour change</div>
+    <div class="note">
+      <strong>“People who have signed in” assigned as <code>admin</code> in one click.</strong>
+      Its replacement — the person picker in Assign across workspaces — asks for person, role
+      and workspaces. That is one step more, and a better default: the old panel hardcoded
+      <code>admin</code>, so everybody added through it became a workspace administrator
+      whether or not anybody meant it. If the one-click path is wanted back it should be
+      “Add to this workspace as…”, with a role picker — not a button that picks silently.
+    </div>
+  </section>
+</div>
+
+<script>
+  // ── tabs ─────────────────────────────────────────────────────────────
+  const tabs = document.querySelectorAll(".tab");
+  const panes = document.querySelectorAll(".tabpanes > div");
+  tabs.forEach((t) => {
+    t.addEventListener("click", () => {
+      tabs.forEach((x) => x.setAttribute("aria-selected", String(x === t)));
+      panes.forEach((p) => p.classList.toggle("on", p.dataset.pane === t.dataset.pane));
+    });
+  });
+
+  // ── the member drawer ────────────────────────────────────────────────
+  const stage = document.querySelector(".stage");
+  const rows = document.querySelectorAll("#member-rows tr");
+  const open = (tr) => {
+    rows.forEach((r) => r.setAttribute("aria-selected", String(r === tr)));
+    document.getElementById("d-email").textContent = tr.dataset.email;
+    document.getElementById("d-sub").textContent = tr.dataset.sub;
+    document.getElementById("d-role").value = tr.dataset.role;
+    // The last-admin warning belongs to the sole admin, nobody else.
+    document.getElementById("d-lastadmin").style.display =
+      tr.dataset.role === "admin" ? "" : "none";
+    stage.dataset.drawer = "open";
+  };
+  const close = () => {
+    stage.dataset.drawer = "closed";
+    rows.forEach((r) => r.setAttribute("aria-selected", "false"));
+  };
+  rows.forEach((tr) => {
+    tr.addEventListener("click", () => open(tr));
+    tr.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" || e.key === " ") { e.preventDefault(); open(tr); }
+    });
+  });
+  document.querySelectorAll("[data-close]").forEach((b) => b.addEventListener("click", close));
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape") close(); });
+
+  // ── the workspace multi-select ───────────────────────────────────────
+  const picker = document.getElementById("ws-picker");
+  const summary = document.getElementById("ws-summary");
+  const label = document.getElementById("ws-label");
+  const submit = document.getElementById("ws-submit");
+  const boxes = [...picker.querySelectorAll("input.ws")];
+  const all = document.getElementById("ws-all");
+
+  const sync = () => {
+    const n = boxes.filter((b) => b.checked).length;
+    label.textContent = `${n} of ${boxes.length} selected`;
+    all.checked = n === boxes.length;
+    all.indeterminate = n > 0 && n < boxes.length;
+    submit.textContent = n === 0
+      ? "Choose at least one workspace"
+      : `Assign in ${n} workspace${n === 1 ? "" : "s"}`;
+    submit.disabled = n === 0;
+  };
+  boxes.forEach((b) => b.addEventListener("change", sync));
+  all.addEventListener("change", () => { boxes.forEach((b) => (b.checked = all.checked)); sync(); });
+  summary.addEventListener("click", () => {
+    const next = picker.dataset.open === "false";
+    picker.dataset.open = String(next);
+    summary.setAttribute("aria-expanded", String(next));
+  });
+  document.addEventListener("click", (e) => {
+    if (!picker.contains(e.target)) { picker.dataset.open = "false"; summary.setAttribute("aria-expanded", "false"); }
+  });
+  sync();
+</script>

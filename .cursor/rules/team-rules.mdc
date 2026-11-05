@@ -1,0 +1,21 @@
+---
+description: Enforced spec-driven development team rules (always apply)
+alwaysApply: true
+---
+
+The canonical team rules live in AGENTS.md at the repo root - read and follow
+them in every session. Summary: all source changes go through the spec-kit
+workflow (`/speckit-specify` → `/speckit-plan` → `/speckit-tasks` →
+`/speckit-implement`); uncovered changes are regularized with
+`/speckit-backfill` and verified with `/speckit-comply`; hooks deny source
+writes outside the workflow - when denied, run the command the denial message
+names instead of working around it. Never set SPECKIT_ENFORCE=0 or use
+`git commit --no-verify` unless a human explicitly instructs it.
+
+Foundational standards first: a new project MUST run `/speckit-start` to
+establish its standards (Constitution, Frameworks, Security, and Design if it
+has a UI) before any source work; the pre-write hook blocks source writes until
+the required standards exist. Change a standard via `/speckit-update-standards`.
+At session start, read these if present and treat them as binding:
+`.specify/memory/constitution.md`, `frameworks.md`, `security.md`, `design.md`
+(UI only), and the `standards.json` manifest. See `docs/STANDARDS.md`.

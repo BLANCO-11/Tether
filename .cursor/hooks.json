@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "hooks": {
+    "beforeFileEdit": [
+      {
+        "command": "./scripts/hooks/cursor-adapter.sh"
+      }
+    ],
+    "beforeShellExecution": [
+      {
+        "command": "./scripts/hooks/cursor-adapter.sh"
+      }
+    ]
+  }
+}

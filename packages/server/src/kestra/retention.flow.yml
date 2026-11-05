@@ -1,0 +1,91 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# O4 — the retention policy for Kestra's internal storage.
+# archive/kestra-migration/09-risks-and-verification.md O4 · progress/phase-1.md 1.3
+#
+# The volume was the easy half. Without this, every execution's task outputs,
+# logs, metrics and storage files accumulate forever — and I-01 (the host at
+# 375M free before a single container started) is what that looks like when it
+# lands. Retention is the recurrence guard, not a nice-to-have.
+#
+# ── Why this is a FLOW and not a config setting ──────────────────────────────
+#
+# Kestra OSS has no declarative `kestra.retention.*`; purging is a task you
+# schedule. That is fine, and arguably better — the policy is visible, versioned
+# and auditable in the same place as everything else.
+#
+# ── Why it lives in `foundry.system` ─────────────────────────────────────────
+#
+# It is an OPERATIONAL flow, not a tenant flow. Two consequences worth being
+# explicit about:
+#
+#   * R8's three-task-type allowlist constrains what the COMPILER emits for a
+#     tenant. This flow is Foundry-authored infrastructure and is deployed by
+#     `pnpm kestra:system`, never by a compiler and never by a client.
+#   * `foundry.system` has no tenant segment, so `resolveWorkspaceFromNamespace`
+#     cannot resolve it and `POST /api/executions/begin` 403s. A system flow
+#     therefore cannot obtain an execution token even though it runs on the same
+#     instance. That is deliberate: the purge job needs no tenant credential, so
+#     under R2 it must not be able to get one.
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# ── ⚠ THIS NUMBER IS ALSO THE REPLAY WINDOW ──────────────────────────────────
+#
+# GAPS §6.3. Replay rehydrates the ENGINE's copy of the upstream step outputs —
+# Foundry keeps the pointer, not the data (R6) — so the purge below is what ends
+# a run's replayability. One setting, two meanings, and only one of them is in
+# its name. `description` carries the same sentence into the Kestra UI, which is
+# where an engineer looking at this policy will actually be standing.
+#
+# ⚠ Do not write the full environment-variable name anywhere in this file:
+# `deploy-system-flows.ts` does a bare `replaceAll("RETENTION_DAYS", …)`, so
+# `KESTRA_RETENTION_DAYS` would render as `KESTRA_30`.
+# ─────────────────────────────────────────────────────────────────────────────
+id: retention
+namespace: foundry.system
+
+description: |
+  Purges terminal Kestra executions, logs, metrics and storage older than RETENTION_DAYS days.
+
+  ⚠ RETENTION IS ALSO THE REPLAY WINDOW. Foundry's replay rehydrates this
+  engine's copy of a run's upstream step outputs; Foundry itself keeps only the
+  pointer. Anything purged here can no longer be replayed, and Foundry's replay
+  control quotes this same number to the user. Shortening it shortens how far
+  back a run can be replayed — change it in one place only, the environment
+  variable this flow is rendered from.
+
+# Purge everything terminal older than the window. RUNNING, PAUSED and QUEUED are
+# absent from `states` on purpose — a long human-approval Pause (§6.4) can
+# legitimately sit for days, and purging it would destroy a live execution.
+tasks:
+  - id: purge_executions
+    type: io.kestra.plugin.core.execution.PurgeExecutions
+    endDate: "{{ now() | dateAdd(-RETENTION_DAYS, 'DAYS') }}"
+    states:
+      - SUCCESS
+      - WARNING
+      - FAILED
+      - KILLED
+      - CANCELLED
+    purgeExecution: true
+    purgeLog: true
+    purgeMetric: true
+    purgeStorage: true
+
+  # Catches storage files that outlived their execution record — an execution
+  # purged by an earlier policy, or one whose files were written by a task that
+  # then failed. `PurgeExecutions` only reaches files it can still see an
+  # execution for.
+  - id: purge_orphan_storage
+    type: io.kestra.plugin.core.storage.PurgeStorage
+    endDate: "{{ now() | dateAdd(-RETENTION_DAYS, 'DAYS') }}"
+
+  # Logs not attached to a purged execution — trigger evaluation logs, for one,
+  # which are written per poll and are the highest-volume thing on the instance.
+  - id: purge_logs
+    type: io.kestra.plugin.core.log.PurgeLogs
+    endDate: "{{ now() | dateAdd(-RETENTION_DAYS, 'DAYS') }}"
+
+triggers:
+  - id: nightly
+    type: io.kestra.plugin.core.trigger.Schedule
+    cron: "PURGE_CRON"

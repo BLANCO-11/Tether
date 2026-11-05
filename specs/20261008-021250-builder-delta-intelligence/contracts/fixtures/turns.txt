@@ -1,0 +1,15 @@
+1 | applied | get me list of employees along with their calculated absence days.
+absence days can be of two types, half day absence = 0.5 absence
+full day absence = 1
+
+half day absence = working hours less than 9.5
+full day absence = working hours less than 4.75
+
+leave days need to be ignored for calculating absence.
+ ```
+2 | applied | should return a total absence field aswell
+3 | needs_input | email this as a excel report to me
+4 | needs_input | employee details
+5 | applied | monthly emplyee update
+6 | answered | are half days counted as 0.5 ?
+7 | insufficient_catalogue | the db step is overlapping because of <= >= on 4.75, its double counting, fix that

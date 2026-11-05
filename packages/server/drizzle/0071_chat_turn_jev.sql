@@ -1,0 +1,25 @@
+-- What the DECISION seam answered for this turn, and whether the op agreed.
+--
+-- ⚠ **A column rather than a log line, and the reason is I-120.** The seam's
+-- answers were already being computed; a value computed and discarded is a check
+-- that is correct, whose tests pass, and on which no behaviour depends — so
+-- nothing would notice when it stopped being true. `resolved_by` records WHICH
+-- path a turn took; this records what that path actually said.
+--
+-- ⚠ **The full answer set is stored, including every `confidence`, and that is
+-- deliberate (I-187).** Every Choice measured in Phase 0 returned 1.0, so the
+-- thresholds in `config.jev` cannot be tuned on probes — only on the
+-- distribution real turns produce. Recording it before anything gates on it is
+-- the whole ordering: choose a threshold first and you ship blind to the band
+-- the interesting cases sit in.
+--
+-- ⚠ **The STATE is NOT stored.** It carries the flow, the catalogue and the
+-- person's own message; the message is already in `message`, and the rest is
+-- reconstructible from the revision. What lands here is step ids, op names and
+-- column names — workspace-internal identifiers already in `flow_steps` — so
+-- this column adds no new class of data to the database.
+--
+-- Nullable with no default: NULL means the seam did not run for this turn, which
+-- is every turn before this migration and every turn with the flag off. An empty
+-- object would claim it ran and answered nothing.
+ALTER TABLE "flow_chat_turns" ADD COLUMN "jev_json" jsonb;

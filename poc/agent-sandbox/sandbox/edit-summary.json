@@ -1,0 +1,10 @@
+{
+  "ok": false,
+  "mode": "edit",
+  "fixTurns": 0,
+  "stage": "verify",
+  "detail": "VERIFY FAIL\n  - workflow.steps is empty — a goal needs at least one step",
+  "snapshot": "2026-10-09T12-23-01-928Z_108794",
+  "reverted": true,
+  "accepted": false
+}

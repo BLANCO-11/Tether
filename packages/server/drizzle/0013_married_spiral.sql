@@ -1,0 +1,1 @@
+ALTER TABLE "flow_steps" ADD COLUMN "contract_json" jsonb;

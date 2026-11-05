@@ -1,0 +1,38 @@
+[
+  {
+    "id": "INV-1001",
+    "customer_name": "Alice Johnson",
+    "customer_email": "alice.johnson@gmail.com",
+    "billing_email": "ap.acme@yahoo.com",
+    "amount_cents": 125000,
+    "due_date": "2026-09-01",
+    "status": "overdue"
+  },
+  {
+    "id": "INV-1002",
+    "customer_name": "Bob Smith",
+    "customer_email": "bob.smith@gmail.com",
+    "billing_email": "payables.beta@yahoo.com",
+    "amount_cents": 89000,
+    "due_date": "2026-09-15",
+    "status": "overdue"
+  },
+  {
+    "id": "INV-1003",
+    "customer_name": "Carol Williams",
+    "customer_email": "carol.williams@gmail.com",
+    "billing_email": "invoices.gamma@yahoo.com",
+    "amount_cents": 45000,
+    "due_date": "2026-10-20",
+    "status": "open"
+  },
+  {
+    "id": "INV-1004",
+    "customer_name": "David Brown",
+    "customer_email": "david.brown@gmail.com",
+    "billing_email": "accounts.delta@yahoo.com",
+    "amount_cents": 210000,
+    "due_date": "2026-08-30",
+    "status": "overdue"
+  }
+]

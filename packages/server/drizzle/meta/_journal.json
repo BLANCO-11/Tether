@@ -1,0 +1,965 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1784821557862,
+      "tag": "0000_square_venus",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1784829529701,
+      "tag": "0001_zippy_rhino",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1784830673550,
+      "tag": "0002_first_marvel_apes",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1785040260000,
+      "tag": "0003_rename_orbit_to_tether",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1785065873190,
+      "tag": "0004_calm_nocturne",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1785066538610,
+      "tag": "0005_huge_sabretooth",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1785085971310,
+      "tag": "0006_natural_devos",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1785086522349,
+      "tag": "0007_motionless_nehzno",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1785086542129,
+      "tag": "0008_furry_nocturne",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1785244107108,
+      "tag": "0009_faithful_tinkerer",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1785248020220,
+      "tag": "0010_small_marvel_boy",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1785320337337,
+      "tag": "0011_charming_roughhouse",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1785325591708,
+      "tag": "0012_aspiring_micromax",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1785329320870,
+      "tag": "0013_married_spiral",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1785329952854,
+      "tag": "0014_tiny_colossus",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1785332428069,
+      "tag": "0015_real_night_nurse",
+      "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1785407842191,
+      "tag": "0016_purple_kat_farrell",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1785441423961,
+      "tag": "0017_real_kate_bishop",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1785483372733,
+      "tag": "0018_drop_stub_capture_tables",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1785496636233,
+      "tag": "0019_wise_katie_power",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1785499446072,
+      "tag": "0020_yummy_skaar",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1785502310781,
+      "tag": "0021_wild_spitfire",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1785588710781,
+      "tag": "0022_slug_backfill_and_unique",
+      "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1785592310781,
+      "tag": "0023_workspace_kind",
+      "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1785593398409,
+      "tag": "0024_outline_and_progress",
+      "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1785700000000,
+      "tag": "0025_dev_sandbox",
+      "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1785800000000,
+      "tag": "0026_revision_author_kind",
+      "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1785900000000,
+      "tag": "0027_workspace_members",
+      "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "7",
+      "when": 1786000000000,
+      "tag": "0028_flow_expectations",
+      "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1786100000000,
+      "tag": "0029_run_requester",
+      "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1786200000000,
+      "tag": "0030_flow_design_selection",
+      "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1786300000000,
+      "tag": "0031_generation_llm",
+      "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1786400000000,
+      "tag": "0032_drop_workspace_tether_columns",
+      "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1786600000000,
+      "tag": "0033_flow_chat",
+      "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1786533669570,
+      "tag": "0034_worthless_captain_britain",
+      "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1786617013969,
+      "tag": "0035_datasource_operations",
+      "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1786700000000,
+      "tag": "0036_workspace_secrets_kind_label",
+      "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "7",
+      "when": 1786622797202,
+      "tag": "0037_nostalgic_molecule_man",
+      "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1786800000000,
+      "tag": "0038_expectation_status_check",
+      "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "7",
+      "when": 1787048115981,
+      "tag": "0039_bright_thundra",
+      "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1787100000000,
+      "tag": "0040_platform_users",
+      "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1787200000000,
+      "tag": "0041_approval_override",
+      "breakpoints": true
+    },
+    {
+      "idx": 42,
+      "version": "7",
+      "when": 1788300000000,
+      "tag": "0042_workspace_member_capabilities",
+      "breakpoints": true
+    },
+    {
+      "idx": 43,
+      "version": "7",
+      "when": 1788400000000,
+      "tag": "0043_flow_step_flags",
+      "breakpoints": true
+    },
+    {
+      "idx": 44,
+      "version": "7",
+      "when": 1788410000000,
+      "tag": "0044_flow_phases",
+      "breakpoints": true
+    },
+    {
+      "idx": 45,
+      "version": "7",
+      "when": 1788420000000,
+      "tag": "0045_approval_requests",
+      "breakpoints": true
+    },
+    {
+      "idx": 46,
+      "version": "7",
+      "when": 1788430000000,
+      "tag": "0046_audit_events",
+      "breakpoints": true
+    },
+    {
+      "idx": 47,
+      "version": "7",
+      "when": 1788440000000,
+      "tag": "0047_incidents_break_glass",
+      "breakpoints": true
+    },
+    {
+      "idx": 48,
+      "version": "7",
+      "when": 1788450000000,
+      "tag": "0048_release_gates",
+      "breakpoints": true
+    },
+    {
+      "idx": 49,
+      "version": "7",
+      "when": 1788460000000,
+      "tag": "0049_reviewed_templates",
+      "breakpoints": true
+    },
+    {
+      "idx": 50,
+      "version": "7",
+      "when": 1788470000000,
+      "tag": "0050_resources_b13",
+      "breakpoints": true
+    },
+    {
+      "idx": 51,
+      "version": "7",
+      "when": 1788480000000,
+      "tag": "0051_catalogue_picker",
+      "breakpoints": true
+    },
+    {
+      "idx": 52,
+      "version": "7",
+      "when": 1788490000000,
+      "tag": "0052_flow_test_scenarios",
+      "breakpoints": true
+    },
+    {
+      "idx": 53,
+      "version": "7",
+      "when": 1788500000000,
+      "tag": "0053_attendance_b17",
+      "breakpoints": true
+    },
+    {
+      "idx": 54,
+      "version": "7",
+      "when": 1788510000000,
+      "tag": "0054_pins",
+      "breakpoints": true
+    },
+    {
+      "idx": 55,
+      "version": "7",
+      "when": 1788520000000,
+      "tag": "0055_flow_revision_hidden",
+      "breakpoints": true
+    },
+    {
+      "idx": 56,
+      "version": "7",
+      "when": 1788530000000,
+      "tag": "0056_sandbox_build_state",
+      "breakpoints": true
+    },
+    {
+      "idx": 57,
+      "version": "7",
+      "when": 1788700000000,
+      "tag": "0057_drop_tether",
+      "breakpoints": true
+    },
+    {
+      "idx": 58,
+      "version": "7",
+      "when": 1788800000000,
+      "tag": "0058_email_capture",
+      "breakpoints": true
+    },
+    {
+      "idx": 59,
+      "version": "7",
+      "when": 1788900000000,
+      "tag": "0059_chat_more_stop",
+      "breakpoints": true
+    },
+    {
+      "idx": 60,
+      "version": "7",
+      "when": 1789000000000,
+      "tag": "0060_local_users",
+      "breakpoints": true
+    },
+    {
+      "idx": 61,
+      "version": "7",
+      "when": 1789100000000,
+      "tag": "0061_flow_chat_config",
+      "breakpoints": true
+    },
+    {
+      "idx": 62,
+      "version": "7",
+      "when": 1789200000000,
+      "tag": "0062_workspace_roles",
+      "breakpoints": true
+    },
+    {
+      "idx": 63,
+      "version": "7",
+      "when": 1789300000000,
+      "tag": "0063_platform_roles",
+      "breakpoints": true
+    },
+    {
+      "idx": 64,
+      "version": "7",
+      "when": 1789400000000,
+      "tag": "0064_platform_audit",
+      "breakpoints": true
+    },
+    {
+      "idx": 65,
+      "version": "7",
+      "when": 1789500000000,
+      "tag": "0065_capability_rename",
+      "breakpoints": true
+    },
+    {
+      "idx": 66,
+      "version": "7",
+      "when": 1789600000000,
+      "tag": "0066_mock_readiness",
+      "breakpoints": true
+    },
+    {
+      "idx": 67,
+      "version": "7",
+      "when": 1789700000000,
+      "tag": "0067_datasource_access_policy",
+      "breakpoints": true
+    },
+    {
+      "idx": 68,
+      "version": "7",
+      "when": 1789800000000,
+      "tag": "0068_schema_column_type_text",
+      "breakpoints": true
+    },
+    {
+      "idx": 69,
+      "version": "7",
+      "when": 1789900000000,
+      "tag": "0069_add_flow_name_snapshot",
+      "breakpoints": true
+    },
+    {
+      "idx": 70,
+      "version": "7",
+      "when": 1790000000000,
+      "tag": "0070_add_flow_id_snapshot",
+      "breakpoints": true
+    },
+    {
+      "idx": 71,
+      "version": "7",
+      "when": 1790100000000,
+      "tag": "0071_chat_turn_jev",
+      "breakpoints": true
+    },
+    {
+      "idx": 72,
+      "version": "7",
+      "when": 1790200000000,
+      "tag": "0072_described_queries_and_tags",
+      "breakpoints": true
+    },
+    {
+      "idx": 73,
+      "version": "7",
+      "when": 1790300000000,
+      "tag": "0073_tool_output_schema",
+      "breakpoints": true
+    },
+    {
+      "idx": 74,
+      "version": "7",
+      "when": 1790400000000,
+      "tag": "0074_flow_incomplete_model",
+      "breakpoints": true
+    },
+    {
+      "idx": 75,
+      "version": "7",
+      "when": 1790500000000,
+      "tag": "0075_revision_goal_spec",
+      "breakpoints": true
+    },
+    {
+      "idx": 76,
+      "version": "7",
+      "when": 1790600000000,
+      "tag": "0076_query_column_tags",
+      "breakpoints": true
+    },
+    {
+      "idx": 77,
+      "version": "7",
+      "when": 1790700000000,
+      "tag": "0077_value_domains",
+      "breakpoints": true
+    },
+    {
+      "idx": 78,
+      "version": "7",
+      "when": 1790800000000,
+      "tag": "0078_datasource_files",
+      "breakpoints": true
+    },
+    {
+      "idx": 79,
+      "version": "7",
+      "when": 1790900000000,
+      "tag": "0079_email_attachments",
+      "breakpoints": true
+    },
+    {
+      "idx": 80,
+      "version": "7",
+      "when": 1791000000000,
+      "tag": "0080_datasource_column_tags",
+      "breakpoints": true
+    },
+    {
+      "idx": 81,
+      "version": "7",
+      "when": 1791100000000,
+      "tag": "0081_step_approval_scope",
+      "breakpoints": true
+    },
+    {
+      "idx": 82,
+      "version": "7",
+      "when": 1791400000000,
+      "tag": "0082_runner_step_results",
+      "breakpoints": true
+    },
+    {
+      "idx": 83,
+      "version": "7",
+      "when": 1791500000000,
+      "tag": "0083_flow_runtime",
+      "breakpoints": true
+    },
+    {
+      "idx": 84,
+      "version": "7",
+      "when": 1791600000000,
+      "tag": "0084_runner_step_io",
+      "breakpoints": true
+    },
+    {
+      "idx": 85,
+      "version": "7",
+      "when": 1791700000000,
+      "tag": "0085_pi_flow_chats",
+      "breakpoints": true
+    },
+    {
+      "idx": 86,
+      "version": "7",
+      "when": 1791800000000,
+      "tag": "0086_runner_step_checks",
+      "breakpoints": true
+    },
+    {
+      "idx": 87,
+      "version": "7",
+      "when": 1791900000000,
+      "tag": "0087_forge_session",
+      "breakpoints": true
+    },
+    {
+      "idx": 88,
+      "version": "7",
+      "when": 1792000000000,
+      "tag": "0088_runner_control_flow",
+      "breakpoints": true
+    },
+    {
+      "idx": 89,
+      "version": "7",
+      "when": 1792100000000,
+      "tag": "0089_usage_events",
+      "breakpoints": true
+    },
+    {
+      "idx": 90,
+      "version": "7",
+      "when": 1792200000000,
+      "tag": "0090_usage_cache_write",
+      "breakpoints": true
+    },
+    {
+      "idx": 91,
+      "version": "7",
+      "when": 1792300000000,
+      "tag": "0091_drop_observe_values",
+      "breakpoints": true
+    },
+    {
+      "idx": 92,
+      "version": "7",
+      "when": 1792400000000,
+      "tag": "0092_step_files",
+      "breakpoints": true
+    },
+    {
+      "idx": 93,
+      "version": "7",
+      "when": 1792500000000,
+      "tag": "0093_sqlite_file_50mb",
+      "breakpoints": true
+    },
+    {
+      "idx": 94,
+      "version": "7",
+      "when": 1792600000000,
+      "tag": "0094_workspace_files",
+      "breakpoints": true
+    },
+    {
+      "idx": 95,
+      "version": "7",
+      "when": 1792700000000,
+      "tag": "0095_pi_chats",
+      "breakpoints": true
+    },
+    {
+      "idx": 96,
+      "version": "7",
+      "when": 1792800000000,
+      "tag": "0096_workspace_assistant",
+      "breakpoints": true
+    },
+    {
+      "idx": 97,
+      "version": "7",
+      "when": 1792900000000,
+      "tag": "0097_chat_mode",
+      "breakpoints": true
+    },
+    {
+      "idx": 98,
+      "version": "7",
+      "when": 1793000000000,
+      "tag": "0098_email_held_files",
+      "breakpoints": true
+    },
+    {
+      "idx": 99,
+      "version": "7",
+      "when": 1793100000000,
+      "tag": "0099_pi_chat_references",
+      "breakpoints": true
+    },
+    {
+      "idx": 100,
+      "version": "7",
+      "when": 1793200000000,
+      "tag": "0100_observer_and_private_content",
+      "breakpoints": true
+    },
+    {
+      "idx": 101,
+      "version": "7",
+      "when": 1793300000000,
+      "tag": "0101_flow_owner",
+      "breakpoints": true
+    },
+    {
+      "idx": 102,
+      "version": "7",
+      "when": 1793400000000,
+      "tag": "0102_model_prices",
+      "breakpoints": true
+    },
+    {
+      "idx": 103,
+      "version": "7",
+      "when": 1793500000000,
+      "tag": "0103_audit_chat_entity",
+      "breakpoints": true
+    },
+    {
+      "idx": 104,
+      "version": "7",
+      "when": 1793600000000,
+      "tag": "0104_model_prices_cache",
+      "breakpoints": true
+    },
+    {
+      "idx": 105,
+      "version": "7",
+      "when": 1793700000000,
+      "tag": "0105_remove_seeded_templates",
+      "breakpoints": true
+    },
+    {
+      "idx": 106,
+      "version": "7",
+      "when": 1793800000000,
+      "tag": "0106_plugins",
+      "breakpoints": true
+    },
+    {
+      "idx": 107,
+      "version": "7",
+      "when": 1793900000000,
+      "tag": "0107_plugin_platform_audit",
+      "breakpoints": true
+    },
+    {
+      "idx": 108,
+      "version": "7",
+      "when": 1794000000000,
+      "tag": "0108_plugin_oauth",
+      "breakpoints": true
+    },
+    {
+      "idx": 109,
+      "version": "7",
+      "when": 1794100000000,
+      "tag": "0109_workspace_agent_changes",
+      "breakpoints": true
+    },
+    {
+      "idx": 110,
+      "version": "7",
+      "when": 1794200000000,
+      "tag": "0110_chat_agent_grants",
+      "breakpoints": true
+    },
+    {
+      "idx": 111,
+      "version": "7",
+      "when": 1794300000000,
+      "tag": "0111_chat_connection_choices",
+      "breakpoints": true
+    },
+    {
+      "idx": 112,
+      "version": "7",
+      "when": 1794400000000,
+      "tag": "0112_private_automations",
+      "breakpoints": true
+    },
+    {
+      "idx": 113,
+      "version": "7",
+      "when": 1794500000000,
+      "tag": "0113_restricted_workspaces",
+      "breakpoints": true
+    },
+    {
+      "idx": 114,
+      "version": "7",
+      "when": 1794600000000,
+      "tag": "0114_declared_api_calls",
+      "breakpoints": true
+    },
+    {
+      "idx": 115,
+      "version": "7",
+      "when": 1794700000000,
+      "tag": "0115_report_shares",
+      "breakpoints": true
+    },
+    {
+      "idx": 116,
+      "version": "7",
+      "when": 1794800000000,
+      "tag": "0116_reports_permission",
+      "breakpoints": true
+    },
+    {
+      "idx": 117,
+      "version": "7",
+      "when": 1794900000000,
+      "tag": "0117_person_agent_grants",
+      "breakpoints": true
+    },
+    {
+      "idx": 118,
+      "version": "7",
+      "when": 1795000000000,
+      "tag": "0118_personal_actions",
+      "breakpoints": true
+    },
+    {
+      "idx": 119,
+      "version": "7",
+      "when": 1795100000000,
+      "tag": "0119_chat_thinking",
+      "breakpoints": true
+    },
+    {
+      "idx": 120,
+      "version": "7",
+      "when": 1795200000000,
+      "tag": "0120_flow_review_request",
+      "breakpoints": true
+    },
+    {
+      "idx": 121,
+      "version": "7",
+      "when": 1795300000000,
+      "tag": "0121_notifications",
+      "breakpoints": true
+    },
+    {
+      "idx": 122,
+      "version": "7",
+      "when": 1795400000000,
+      "tag": "0122_chat_visibility",
+      "breakpoints": true
+    },
+    {
+      "idx": 123,
+      "version": "7",
+      "when": 1795500000000,
+      "tag": "0123_flow_others_may_edit",
+      "breakpoints": true
+    },
+    {
+      "idx": 124,
+      "version": "7",
+      "when": 1795600000000,
+      "tag": "0124_run_acts_as",
+      "breakpoints": true
+    },
+    {
+      "idx": 125,
+      "version": "7",
+      "when": 1795700000000,
+      "tag": "0125_flow_activations",
+      "breakpoints": true
+    },
+    {
+      "idx": 126,
+      "version": "7",
+      "when": 1795800000000,
+      "tag": "0126_pause_decider",
+      "breakpoints": true
+    },
+    {
+      "idx": 127,
+      "version": "7",
+      "when": 1795900000000,
+      "tag": "0127_person_account_choices",
+      "breakpoints": true
+    },
+    {
+      "idx": 128,
+      "version": "7",
+      "when": 1796000000000,
+      "tag": "0128_projects",
+      "breakpoints": true
+    },
+    {
+      "idx": 129,
+      "version": "7",
+      "when": 1796100000000,
+      "tag": "0129_audit_project_entity",
+      "breakpoints": true
+    },
+    {
+      "idx": 130,
+      "version": "7",
+      "when": 1796200000000,
+      "tag": "0130_platform_user_aliases",
+      "breakpoints": true
+    },
+    {
+      "idx": 131,
+      "version": "7",
+      "when": 1796300000000,
+      "tag": "0131_person_invitations",
+      "breakpoints": true
+    },
+    {
+      "idx": 132,
+      "version": "7",
+      "when": 1796400000000,
+      "tag": "0132_project_files",
+      "breakpoints": true
+    },
+    {
+      "idx": 133,
+      "version": "7",
+      "when": 1796500000000,
+      "tag": "0133_web_fetch",
+      "breakpoints": true
+    },
+    {
+      "idx": 134,
+      "version": "7",
+      "when": 1796600000000,
+      "tag": "0134_runtime_model_provider",
+      "breakpoints": true
+    },
+    {
+      "idx": 135,
+      "version": "7",
+      "when": 1796700000000,
+      "tag": "0135_chat_model",
+      "breakpoints": true
+    },
+    {
+      "idx": 136,
+      "version": "7",
+      "when": 1796800000000,
+      "tag": "0136_one_model_connection",
+      "breakpoints": true
+    }
+  ]
+}

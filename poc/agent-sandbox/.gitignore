@@ -1,0 +1,6 @@
+node_modules/
+sandbox/outbox.json
+sandbox/run.json
+sandbox/pi-last-run.log
+sandbox/context/
+sandbox/.snapshots/

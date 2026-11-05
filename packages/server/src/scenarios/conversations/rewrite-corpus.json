@@ -1,0 +1,583 @@
+[
+  {
+    "id": "RW-F01",
+    "workspace": "Finance",
+    "kinds": [
+      "linear",
+      "email",
+      "schedule"
+    ],
+    "goal": "every Monday email me a list of invoices that are past due",
+    "replies": [],
+    "expect": {
+      "outcome": "complete",
+      "maxQuestions": 2,
+      "has": [
+        "schedule",
+        "email"
+      ]
+    },
+    "answers": [
+      {
+        "when": "who|recipient|address",
+        "say": "me"
+      }
+    ]
+  },
+  {
+    "id": "RW-F02",
+    "workspace": "Finance",
+    "kinds": [
+      "join",
+      "date"
+    ],
+    "goal": "list open invoices that were past their due date on 30 june 2026, with the vendor name and contact email",
+    "replies": [],
+    "expect": {
+      "outcome": "complete",
+      "maxQuestions": 1,
+      "tests": [
+        "open",
+        "due"
+      ]
+    },
+    "answers": []
+  },
+  {
+    "id": "RW-F03",
+    "workspace": "Finance",
+    "kinds": [
+      "branch",
+      "aggregate",
+      "email"
+    ],
+    "goal": "for june 2026 compare each cost centre's invoice spend with its budget. if a cost centre is over budget email its owner, otherwise nothing",
+    "replies": [],
+    "expect": {
+      "outcome": "complete",
+      "maxQuestions": 2,
+      "has": [
+        "email"
+      ]
+    },
+    "answers": [
+      {
+        "when": "who|recipient|owner",
+        "say": "owner email"
+      }
+    ]
+  },
+  {
+    "id": "RW-F04",
+    "workspace": "Finance",
+    "kinds": [
+      "loop",
+      "branch",
+      "approval",
+      "email"
+    ],
+    "goal": "for each overdue invoice as of 30 june 2026: if the amount is over 10000 ask me to approve before emailing the customer a reminder, otherwise email the reminder straight away",
+    "replies": [],
+    "expect": {
+      "outcome": "complete",
+      "maxQuestions": 2,
+      "has": [
+        "branch",
+        "approval",
+        "email"
+      ]
+    },
+    "answers": [
+      {
+        "when": "who|recipient|address",
+        "say": "me"
+      }
+    ]
+  },
+  {
+    "id": "RW-FILE01",
+    "workspace": "Finance",
+    "kinds": [
+      "file-backed",
+      "sqlite",
+      "linear"
+    ],
+    "goal": "list the vendors from the uploaded finance file and email me their names",
+    "replies": [],
+    "expect": {
+      "outcome": "complete",
+      "maxQuestions": 3,
+      "has": [
+        "email"
+      ]
+    },
+    "notes": "File-backed catalogue goal \u2014 uses whatever SQLite/file datasource the workspace exposes; no workspace-specific column names in harness code.",
+    "answers": [
+      {
+        "when": "who|recipient",
+        "say": "me"
+      }
+    ]
+  },
+  {
+    "id": "RW-S01",
+    "workspace": "Customer Support",
+    "kinds": [
+      "branch",
+      "ticket",
+      "email"
+    ],
+    "goal": "if any enterprise customer has an open urgent ticket raise a ticket for the billing team, otherwise email me that we're clear",
+    "replies": [],
+    "expect": {
+      "outcome": "complete",
+      "maxQuestions": 2,
+      "has": [
+        "branch",
+        "ticket",
+        "email"
+      ]
+    },
+    "answers": [
+      {
+        "when": "who|recipient|address",
+        "say": "me"
+      }
+    ]
+  },
+  {
+    "id": "RW-S02",
+    "workspace": "Customer Support",
+    "kinds": [
+      "branch",
+      "loop",
+      "email"
+    ],
+    "goal": "each morning for every open ticket older than 3 days: if priority is high email the assignee a chase, otherwise email me a digest of the rest",
+    "replies": [],
+    "expect": {
+      "outcome": "complete",
+      "maxQuestions": 4,
+      "has": [
+        "branch",
+        "email"
+      ]
+    },
+    "answers": [
+      {
+        "when": "priority|field",
+        "say": "priority"
+      },
+      {
+        "when": "assignee|email|address",
+        "say": "requester email"
+      },
+      {
+        "when": "who|recipient|me",
+        "say": "me"
+      }
+    ]
+  },
+  {
+    "id": "RW-S03",
+    "workspace": "Customer Support",
+    "kinds": [
+      "schedule",
+      "email"
+    ],
+    "goal": "every weekday morning email me a digest of tickets that missed their target",
+    "replies": [],
+    "expect": {
+      "outcome": "complete",
+      "maxQuestions": 2,
+      "has": [
+        "schedule",
+        "email"
+      ]
+    },
+    "answers": [
+      {
+        "when": "who|recipient",
+        "say": "me"
+      }
+    ]
+  },
+  {
+    "id": "RW-O01",
+    "workspace": "Orders & Fulfilment",
+    "kinds": [
+      "branch",
+      "chat",
+      "schedule"
+    ],
+    "goal": "every day at 8am if there are more than 5 late orders post them in #order-exceptions, otherwise post 'all good' in #fulfilment",
+    "replies": [],
+    "expect": {
+      "outcome": "complete",
+      "maxQuestions": 2,
+      "has": [
+        "schedule",
+        "branch",
+        "chat"
+      ]
+    },
+    "answers": [
+      {
+        "when": "as of|which date|what date",
+        "say": "the day it runs"
+      }
+    ]
+  },
+  {
+    "id": "RW-O02",
+    "workspace": "Orders & Fulfilment",
+    "kinds": [
+      "email",
+      "linear"
+    ],
+    "goal": "email customers when their order is late past the promised date",
+    "replies": [],
+    "expect": {
+      "outcome": "complete",
+      "maxQuestions": 2,
+      "has": [
+        "email"
+      ]
+    },
+    "answers": [
+      {
+        "when": "who|recipient|email",
+        "say": "customer email"
+      }
+    ]
+  },
+  {
+    "id": "RW-R01",
+    "workspace": "Recruitment",
+    "kinds": [
+      "email",
+      "schedule"
+    ],
+    "goal": "every morning email me offers that expire within seven days",
+    "replies": [],
+    "expect": {
+      "outcome": "complete",
+      "maxQuestions": 2,
+      "has": [
+        "schedule",
+        "email"
+      ]
+    },
+    "answers": [
+      {
+        "when": "who|recipient",
+        "say": "me"
+      }
+    ]
+  },
+  {
+    "id": "RW-R02",
+    "workspace": "Recruitment",
+    "kinds": [
+      "loop",
+      "email"
+    ],
+    "goal": "for every candidate still waiting on an offer reply, email them a polite chase",
+    "replies": [],
+    "expect": {
+      "outcome": "complete",
+      "maxQuestions": 2,
+      "has": [
+        "email"
+      ]
+    },
+    "answers": [
+      {
+        "when": "who|recipient|email",
+        "say": "candidate email"
+      }
+    ]
+  },
+  {
+    "id": "RW-E01",
+    "workspace": "Finance",
+    "kinds": [
+      "edit"
+    ],
+    "goal": "list open invoices past due on 30 june 2026 with vendor name",
+    "then": [
+      "also email me that list every Monday"
+    ],
+    "replies": [],
+    "expect": {
+      "outcome": "complete",
+      "maxQuestions": 2
+    },
+    "answers": [
+      {
+        "when": "who|recipient",
+        "say": "me"
+      }
+    ]
+  },
+  {
+    "id": "RW-E02",
+    "workspace": "Customer Support",
+    "kinds": [
+      "edit"
+    ],
+    "goal": "email me a digest of open tickets older than 3 days",
+    "then": [
+      "stop emailing me, just raise a ticket instead"
+    ],
+    "replies": [],
+    "expect": {
+      "outcome": "complete",
+      "maxQuestions": 2
+    },
+    "answers": [
+      {
+        "when": "who|recipient",
+        "say": "me"
+      }
+    ]
+  },
+  {
+    "id": "RW-E03",
+    "workspace": "Orders & Fulfilment",
+    "kinds": [
+      "edit"
+    ],
+    "goal": "every day at 8am post late orders in #order-exceptions",
+    "then": [
+      "change the channel to #fulfilment"
+    ],
+    "replies": [],
+    "expect": {
+      "outcome": "complete",
+      "maxQuestions": 2
+    },
+    "answers": []
+  },
+  {
+    "id": "RW-E04",
+    "workspace": "Recruitment",
+    "kinds": [
+      "edit"
+    ],
+    "goal": "every morning email me expiring offers",
+    "then": [
+      "also email the hiring manager for each one"
+    ],
+    "replies": [],
+    "expect": {
+      "outcome": "complete",
+      "maxQuestions": 3
+    },
+    "answers": [
+      {
+        "when": "who|recipient|me",
+        "say": "me"
+      },
+      {
+        "when": "manager|hiring",
+        "say": "hiring manager email"
+      }
+    ]
+  },
+  {
+    "id": "RW-HR-A01",
+    "workspace": "HR",
+    "kinds": [
+      "attendance",
+      "bands",
+      "aggregate",
+      "complex"
+    ],
+    "goal": "calculate the full absence day and half absence day from the data for each employee. half day absence equals at least 4.75 hours worked, full day absence is minimum 0 hours and max 4.74. total max working hours is 9.5. we need to calculate the absence days \u2014 for half day absence equals 0.5 and for full day it is 1. return half day absence, full day absence, and total absences which is full + half",
+    "notes": "Attendance_DB.attendance_day.hours_worked. Bands: [0,4.74]\u21921 full; [4.75,9.49]\u21920.5 half; \u22659.5\u21920 present. total_absences = sum of day-weights (not count of days alone).",
+    "replies": [],
+    "expect": {
+      "outcome": "complete",
+      "maxQuestions": 3,
+      "tests": [
+        "4.75",
+        "4.74",
+        "0.5",
+        "hours"
+      ],
+      "has": [
+        "summary"
+      ]
+    },
+    "answers": [
+      {
+        "when": "hours|column|field|worked",
+        "say": "hours worked"
+      },
+      {
+        "when": "period|month|date|when",
+        "say": "all days in the data"
+      }
+    ]
+  },
+  {
+    "id": "RW-HR-A02",
+    "workspace": "HR",
+    "kinds": [
+      "attendance",
+      "bands",
+      "per-employee"
+    ],
+    "goal": "for each employee show half-day absences, full-day absences, and total absence days. a half day is when they worked between 4.75 and 9.49 hours that day (count as 0.5). a full day absence is when they worked 0 to 4.74 hours (count as 1). a day with 9.5 hours worked is a full present day and counts as 0 absence",
+    "notes": "Sharper wording of A01 \u2014 explicitly states 9.5 \u2192 0 so the builder must not treat \u22654.75 as always half-day.",
+    "replies": [],
+    "expect": {
+      "outcome": "complete",
+      "maxQuestions": 2,
+      "tests": [
+        "9.5",
+        "4.75",
+        "0.5"
+      ]
+    },
+    "answers": []
+  },
+  {
+    "id": "RW-HR-A03",
+    "workspace": "HR",
+    "kinds": [
+      "attendance",
+      "bands",
+      "email",
+      "threshold"
+    ],
+    "goal": "email me every employee whose total absence days (half at 0.5 plus full at 1, from hours worked bands 0\u20134.74 full and 4.75\u20139.49 half, with 9.5 a full day present) is more than 3",
+    "replies": [],
+    "expect": {
+      "outcome": "complete",
+      "maxQuestions": 3,
+      "has": [
+        "email"
+      ],
+      "tests": [
+        "3",
+        "absence",
+        "hours"
+      ]
+    },
+    "answers": [
+      {
+        "when": "who|recipient|address",
+        "say": "me"
+      },
+      {
+        "when": "hours|column|field",
+        "say": "hours worked"
+      }
+    ]
+  },
+  {
+    "id": "RW-HR-A04",
+    "workspace": "HR",
+    "kinds": [
+      "attendance",
+      "bands",
+      "department",
+      "join"
+    ],
+    "goal": "by department, sum each employee's half-day and full-day absences from daily hours worked using the 4.75 / 4.74 / 9.5 bands, and list department name with total absences",
+    "replies": [],
+    "expect": {
+      "outcome": "complete",
+      "maxQuestions": 2,
+      "tests": [
+        "department",
+        "4.75"
+      ]
+    },
+    "answers": [
+      {
+        "when": "department|dept|field",
+        "say": "dept"
+      }
+    ]
+  },
+  {
+    "id": "RW-HR-A05",
+    "workspace": "HR",
+    "kinds": [
+      "attendance",
+      "bands",
+      "schedule",
+      "email"
+    ],
+    "goal": "every Monday email me a CSV of emp id, name, half day absences, full day absences and total absences for last week, using half day when hours worked were 4.75 to 9.49 and full day when 0 to 4.74",
+    "replies": [],
+    "expect": {
+      "outcome": "complete",
+      "maxQuestions": 3,
+      "has": [
+        "schedule",
+        "email"
+      ],
+      "tests": [
+        "4.75",
+        "csv"
+      ]
+    },
+    "answers": [
+      {
+        "when": "body.*to be|to be.*body|What should the body be",
+        "say": "attach the CSV of emp id, name, half day absences, full day absences, total absences; send it to me"
+      },
+      {
+        "when": "who|recipient|\\bto be\\b|address",
+        "say": "me"
+      },
+      {
+        "when": "week|period|dates|last week",
+        "say": "the previous calendar week"
+      },
+      {
+        "when": "choose one|new read|written read|bands compute|which read",
+        "say": "write a new read with half 4.75\u20139.49\u21920.5 and full 0\u20134.74\u21921 (9.5 present = 0) for last week"
+      },
+      {
+        "when": "mean|what should|half|full|4\\.75|absence|csv",
+        "say": "CSV columns: emp id, name, half day absences, full day absences, total absences using those hour bands"
+      }
+    ]
+  },
+  {
+    "id": "RW-HR-A06",
+    "workspace": "HR",
+    "kinds": [
+      "attendance",
+      "boundary",
+      "vague"
+    ],
+    "goal": "get me the absence report from attendance",
+    "replies": [],
+    "then": [],
+    "expect": {
+      "outcome": "complete",
+      "maxQuestions": 4
+    },
+    "notes": "Vague opener \u2014 person clarifies the bands in answers.",
+    "answers": [
+      {
+        "when": "mean|which|what|absence|report",
+        "say": "per employee: half day absences (hours worked 4.75\u20139.49 = 0.5), full day (0\u20134.74 = 1), and total = half + full day-weights; 9.5 hours is present (0)"
+      },
+      {
+        "when": "hours|column",
+        "say": "hours worked on attendance day"
+      },
+      {
+        "when": "who|recipient",
+        "say": "just show the list, do not email"
+      }
+    ]
+  }
+]

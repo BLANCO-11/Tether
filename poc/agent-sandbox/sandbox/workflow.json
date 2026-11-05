@@ -1,0 +1,51 @@
+{
+  "steps": [
+    {
+      "id": "fetch",
+      "entry": "steps/fetch/main.py",
+      "params": {
+        "fixture_path": "fixtures/invoices.json",
+        "status_column": "status",
+        "overdue_value": "overdue"
+      },
+      "inputs": {},
+      "outputs": [
+        "rows"
+      ]
+    },
+    {
+      "id": "order_by_amount",
+      "entry": "steps/sort/main.py",
+      "params": {
+        "amount_column": "amount_cents",
+        "sort_descending": true
+      },
+      "inputs": {
+        "rows": "fetch.rows"
+      },
+      "outputs": [
+        "rows"
+      ]
+    },
+    {
+      "id": "notify",
+      "entry": "steps/notify/main.py",
+      "params": {
+        "large_threshold_cents": 150000,
+        "amount_column": "amount_cents",
+        "id_column": "id",
+        "due_date_column": "due_date",
+        "customer_email_column": "customer_email",
+        "billing_email_column": "billing_email",
+        "outbox_path": "outbox.json",
+        "subject_template": "Invoice {id} is overdue"
+      },
+      "inputs": {
+        "rows": "order_by_amount.rows"
+      },
+      "outputs": [
+        "sent"
+      ]
+    }
+  ]
+}

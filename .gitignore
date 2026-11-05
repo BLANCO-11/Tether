@@ -1,0 +1,237 @@
+# ── Foundry .gitignore ───────────────────────────────────────────────────────
+#
+# Reorganised 2026-08-18. It had grown by appending, so `node_modules/`, `dist/`,
+# `.DS_Store` and `.env` each appeared TWICE and `plans/` appeared as a
+# commented-out rule on line 12 and a live one on line 80 — which reads, on a
+# skim, as though plans were tracked. Nothing was removed from what is ignored;
+# the duplicates were merged and every load-bearing comment was kept verbatim,
+# because each one records a decision rather than a preference.
+#
+# ⚠ Two rules here are LOAD-BEARING and are explained where they sit rather than
+# here: the `.env.local.example` exemption, and `/plans`. Read those comments
+# before touching either.
+
+# ── Dependencies and build output ────────────────────────────────────────────
+node_modules/
+ux-flow/
+dist/
+build/
+.next/
+.next-verify/
+.vite/
+.turbo/
+coverage/
+*.tsbuildinfo
+.venv/
+__pycache__/
+*.pyc
+
+# Tool caches. Re-created on demand and worth nobody's diff.
+.eslintcache
+.parcel-cache/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+# Extension catalog cache (re-fetched on demand)
+.specify/extensions/.cache/
+
+# ── Lockfiles: pnpm is the ONLY one ──────────────────────────────────────────
+#
+# ⚠ `package-lock.json` was TRACKED until 2026-08-18 and was a 250-byte stub —
+# one empty root entry, no dependencies, and `"engines": {"node": ">=20"}` while
+# both real `package.json`s say `>=22`. `packageManager` pins `pnpm@10.29.2`, so
+# the file could only ever mislead: `npm install` against it installs nothing,
+# and its engine floor contradicted the one the test suite actually needs (the
+# Node 20 jsdom failure is exactly what that disagreement costs). Deleted, and
+# ignored here so a stray `npm install` cannot quietly reintroduce it.
+package-lock.json
+yarn.lock
+npm-debug.log*
+pnpm-debug.log*
+yarn-error.log*
+
+# ── Secrets — NEVER commit ───────────────────────────────────────────────────
+#
+# Local values live in .env; document variable NAMES as placeholders in
+# .env.example (which IS committed).
+.env
+.env.*
+!.env.example
+!.env.sample
+!.env.template
+# ⚠ `.env.local.example` is a PLACEHOLDER file and belongs in the repo, exactly
+# as the comment above says of `.env.example`. Without this line `.env.*` swallows
+# it: `packages/client/.env.local.example` documents the four Entra SSO variable
+# names and nothing else records them, so restoring the file after `3e0dd30`
+# deleted it would silently leave it untracked and one `git clean` from gone
+# again. The real secret file, `.env.local`, is still ignored by `.env.*` — only
+# the `*.example` spelling is exempted here.
+!.env.local.example
+!**/.env.local.example
+
+# ⚠ Timestamped hand-backups of an env file — `.env.bak-1786962128`,
+# `.env.local.bak-1787032496`. `.env.*` already catches the repo-root spelling,
+# but not a nested one or a `.bak` of a differently-named file, and these hold
+# LIVE credentials: API keys, the JWT signing secret, the Entra client secret.
+# Ignored explicitly so a copy made while debugging cannot be committed by a
+# `git add -A` on the day it is made. ⚠ Ignoring is not deleting — a stale
+# `.env.bak-*` is still a plaintext credential on disk. Delete them when done.
+*.bak
+*.bak-*
+.env.bak*
+**/.env.local.bak*
+
+# Keys, certificates and credential files, by extension and by conventional name.
+*.pem
+*.p12
+*.pfx
+*.jks
+*.keystore
+*.ppk
+id_rsa*
+id_dsa*
+id_ecdsa*
+id_ed25519*
+.netrc
+.pypirc
+credentials.json
+*-credentials.json
+service-account*.json
+terraform.tfstate
+terraform.tfstate.*
+
+# ⚠ Backup artifacts contain SCRAM role password hashes (scripts/backup.sh), and
+# `roles.sql` inside them is cluster state no per-database dump carries. The
+# artifact directory is created 0700 and the file 0600; this keeps it out of git
+# as the second layer.
+backups/
+
+# ── Working-tree-only: per-developer and per-feature state ───────────────────
+#
+# Per-developer local feature pointer written by spec-kit commands.
+# Never commit: two developers on different features would conflict on every merge.
+.specify/feature.json
+
+# Per-developer agent settings
+.claude/settings.local.json
+
+# Spec-kit feature artifacts (spec.md/plan.md/tasks.md/etc.) — working-tree-only,
+# same convention the krt/guardrail_validation branch used. Keeps every
+# developer's in-progress feature directories out of history and off every
+# other branch's diff; the reasoning that matters long-term belongs in docs/.
+# specs/
+
+# ⚠ `/plans` IS THE KNOWN EXPOSURE, not an oversight. The current plan
+# (`plans/foundations-2026-08-10/`) was moved out of `docs/programmes/` on
+# 2026-08-11 at the user's instruction and left untracked, so **edits to it are
+# not in git** — stated before the move and accepted. `docs/` is the durable
+# home; `docs/programmes/README.md` carries the fuller note, including the
+# argument the move went against, kept verbatim because it was overruled rather
+# than withdrawn. Its last committed state is `cd4387c`.
+#
+# ⚠ There used to be a commented-out `# plans/` near the top of this file as
+# well. A rule that is present-but-disabled beside a live one that does the same
+# thing is how somebody concludes the opposite of what is true; the live rule is
+# here and there is now only one.
+/plans
+# A local archive of what is now docs/programmes/ — redundant, and must never be committed.
+plan.zip
+
+# ── Editor and OS junk ───────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+*.swp
+*.swo
+*~
+.idea/
+.vscode/
+*.orig
+*.rej
+
+# ── Docs: planning notes are local, REFERENCE docs stay in git ────────────────
+#
+# ⚠ **`docs/` IS NOT IGNORED WHOLESALE, and the split is the whole point.** Asked
+# for on 2026-08-18 as "docs needs to go into gitignore"; scoped to the planning
+# half after the cost of the other reading was put on the table and the narrower
+# one chosen. What that reading would have cost: 27 `docs/…` citations in
+# CLAUDE.md and 92 in code, scripts and CI pointing at paths a fresh clone would
+# not have, `ci/spec-policy.sh`'s `docs/*) return 0` exemption and
+# `check-spec-compliance.sh`'s "docs-only change → PASS" becoming dead code, and
+# `docs/kestra-migration/`'s pinned design — 22 files implementation is forbidden
+# to edit — leaving the repo.
+#
+# ⚠ Adding a directory here does NOT untrack what is already in it. These four
+# were untracked with `git rm -r --cached` in the same commit; **their last
+# tracked state is `c157947`**:
+#
+#     git show c157947:docs/programmes/README.md          # read one file
+#     git checkout c157947 -- docs/programmes/            # restore it all
+#
+# ⚠ **THE EXPOSURE THIS CREATES IS THE ONE `plans/` ALREADY CARRIES, and it has
+# bitten this repo before.** `docs/programmes/` was RESTORED to `docs/` on
+# 2026-08-10 precisely because records kept only in a gitignored directory were
+# one `rm` from gone — which had already happened to them once. From this commit
+# on, edits to these four are not in git. That is recorded here rather than left
+# to be discovered, exactly as the `/plans` note above does it.
+#
+# ⚠ `docs/programmes/README.md` is the sharpest case: CLAUDE.md states it is
+# "now the only copy of that reasoning in the working tree" — the load-bearing
+# summaries of three programmes whose full records were already deleted. Losing
+# the working-tree copy now means recovering it from history or not at all.
+docs/programmes/
+docs/intent/
+docs/ui-mock/
+docs/validation-and-guardrails-roadmap.md
+
+# Design workshop scratch: generated mockups are approval artifacts, not source.
+# Only the mockups/ subtree is ignored so docs/design/README.md stays tracked.
+docs/design/mockups/
+
+# ⚠ STAYS TRACKED, deliberately — do not add these:
+#   docs/kestra-migration/  the pinned design (02-rules.md's R1–R9 and the
+#                           worked example); implementation does not edit it
+#   docs/GAPS.md            every known gap with its OPEN/DELIBERATE/CLOSED
+#                           evidence; several entries are decisions, not bugs
+#   docs/STANDARDS.md       · docs/TEAM-WORKFLOW.md · docs/design/README.md
+
+# ── Logs ─────────────────────────────────────────────────────────────────────
+*.log
+
+# ⚠ NOT ignored, deliberately: `drizzle/meta/_journal.json`. Its `.bak` is junk,
+# but the journal itself is the migration watermark's source of truth — a rewrite
+# of one entry's `when` is what made `0033` re-run for ever (see CLAUDE.md's
+# migrations note). It must stay in git so that rewrite is visible in a diff.
+drizzle/meta/_journal.json.bak
+
+# ── Corporate CA staged for Docker builds (feature 20260824-211547-docker-ca-trust)
+#
+# `infra/certs/` holds the corporate root certificate staged by
+# scripts/stage-corp-ca.sh so that image builds behind a TLS-intercepting proxy
+# can trust it. The material is PUBLIC (a CA's public certificate is not a
+# secret) but it is organisation-specific, and Constitution VIII prohibits
+# committing key material regardless of sensitivity.
+#
+# ⚠ THE STAGED FILE MUST BE `*.pem`, NEVER `*.crt`. The rule at the top of this
+# section's neighbour (`*.pem`, line ~87) covers `.pem` and there is NO `*.crt`
+# rule anywhere in this file — so a file staged as `corp-ca.crt` would be
+# untracked by intent but not by rule. Where a `.crt` extension is required
+# (Debian's /usr/local/share/ca-certificates only processes *.crt), the rename
+# happens inside the Dockerfile's COPY, not here.
+#
+# ⚠ `.gitkeep` is deliberately NOT ignored. The directory must exist in a fresh
+# clone or `COPY certs/ …` fails the build. The ignore rule and the tracked
+# placeholder are a pair; removing either makes a clean checkout unbuildable.
+infra/certs/*
+!infra/certs/.gitkeep
+
+# macOS resource-fork shadow dir from unzipping ux-flow/
+__MACOSX/
+ux-flow.zip
+.harness-results/
+
+# Pi builder isolated sandboxes (per-session, local only)
+packages/server/.pi-sandboxes/
+
+# Local output folder (not part of the repo)
+/packages/Finaloutput/

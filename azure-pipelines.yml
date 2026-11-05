@@ -1,0 +1,80 @@
+# Spec-kit compliance gate - PR validation pipeline.
+#
+# Setup (once, by a project administrator):
+#   1. Azure DevOps > Pipelines > New pipeline > select this repo > Existing YAML > this file.
+#   2. Project Settings > Repositories > <repo> > Policies > Branch Policies on 'main':
+#      - Build Validation: add this pipeline, Required, trigger: Automatic
+#      - Minimum number of reviewers: 1
+#      - Limit merge types: Squash merge (keeps specs/ history linear)
+# See docs/TEAM-WORKFLOW.md for the full workflow.
+
+trigger: none # PR validation only
+
+pr:
+  branches:
+    include:
+      - main
+
+pool:
+  vmImage: ubuntu-latest
+
+steps:
+  - checkout: self
+    fetchDepth: 0 # full history needed for merge-base computation
+
+  - bash: |
+      set -euo pipefail
+      git fetch origin "${TARGET_BRANCH:-main}" || true
+      BASE=$(git merge-base "origin/${TARGET_BRANCH:-main}" HEAD)
+      bash ci/check-secrets.sh range "$BASE..HEAD"
+    displayName: Secret scan (all branches, no exceptions)
+    env:
+      TARGET_BRANCH: $(System.PullRequest.TargetBranchName)
+
+  - bash: |
+      set -euo pipefail
+      git fetch origin "${SYSTEM_PULLREQUEST_TARGETBRANCHNAME:-main}" || true
+      bash ci/check-spec-compliance.sh
+    displayName: Spec-kit compliance gate
+    env:
+      SOURCE_BRANCH: $(System.PullRequest.SourceBranch)
+      TARGET_BRANCH: $(System.PullRequest.TargetBranchName)
+
+
+  # ── The three client gates ────────────────────────────────────────────────
+  # Added by the ui-upgrade programme Phase 0.4, issue I-73 (programme closed, record
+  # removed 2026-09-11; the reason below is the surviving record: CI ran NONE of them, so
+  # every quality claim in that programme was a claim about one developer's machine).
+  #
+  # ⚠ NON-BLOCKING on purpose, and only for now. `continueOnError: true` keeps a red
+  # run from stopping unrelated PRs while the gates settle. Make this step REQUIRED
+  # (delete the continueOnError line) once it has been green on two consecutive runs,
+  # and record the two run ids in the programme evidence (record removed 2026-09-11).
+  #
+  # Node 22 is not a preference: jsdom@30 → undici@8.9.0 calls
+  # worker_threads.markAsUncloneable, absent before Node 22, and without it NINE of the
+  # eighteen client test files never load while the suite still exits 1 (issues.md I-67,
+  # decisions.md D-87). Every Dockerfile in this repo already runs node:22-slim.
+  - task: NodeTool@0
+    displayName: Use Node 22 (see .nvmrc — D-87)
+    inputs:
+      versionSpec: "22.x"
+
+  - bash: |
+      set -euo pipefail
+      corepack enable
+      pnpm install --frozen-lockfile
+    displayName: Install (pnpm, frozen lockfile)
+    continueOnError: true
+
+  - bash: |
+      set -euo pipefail
+      node -v
+      pnpm --filter @foundry/client typecheck
+      pnpm --filter @foundry/client test
+      bash scripts/ui-honesty-check.sh
+      # ⚠ `next build` was NEVER run here, so a build break (a page Next refuses to prerender, a type error Next 16's build checks
+      # in test files) reached main unseen. Added with the Next 14 → 16 upgrade (specs/20261012-123549-nextjs-16-upgrade).
+      pnpm --filter @foundry/client build
+    displayName: "Client gates: typecheck · test · UI honesty check · build"
+    continueOnError: true

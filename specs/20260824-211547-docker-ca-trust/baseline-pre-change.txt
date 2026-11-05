@@ -1,0 +1,157 @@
+# Pre-change trust baseline
+# Feature: 20260824-211547-docker-ca-trust
+# Captured: 2026-08-25, on the affected workstation (macOS, Docker Engine 29.7.2,
+#           behind the TLS-intercepting proxy)
+#
+# Purpose: US2 (FR-003) claims this feature leaves images unchanged when no
+# certificate is supplied. That claim is a COMPARISON, and this file is the thing
+# it compares against. Without it the claim can only be asserted.
+
+# ─────────────────────────────────────────────────────────────────────────────
+# ⚠ DEVIATION FROM T006 AS WRITTEN, AND THE REASON IS THE BUG ITSELF
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# T006 says "build all six images from the current HEAD". THAT IS IMPOSSIBLE ON
+# THIS WORKSTATION — the pre-change images cannot be built here at all. Measured
+# 2026-08-25 against packages/mcp-bridge/Dockerfile at HEAD:
+#
+#   ERROR: process "/bin/sh -c pnpm install --filter @foundry/mcp-bridge --prod
+#          --frozen-lockfile=false" did not complete successfully: exit code: 1
+#
+# That failure IS the defect this feature fixes, so "capture the before state by
+# building the before state" is circular here.
+#
+# What is recorded instead: the trust state of the three BASE images. This is a
+# faithful substitute, and the reason is checkable rather than asserted — at HEAD
+# no Dockerfile in this repository adds, removes or modifies any certificate
+# authority. Verify with:
+#
+#   grep -rnE 'ca-certificates|NODE_EXTRA_CA_CERTS|PIP_CERT|keytool|cacerts' \
+#     packages/*/Dockerfile infra/*/Dockerfile | grep -vE ':[0-9]+:[[:space:]]*#'
+#
+# ⚠ The trailing comment filter is NOT cosmetic. Without it the grep hits
+# packages/server/Dockerfile:63, a COMMENT explaining why curl and
+# ca-certificates were removed from that image — a false positive that makes the
+# check look like it found cert logic when none exists. Verified 2026-08-25:
+# with the filter, nothing at HEAD.
+#
+# At HEAD that returns nothing. So each derived image's trusted-authority set is
+# exactly its base image's, and the base images are the honest baseline.
+#
+# ⚠ CONSEQUENCE FOR US2: T026's comparison must therefore be made against the
+# BASE image figures below, not against pre-change derived images. A derived
+# image built after this feature with CORP_CA_FILE empty must match its base.
+
+# ─────────────────────────────────────────────────────────────────────────────
+# node:22-slim  — base of server, client, ops-api, mcp-bridge
+# ─────────────────────────────────────────────────────────────────────────────
+node.version=v22.23.2
+node.node_extra_ca_certs=            # empty
+node.system_bundle_present=no
+node.update_ca_certificates=absent
+node.anchor_dir=absent
+node.openssl=absent
+
+# ⚠ T007 — THE FINDING THAT DETERMINED THE DESIGN.
+# These four images have NO system trust infrastructure whatsoever: no
+# ca-certificates package, no /etc/ssl/certs/ca-certificates.crt, no
+# update-ca-certificates, no /usr/local/share/ca-certificates, no openssl.
+# Node carries a compiled-in root set and needs none of it.
+#
+# So the intended "add the certificate to the system store and point every
+# toolchain at it" approach is IMPOSSIBLE here, not merely inconvenient. It would
+# have worked on two of six images, and the four failures would have read as an
+# unrelated problem. This is why the feature uses three mechanisms rather than
+# one (research R1, plan.md Complexity Tracking).
+#
+# It also rules out the obvious repair: installing ca-certificates needs a
+# network fetch, which is the thing that is broken.
+
+# ─────────────────────────────────────────────────────────────────────────────
+# python@sha256:57cd7c3a… (python:3.12-slim, Debian trixie) — base of fragment-base
+# ─────────────────────────────────────────────────────────────────────────────
+python.version=Python 3.12.13
+fragment-base.bundle_certs=150
+fragment-base.pip_cert=              # empty
+# Read by scripts/check-corp-ca-trust.sh, which compares the post-change count
+# against this value rather than against a literal — a hardcoded number goes
+# stale the first time the base image refreshes its own bundle and then reports
+# a false failure that reads like this feature broke.
+
+# ─────────────────────────────────────────────────────────────────────────────
+# kestra/kestra:v1.3.29-no-plugins (Ubuntu 24.04.4, OpenJDK 25.0.3) — base of kestra
+# ─────────────────────────────────────────────────────────────────────────────
+kestra.truststore_entries=144
+kestra.corp_alias_present=no
+kestra.truststore_path=/opt/java/openjdk/lib/security/cacerts
+kestra.keytool_path=/opt/java/openjdk/bin/keytool
+
+# ─────────────────────────────────────────────────────────────────────────────
+# T008 — image pulls are NOT affected by the interception
+# ─────────────────────────────────────────────────────────────────────────────
+# All three base images pulled successfully on 2026-08-25. The Docker daemon
+# validates registry TLS against the host's own trust configuration, which
+# already trusts the intercepting authority.
+#
+# Recorded so that a future pull failure is diagnosed as its own problem and not
+# mistaken for this feature regressing. Scope here is RUN-step fetches only.
+pulls.node_22_slim=ok
+pulls.python_digest_pinned=ok
+pulls.kestra_no_plugins=ok
+
+# ─────────────────────────────────────────────────────────────────────────────
+# DEFERRED PROOFS — filled in by T020 and T031
+# ─────────────────────────────────────────────────────────────────────────────
+# Two claims cannot be settled in the phases that assert them. They are listed
+# here so that an unfilled line is visible rather than absent.
+#
+# T020  kestra plugin fetch, end to end (treatment + control)
+deferred.kestra_plugin_fetch=PROVEN 2026-08-25, both arms
+#   TREATMENT (CORP_CA_FILE=corp-ca.pem): all seven jars downloaded from Maven
+#     Central — plugin-script-python 1.3.1, plugin-slack 1.3.0, plugin-email
+#     1.3.1, plugin-serdes 1.3.5, plugin-azure 1.3.1, plugin-aws 1.3.0,
+#     plugin-git 1.3.3. All six RUN layers DONE.
+#   CONTROL (CORP_CA_FILE empty): failed at the FIRST plugin layer with the JVM's
+#     own error —
+#       PKIX path building failed: sun.security.provider.certpath.
+#       SunCertPathBuilderException: unable to find valid certification path to
+#       requested target   (certificate_unknown)
+#   The control fires, so the keytool import is demonstrably what fixes it rather
+#   than something else having changed.
+#
+# T031  FR-003 on a NON-INTERCEPTED network. Untestable from this workstation:
+#       every connection here is intercepted, so "public TLS works with no
+#       certificate" fails for the expected reason and cannot discriminate.
+deferred.fr003_no_interception=NOT VERIFIED — and it cannot be, from here
+#   Every connection from this workstation is intercepted, so a no-CA build fails
+#   for the EXPECTED reason and the test cannot discriminate between "the feature
+#   left it unchanged" and "the network broke it". Needs one build on a
+#   non-intercepted network, or a CI run.
+#
+#   WHAT WAS VERIFIED INSTEAD, and it is the part that was actually in doubt:
+#     * empty NODE_EXTRA_CA_CERTS behaves IDENTICALLY to unset (both give
+#       UNABLE_TO_GET_ISSUER_CERT_LOCALLY here, i.e. neither adds trust)
+#     * with CORP_CA_FILE empty the trust RUN is a genuine NO-OP: no /etc/foundry
+#       directory, empty ENV. Measured with a probe built from the REAL
+#       packages/server/Dockerfile lines 29-48, and the same probe with the
+#       argument set produces the certificate — so the probe discriminates.
+#     * a FRESH CLONE resolves `COPY infra/certs/` with only .gitkeep present:
+#       step 3/10 DONE 0.0s, trust step DONE 0.1s. (T030)
+
+# ─────────────────────────────────────────────────────────────────────────────
+# US2 TASKS BLOCKED BY THE SAME CAUSE — recorded, not silently dropped
+# ─────────────────────────────────────────────────────────────────────────────
+# T026 (build all six with CORP_CA_FILE empty and diff against baseline),
+# T028 (fragment-base bundle count equals baseline with the arg empty) and
+# T029 (kestra truststore count equals baseline with the arg empty) all require
+# a SUCCESSFUL no-CA build. On this network no image can build without the
+# certificate — that failure IS the defect this feature fixes — so all three are
+# blocked for exactly the reason T031 is.
+#
+# They are NOT satisfied by the probe above: the probe proves the trust step is a
+# no-op, not that a complete image is byte-equivalent to its pre-change self.
+us2.t026_all_six_no_ca_build=BLOCKED (needs a non-intercepted network or CI)
+us2.t028_fragment_base_no_ca=BLOCKED (same)
+us2.t029_kestra_no_ca=BLOCKED (same)
+us2.t027_env_empty_probe=VERIFIED 2026-08-25
+us2.t030_fresh_clone_copy=VERIFIED 2026-08-25

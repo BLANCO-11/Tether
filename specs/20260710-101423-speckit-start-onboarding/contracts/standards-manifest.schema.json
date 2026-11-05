@@ -1,0 +1,116 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://spec-kit-template/standards-manifest.schema.json",
+  "title": "Standards Manifest",
+  "description": "Decidable source of truth for the standards existence gate. Lives at .specify/memory/standards.json. Read by scripts/spec-gate-core.sh via jq. When absent, the standards gate is inactive (template-dev / pre-setup state).",
+  "type": "object",
+  "required": ["schema_version", "status", "has_ui", "standards", "revision", "created"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "const": 1,
+      "description": "Manifest schema version."
+    },
+    "status": {
+      "type": "string",
+      "enum": ["pending", "established"],
+      "description": "Arming state. 'pending' blocks all source writes (onboarding incomplete). 'established' enforces per-standard existence."
+    },
+    "has_ui": {
+      "type": ["boolean", "null"],
+      "description": "Whether the project has a UI. May be null only while status='pending'. Must be boolean when status='established'."
+    },
+    "frameworks": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Chosen frameworks (informational mirror of frameworks.md)."
+    },
+    "standards": {
+      "type": "object",
+      "required": ["constitution", "frameworks", "security", "design"],
+      "additionalProperties": false,
+      "properties": {
+        "constitution": { "$ref": "#/$defs/standardRecord" },
+        "frameworks": { "$ref": "#/$defs/standardRecord" },
+        "security": { "$ref": "#/$defs/standardRecord" },
+        "design": { "$ref": "#/$defs/standardRecord" }
+      }
+    },
+    "revision": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Bumped on every amendment."
+    },
+    "created": {
+      "type": "string",
+      "format": "date",
+      "description": "Date onboarding first established standards."
+    },
+    "last_amended": {
+      "type": "string",
+      "format": "date",
+      "description": "Date of the most recent amendment."
+    },
+    "history_log": {
+      "type": "string",
+      "description": "Repo-relative path to the amendment history log."
+    }
+  },
+  "$defs": {
+    "standardRecord": {
+      "type": "object",
+      "required": ["path", "required", "present"],
+      "additionalProperties": false,
+      "properties": {
+        "path": {
+          "type": "string",
+          "description": "Repo-relative path to the standard file."
+        },
+        "required": {
+          "type": "boolean",
+          "description": "Whether the existence gate blocks when this file is missing. security=always true; design=has_ui; constitution/frameworks=true."
+        },
+        "present": {
+          "type": "boolean",
+          "description": "Whether the file existed at last write. The gate re-checks the filesystem regardless."
+        },
+        "established": {
+          "type": "string",
+          "format": "date",
+          "description": "Date this standard was first completed."
+        }
+      }
+    }
+  },
+  "examples": [
+    {
+      "schema_version": 1,
+      "status": "established",
+      "has_ui": true,
+      "frameworks": ["next.js", "tailwindcss"],
+      "standards": {
+        "constitution": { "path": ".specify/memory/constitution.md", "required": true, "present": true, "established": "2026-07-10" },
+        "frameworks": { "path": ".specify/memory/frameworks.md", "required": true, "present": true, "established": "2026-07-10" },
+        "security": { "path": ".specify/memory/security.md", "required": true, "present": true, "established": "2026-07-10" },
+        "design": { "path": ".specify/memory/design.md", "required": true, "present": true, "established": "2026-07-10" }
+      },
+      "revision": 1,
+      "created": "2026-07-10",
+      "history_log": ".specify/memory/standards-history.md"
+    },
+    {
+      "schema_version": 1,
+      "status": "pending",
+      "has_ui": null,
+      "standards": {
+        "constitution": { "path": ".specify/memory/constitution.md", "required": true, "present": true },
+        "frameworks": { "path": ".specify/memory/frameworks.md", "required": true, "present": false },
+        "security": { "path": ".specify/memory/security.md", "required": true, "present": false },
+        "design": { "path": ".specify/memory/design.md", "required": false, "present": false }
+      },
+      "revision": 1,
+      "created": "2026-07-10"
+    }
+  ]
+}

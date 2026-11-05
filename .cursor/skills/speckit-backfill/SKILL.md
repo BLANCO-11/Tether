@@ -1,0 +1,101 @@
+---
+name: "speckit-backfill"
+description: "Reverse-engineer spec-kit artifacts (spec/plan/tasks) from manual or uncovered code changes, marking the work as retroactively completed, then hand off to compliance checks."
+argument-hint: "Optional: what the manual change was about"
+compatibility: "Requires spec-kit project structure with .specify/ directory"
+metadata:
+  author: "team-spec-kit-template"
+  source: "custom"
+user-invocable: true
+disable-model-invocation: false
+---
+
+## User Input
+
+```text
+$ARGUMENTS
+```
+
+Treat any user input as a hint describing what the manual changes were for.
+
+## Purpose
+
+Code was changed WITHOUT going through the spec-kit workflow (a human edited
+files, a hotfix was merged, or an agent worked before the gates existed).
+This command regularizes that work: it reverse-engineers `spec.md`, `plan.md`
+and `tasks.md` from the ACTUAL diff so the feature is spec-covered again, then
+directs the user to `/speckit-analyze` and `/speckit-comply` for verification.
+
+This command only writes under `specs/` and `.specify/`, so it can always run
+even when the enforcement gates are blocking source edits.
+
+## Execution Steps
+
+### 1. Establish context
+
+- Run `.specify/scripts/bash/check-prerequisites.sh --json --paths-only` from
+  the repo root and parse `REPO_ROOT`, `FEATURE_DIR`, `FEATURE_SPEC`,
+  `IMPL_PLAN`, `TASKS`. If it fails because no feature context exists, that is
+  fine - you will create one in step 3.
+- Determine the default branch: `git symbolic-ref refs/remotes/origin/HEAD`
+  (basename), falling back to `main`.
+
+### 2. Compute the uncovered change set
+
+- Committed changes: `git diff --name-status $(git merge-base HEAD origin/<default>)..HEAD`
+  (if the current branch IS the default branch, use `git diff --name-status HEAD~10..HEAD`
+  and ask the user to confirm the range if ambiguous).
+- Uncommitted changes: `git status --porcelain`.
+- EXCLUDE paths under `specs/`, `.specify/`, `docs/`, agent skill/command
+  directories, and standalone `*.md` docs - those are always-editable and need
+  no coverage.
+- If the resulting set is empty, report "nothing to backfill" and stop.
+
+### 3. Ensure a feature exists
+
+- **Case A - no feature context** (on the default branch, or `FEATURE_DIR`
+  missing): derive a 2-4 word slug from the dominant theme of the diff (plus
+  the user's hint), then run:
+  `.specify/scripts/bash/create-new-feature.sh --json --timestamp --short-name <slug> "<one-line summary of the observed change>"`
+  Parse `SPEC_FILE` and the feature directory from the JSON output.
+  If the git extension is installed and you are on the default branch, also
+  create the branch first via the `speckit-git-feature` skill so uncommitted
+  changes carry over onto a feature branch (`git checkout -b` preserves the
+  working tree).
+- **Case B - feature exists but artifacts are missing or stale**: use the
+  existing `FEATURE_DIR`.
+
+### 4. Reverse-engineer the artifacts from the ACTUAL diff
+
+Read the changed files (not just their names) before writing anything.
+
+- **spec.md**: describe the user-visible behavior the diff implements as user
+  stories and functional requirements. Where you infer intent, mark it
+  `[BACKFILLED - verify with author]`. Use the spec template structure
+  (resolve via `.specify/templates/spec-template.md`). If a spec already
+  exists, append a `## Backfilled additions <date>` section instead of
+  overwriting.
+- **plan.md**: record the tech stack and structure AS ACTUALLY IMPLEMENTED in
+  the diff (languages, dependencies added, files touched). Same append rule.
+- **tasks.md**: one task per coherent change, each referencing the exact file
+  paths it covers, ALL marked `[X]` (completed retroactively), under a heading
+  `## Backfilled <date> from <commit-range or "working tree">`. Append to an
+  existing tasks.md, never overwrite.
+
+### 5. Report
+
+Output a coverage table: `| changed file | covering task | artifact updated |`.
+Then instruct the user, in order:
+
+1. Review every `[BACKFILLED - verify with author]` marker.
+2. Run `/speckit-analyze` (artifact consistency).
+3. Run `/speckit-comply` (code-level constitution compliance).
+4. Commit the `specs/` updates in the SAME branch/PR as the code they cover.
+
+## Constraints
+
+- NEVER modify source files - this command documents what exists; it does not
+  fix code. If the diff violates the constitution, report it and let
+  `/speckit-comply` enumerate the findings.
+- One feature per invocation. If the diff clearly contains multiple unrelated
+  features, backfill the dominant one and tell the user to re-run for the rest.

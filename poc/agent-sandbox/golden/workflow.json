@@ -1,0 +1,28 @@
+{
+  "steps": [
+    {
+      "id": "fetch",
+      "entry": "steps/fetch/main.py",
+      "params": {
+        "fixture": "fixtures/invoices.json",
+        "status": "overdue"
+      },
+      "inputs": {},
+      "outputs": ["rows"]
+    },
+    {
+      "id": "notify",
+      "entry": "steps/notify/main.py",
+      "params": {
+        "email_field": "customer_email",
+        "subject": "Invoice {id} is overdue",
+        "outbox": "outbox.json"
+      },
+      "foreach": "fetch.rows",
+      "inputs": {
+        "row": "$item"
+      },
+      "outputs": ["sent", "message"]
+    }
+  ]
+}

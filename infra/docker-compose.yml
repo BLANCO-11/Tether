@@ -1,0 +1,461 @@
+# Foundry Parent App — unified local stack (single source of truth).
+# Postgres + one-shot migrate + parent API server + MCP schema bridge +
+# Next.js web UI. Everything shares Compose's default network, so
+# services reach each other by SERVICE NAME (server, postgres, mcp-bridge, web).
+#
+# NOTE: an external agent runtime used to sit outside this stack, reached
+# Foundry-Harness compose and publishes :6800 on the host. Containers here reach it
+# via host.docker.internal. It has been removed from the product; being a container
+# in the other stack, reaches back the same way (host gateway :4003).
+#
+# Run from the repo root (foundry/) so Compose picks up ./.env for interpolation:
+#   docker compose -f infra/docker-compose.yml up --build
+#
+# ── Host ports: one contiguous block for the app, +1 offsets for the data stores ─
+#
+#   4000  server   REST API
+#   4001  server   WebSocket — /ws/flow-execution, ticket-authorised (D-15)
+#   4002  web      Next.js UI
+#   4003  mcp-bridge  (was 3015; pulled into the block, nothing registers it today)
+#    —    ops-api  REMOVED 2026-10-30. Its one product job — the `llm_complete`
+#                  tool and the runtime model settings — moved into `server`
+#                  (`/api/llm/complete`, `/api/runtime-model`); the rest was demo
+#                  simulation nothing seeds any more. Its database `foundry_ops`
+#                  and role are left in Postgres; nothing reads them.
+#   5433  postgres 5432 + 1
+#    —    redis    REMOVED. It was provisioned for BullMQ-at-scale and never
+#                  acquired a consumer: `DBSIZE` 0, no client library in any
+#                  package.json, `config.redisUrl` read by nothing. A port and a
+#                  container that answer `PING` are indistinguishable from a
+#                  working dependency, so it was a permanent invitation to
+#                  "surely something uses this". 6380 is now FREE — see the note
+#                  under `postgres` before reusing it.
+#
+# Postgres keeps its +1 offset rather than joining the 40xx block, and that is
+# load-bearing rather than merely conventional: registered datasources store an
+# ENCRYPTED DSN naming `host.docker.internal:5433`, and `demo:reset` reseeds
+# without re-registering — so renumbering Postgres would silently invalidate
+# every stored credential with no reseed path back. 6380 carries no such
+# constraint now that nothing is on it, but the +1 convention is why it was
+# chosen; a future data store should take 6380 back rather than a 40xx port.
+#
+# The `migrate` service applies DB migrations once before the server boots.
+# The connector and its egress proxy live in their own file so their `${...}` secrets are filled from the root
+# .env (`include` is the only way a compose file can name its interpolation file). Started by every `up`.
+include:
+  - path: connector.compose.yml
+    env_file: ../.env
+
+services:
+  postgres:
+    image: postgres:16
+    container_name: foundry-parent-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: foundry
+      POSTGRES_PASSWORD: foundry
+      POSTGRES_DB: foundry_parent
+    ports:
+      - "5433:5432"
+    volumes:
+      - foundry_pgdata:/var/lib/postgresql/data
+    networks:
+      - default
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U foundry -d foundry_parent"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # ── There is no `redis` service, and that is the change (GAPS.md 6.4) ────────
+  #
+  # It was provisioned "for BullMQ / scale" and never got a consumer. Measured
+  # before removing, not assumed: `DBSIZE` 0, no `redis`/`ioredis` dependency in
+  # any package.json in the workspace, and `config.redisUrl` defined in
+  # `config/index.ts` and read by nothing.
+  #
+  # Removed rather than left because a healthy container is the most convincing
+  # possible evidence of a working dependency. It answered `PING`, `depends_on`
+  # made the server wait for it, and `REDIS_URL` was in the server's environment
+  # — so every signal a person or a check could look at said "in use". The next
+  # person to need a queue would have found it already wired up and reasonably
+  # concluded it was.
+  #
+  # ⚠ The named volume `foundry_redisdata` is NOT declared any more, so Compose
+  # will not manage it — the existing `infra_foundry_redisdata` becomes an
+  # orphan holding an empty appendonly file. Reclaim it deliberately with
+  # `docker volume rm infra_foundry_redisdata`; it is not removed here because a
+  # compose edit that silently deletes a volume is the wrong default even when
+  # the volume is empty.
+
+  # One-shot: apply DB migrations against the same Postgres, then exit. The server
+  # waits for this to complete successfully before starting.
+  migrate:
+    build:
+      context: ..
+      dockerfile: packages/server/Dockerfile
+      # ── Corporate CA for TLS-intercepting proxies (20260824-211547-docker-ca-trust)
+      #
+      # Empty by default, which means NO corporate CA and a build identical to the
+      # one before this feature existed. Set CORP_CA_FILE=corp-ca.pem in the
+      # repo-root .env after running ./scripts/stage-corp-ca.sh.
+      #
+      # ⚠ COMPOSE INTERPOLATES ${VAR} FROM THE PROJECT DIRECTORY (infra/), NOT THE
+      # REPO ROOT. The repo-root .env reaches this only via `--env-file .env` (run from the repo root).
+      # Without it CORP_CA_FILE silently expands to EMPTY, the build proceeds with
+      # no trust, and fails at the first fetch looking exactly like the original
+      # bug. This is the same trap the env_file/environment notes elsewhere in this
+      # file already warn about, arriving from the interpolation side.
+      #
+      # ⚠ This arg is needed on EVERY build stanza. `migrate`, `server` and `seed`
+      # share one Dockerfile but are three separate builds; omitting it from one
+      # leaves that image untrusted while its siblings work.
+      args:
+        CORP_CA_FILE: ${CORP_CA_FILE:-}
+    container_name: foundry-parent-migrate
+    command: ["node", "packages/server/dist/db/migrate.js"]
+    # ⚠ D-05.4 gap fixed: the migrate script imports config that needs the
+    # repo-root env (LLM_BASE_URL etc.). Without env_file, `docker compose up`
+    # fails on migrate after any rebuild.
+    env_file: ../.env
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  # Parent API server (Express :4000 + WS :4001). Secrets (PARENT_API_KEY,
+  # CREDENTIAL_ENC_KEY) come from the repo-root .env; the URLs below
+  # override its localhost values with in-compose service names.
+  server:
+    build:
+      context: ..
+      dockerfile: packages/server/Dockerfile
+      args:
+        CORP_CA_FILE: ${CORP_CA_FILE:-}
+    container_name: foundry-parent-server
+    restart: unless-stopped
+    # Forge runs in the `forge` container now; `init` stays as a reaper for the verifier the server still runs.
+    init: true
+    ports:
+      - "4000:4000"
+      - "4001:4001"
+    volumes:
+      # Mock testing-DB files (mock-data programme). Survives `up --build`;
+      # without this every server rebuild wipes the file cache and ready
+      # fixtures degrade to mock_file_missing until the rebuild trigger runs.
+      # ⚠ A BIND mount of the checkout's data/mocks, NOT a named volume (I-229,
+      # D-269): host provisioners (demo:seed & co) write <repo>/data/mocks, and a
+      # named volume meant the server never saw what they built — the fixture row
+      # pointed at a version whose file only the host had, and every draft run
+      # on that datasource was refused "mock file vN … is missing". The server
+      # runs as root; mock-file-store hands its writes to this directory's owner
+      # so the host can keep writing. The old `foundry_mockdata` volume is left
+      # in place (an orphan Compose ignores) — its files were merged here.
+      - ../data/mocks:/repo/data/mocks
+      # Pi builder session sandboxes (isolated per session; survives rebuild).
+      - foundry_pi_sandboxes:/repo/packages/server/.pi-sandboxes
+    # Secrets (PARENT_API_KEY, CREDENTIAL_ENC_KEY) come from ../.env
+    # via env_file — resolved relative to THIS compose file, so it works no matter
+    # which directory you run `docker compose` from. Do NOT re-declare those secrets
+    # under `environment:` with ${VAR} interpolation: Compose looks for its .env next
+    # to the compose file (infra/.env, absent here), so ${VAR} resolves to empty and
+    # would BLANK the value env_file just loaded. The URLs below are hardcoded (not
+    # interpolated) because they must override ../.env's host-oriented localhost values.
+    env_file:
+      - ../.env
+    # Container settings — DATABASE_URL, PORT, WS_PORT, NODE_ENV, FORGE_HOST,
+    # FORGE_TOOL_URL — come from ../.env too.
+    # `default` keeps its route to the host gateway. `runner-net`: the pair of
+    # channels to `flow-runner` (start a run → ; step callbacks ←), on a network
+    # nothing else is on.
+    networks:
+      - default
+      - runner-net
+      - forge-net
+      - connector-net
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    # ── NO docker.sock, and its removal is the point (D-28) ───────────────────
+    #
+    # This service used to mount /var/run/docker.sock, because
+    # `execution.service.ts` shelled out to `docker run` for every generated
+    # script. Phase 4 deleted that service and nothing in packages/server spawns
+    # a subprocess at all any more — so the mount was a live path onto the host
+    # daemon with no remaining caller, held by the one process that terminates
+    # tenant HTTP traffic and holds PARENT_API_KEY and
+    # CREDENTIAL_ENC_KEY.
+    #
+    # Do not add it back to run "just one" container from the API.
+    healthcheck:
+      # `node -e`, not curl: removing the docker CLI install from the Dockerfile
+      # (D-28) took curl with it, and re-adding a package for a healthcheck would
+      # undo the point. Gives `web`'s depends_on something to actually wait for.
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://localhost:4000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+
+  # MCP schema bridge (:4003/mcp — was :3015). Historically registered with an agent runtime as the
+  # "dataplane" connector, but NOTHING registers it today: the generation prompt
+  # now tells the agent to connect to datasources directly ("there is NO
+  # dataplane"), and the web-side bootstrap that used to seed the connector was
+  # dead code and has been removed. Kept running because it is harmless and the
+  # read-only schema tools may be rewired later; not currently on any live path.
+  # ⚠ NOT STARTED BY DEFAULT since 2026-08-14 (guardrail remediation F2), and the
+  # reason is the three facts above combined rather than any one of them:
+  #
+  #   • it is on no live path — nothing in `packages/server`, `packages/client` or
+  #     any external stack references :4003 or MCP_BRIDGE_API_KEY,
+  #   • it published :4003 on the HOST, and
+  #   • it connects to `foundry_parent` with the OWNER credential (the
+  #     `DATABASE_URL` default below), which is one query from `workspace_secrets`.
+  #
+  # A container answering on a published port with the control-plane credential is
+  # indistinguishable from a working dependency (the argument that removed Redis),
+  # and here it also carries a real one. `profiles:` is the smallest reversible
+  # answer: nothing is deleted, `up` no longer starts it, and turning it back on
+  # is explicit —
+  #
+  #   docker compose -f infra/docker-compose.yml --profile mcp-bridge up -d
+  #
+  # ⚠ TWO THINGS TO FIX BEFORE ANYTHING RELIES ON IT. Its tools take
+  # `workspaceId` from the CALLER's arguments and it authenticates with one
+  # shared key, so any holder reads every workspace's schema — there is no tenant
+  # model on the bridge to scope that with (`packages/mcp-bridge/src/index.ts`).
+  # And it wants its own least-privilege role on `foundry_parent` (it reads
+  # `schemas` + `datasources` and nothing else) rather than the owner DSN.
+  mcp-bridge:
+    profiles: ["mcp-bridge"]
+    build:
+      context: ..
+      dockerfile: packages/mcp-bridge/Dockerfile
+      args:
+        CORP_CA_FILE: ${CORP_CA_FILE:-}
+    container_name: foundry-parent-mcp-bridge
+    restart: unless-stopped
+    ports:
+      - "4003:4003"
+    # MCP_BRIDGE_API_KEY comes from ../.env via env_file, same reasoning as the
+    # server block above: do NOT re-declare it under environment: with ${VAR}
+    # interpolation, or it blanks to empty and every request refuses.
+    env_file:
+      - ../.env
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # Next.js web UI (:4002). Talks ONLY to the parent API over the compose network.
+  # It has no direct route to the runtime: the server-side proxy layer that used to
+  # provide one (src/lib/orbit-server.ts + app/api/orbit/*) had no callers and was
+  # removed, so no runtime vars are needed here. All runtime traffic —
+  # generation, polling, secrets, artifacts — goes through the parent server.
+  web:
+    build:
+      context: ..
+      dockerfile: packages/client/Dockerfile
+      args:
+        CORP_CA_FILE: ${CORP_CA_FILE:-}
+    container_name: foundry-parent-web
+    restart: unless-stopped
+    ports:
+      - "4002:4002"
+    # Everything comes from ../.env — PARENT_API_KEY, AUTH_SECRET, AUTH_URL and the
+    # Entra SSO credentials (AUTH_MICROSOFT_ENTRA_ID_ID / _SECRET / _ISSUER; without
+    # them the work-account button does not render). `packages/client/.env.local` is
+    # no longer loaded. Do NOT re-declare these under `environment:` with ${VAR},
+    # which would blank them (see the server service note). PARENT_API_URL below is a
+    # literal because ../.env's value (localhost) is for host-based dev.
+    env_file:
+      - ../.env
+    environment:
+      # ⚠ `3e0dd30` also removed a hardcoded `AUTH_URL: http://localhost:4002`
+      # from this block, and that removal is CORRECT and deliberately NOT reverted.
+      # A literal here overrides both env files, so restoring it would force the
+      # production deployment onto a localhost URL: `auth.ts` would boot (localhost
+      # is the http exemption), cookies would go out without Secure, and every
+      # Entra redirect_uri would mismatch. AUTH_URL belongs in the env file for
+      # whichever host this is.
+      #
+      # Public hostname this app is served at (portal.intelligeni.foundry.apps.askml.ai).
+      # auth.ts REFUSES TO START in production if this is set and isn't https:// —
+      # session cookies would go out without the Secure flag otherwise. Whatever sits in
+      # front of this container (load balancer / ingress) terminates TLS; the container
+      # itself still just listens on plain HTTP :4002.
+      # AUTH_URL: https://portal.intelligeni.foundry.apps.askml.ai
+      # Server components reach the parent API by its compose service name.
+      PARENT_API_URL: http://server:4000
+      # NO NEXT_PUBLIC_WS_URL. It pointed at `/ws/generation`, which Phase 4
+      # deleted along with the monolithic path — and that socket was authorised
+      # by NOTHING (a scriptId in the query string subscribed you). Leaving the
+      # var set would bake a dead URL into the browser bundle and, worse, imply
+      # the channel still exists. The surviving socket is below.
+      # Base for the step-progress socket (phase-2.md 2.8), served at REQUEST time
+      # via /api/foundry-config rather than baked into the bundle like the
+      # NEXT_PUBLIC_ one above — so a redeploy needs `up -d`, not a rebuild.
+      # ⚠ LEFT UNSET on this domain, deliberately: the socket needs :4001 reachable
+      # from the BROWSER, not just from other containers, and nothing here confirms
+      # this deployment's ingress publishes a second port/path for it. An unset value
+      # degrades to polling — same data, slower, never a broken page (see flow-stream.ts).
+      # If the ingress does expose it (e.g. wss://portal.intelligeni.foundry.apps.askml.ai/ws
+      # proxied to this container's :4001), set FOUNDRY_WS_URL to that and redeploy —
+      # no rebuild needed.
+      # FOUNDRY_WS_URL: wss://portal.intelligeni.foundry.apps.askml.ai/ws
+      # Which workspace the UI binds to. Read at REQUEST time via
+      # /api/foundry-config, so changing it needs a restart, not a rebuild.
+      # Without it the UI falls back to the OLDEST workspace — never the newest,
+      # because that made creating a workspace silently repoint the whole UI.
+      FOUNDRY_WORKSPACE: HR
+    depends_on:
+      # `condition: service_healthy`, not a bare list entry. A bare depends_on
+      # waits for the container to START, so the UI used to render server
+      # components against an API that was still opening its DB pool — a first
+      # paint of errors that looked like a real failure and fixed itself on
+      # reload, which is the least debuggable kind of wrong.
+      server:
+        condition: service_healthy
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  # ── The fragment base image ───────────────────────────────────────────────
+  # `flow-runner`'s base image (packages/flow-runner/Dockerfile). A one-shot service so `docker compose build`
+  # produces it before flow-runner builds on it. The base is digest-pinned and the pip versions are pinned; bump
+  # the tag, never re-point it.
+  # Foundry's executor for Pi-built workflows (plans/pi-runtime-2026-10-09, option A).
+  # ⚠ NO env_file: the runner must not hold the deployment's secrets, because step
+  # code runs under it. It gets exactly one value, and needs `--env-file .env` from
+  # the repo root to resolve it (Compose looks for infra/.env otherwise).
+  # No Docker socket, no ports, one internal network (runner-net).
+  flow-runner:
+    build:
+      context: ../packages/flow-runner
+    image: foundry/flow-runner:dev
+    container_name: foundry-flow-runner
+    restart: unless-stopped
+    # Run isolation (pi-runtime P5b): only the capabilities it needs; SYS_ADMIN is dropped by entrypoint.sh after
+    # remounting /proc hidepid. A reaper at PID 1 for whatever a killed step leaves behind.
+    cap_drop: [ALL]
+    cap_add: [SETUID, SETGID, CHOWN, KILL, SYS_ADMIN, SETPCAP]
+    # apparmor=unconfined: Docker's default AppArmor profile blocks the cgroup mounts the entrypoint needs for
+    # per-run memory groups, and the runner then refuses to start (exit 3). Same setting as forge.
+    security_opt: ["no-new-privileges:true", "apparmor=unconfined"]
+    init: true
+    # The repo-root .env, like every other service — so `compose up` works from infra/ or the root with no
+    # --env-file and no second .env. entrypoint.sh starts the runner with only its own variables; it refuses to
+    # start when FLOW_RUNNER_SECRET is empty.
+    env_file:
+      - path: ../.env
+        required: true
+    networks:
+      - runner-net
+    depends_on:
+      fragment-base:
+        condition: service_completed_successfully
+
+  # Forge, the builder agent, in its own container (2026-10-13). Each conversation's Forge runs as its own Linux user
+  # in its own 0700 folder, with /proc hidden, and holds no secret of the stack: the AI key arrives per process from
+  # the server. Its only network is `forge-net`, which has no gateway; the only way out is `forge-egress`, which lets
+  # through the AI gateway and nothing else. The sandboxes volume is mounted at the SAME path as in `server`, because
+  # the server names folders by path. Capabilities: SETUID/SETGID to run each conversation as its user, CHOWN/FOWNER/
+  # DAC_OVERRIDE to hand a folder to that user (the host only — a conversation's process has none), KILL to stop it;
+  # SYS_ADMIN and SETPCAP only until /proc is remounted (entrypoint.sh drops them).
+  forge:
+    build:
+      context: ..
+      dockerfile: packages/forge/Dockerfile
+      args:
+        CORP_CA_FILE: ${CORP_CA_FILE:-}
+    image: foundry/forge:dev
+    container_name: foundry-forge
+    restart: unless-stopped
+    cap_drop: [ALL]
+    cap_add: [SETUID, SETGID, CHOWN, FOWNER, DAC_OVERRIDE, KILL, SYS_ADMIN, SETPCAP]
+    # apparmor=unconfined: Docker's default AppArmor profile (Ubuntu 24.04) blocks the /proc remount that
+    # entrypoint.sh needs for hidepid, even with SYS_ADMIN. Replace with a custom profile allowing only that remount.
+    security_opt: ["no-new-privileges:true", "apparmor=unconfined"]
+
+    init: true
+    # The repo .env, like every service; entrypoint.sh starts the host with ONLY FORGE_HOST_SECRET from it.
+    env_file:
+      - path: ../.env
+        required: true
+    volumes:
+      - foundry_pi_sandboxes:/repo/packages/server/.pi-sandboxes
+    networks:
+      - forge-net
+    depends_on:
+      - forge-egress
+
+  # The only way out of forge-net: an HTTPS CONNECT proxy that allows the AI gateway (the host of LLM_BASE_URL, or
+  # FORGE_EGRESS_ALLOW) and refuses everything else. Runs as nobody with no capabilities after start.
+  forge-egress:
+    image: foundry/forge:dev
+    container_name: foundry-forge-egress
+    restart: unless-stopped
+    command: ["egress"]
+    cap_drop: [ALL]
+    cap_add: [SETUID, SETGID]
+    security_opt: ["no-new-privileges:true"]
+    env_file:
+      - path: ../.env
+        required: true
+    networks:
+      - default
+      - forge-net
+
+  fragment-base:
+    build:
+      # ⚠ Context is `.` (infra/), NOT ./fragment-base — moved up one level so the
+      # staged corporate CA at infra/certs/ is inside this build's context.
+      context: .
+      dockerfile: fragment-base/Dockerfile
+      args:
+        CORP_CA_FILE: ${CORP_CA_FILE:-}
+    image: foundry/fragment-base:py3.12-pandas2.2.3
+    container_name: foundry-fragment-base-build
+    # Never "run" as a service: this exits 0 immediately; its only job is to make
+    # the build a first-class part of `up`/`build`, ahead of flow-runner.
+    command: ["python", "-c", "import pandas, numpy; print('fragment-base ok', pandas.__version__, numpy.__version__)"]
+    # No network: the import check needs none.
+    network_mode: none
+    restart: "no"
+
+networks:
+  # The default bridge — has a route off the host. Everything that needs the
+  # internet or the host gateway stays here.
+  default:
+  # No gateway. `flow-runner` and `server` only: step code reaches Foundry's step
+  # API and nothing else — not the internet, not Postgres.
+  runner-net:
+    internal: true
+  # No gateway. `forge`, `server` and `forge-egress` only: Forge reaches the server's /api/forge tools and the proxy,
+  # and through the proxy the AI gateway — not Postgres, not the host, not the internet.
+  forge-net:
+    internal: true
+  # `connector-net` is defined in connector.compose.yml (included above); `server` joins it.
+
+volumes:
+  foundry_pgdata:
+  foundry_pi_sandboxes:
+  # `foundry_mockdata` was here until I-229 moved mocks to a bind mount. Not
+  # deleted: its files were merged into data/mocks, and a compose edit that
+  # silently deletes a volume is the wrong default. Reclaim with
+  # `docker volume rm infra_foundry_mockdata` once the bind mount is trusted.
+  # `foundry_redisdata` was here until Redis was removed (GAPS.md 6.4). Not
+  # re-added: an undeclared volume is an orphan Compose ignores, which is the
+  # honest state, and the removal note in the services block says how to reclaim
+  # the existing one.
+  # `kestra_storage` and `kestra_plugins` were here until Kestra was removed (2026-10-21). Not deleted by this
+  # file: reclaim with `docker volume rm infra_kestra_storage infra_kestra_plugins`.
+

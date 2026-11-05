@@ -1,0 +1,44 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: web
+  labels: {{- include "foundry.labels" (dict "root" . "component" "web") | nindent 4 }}
+spec:
+  selector: {{- include "foundry.selector" (dict "root" . "component" "web") | nindent 4 }}
+  ports:
+    - { name: http, port: 4002, targetPort: 4002 }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web
+  labels: {{- include "foundry.labels" (dict "root" . "component" "web") | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {{- include "foundry.selector" (dict "root" . "component" "web") | nindent 6 }}
+  template:
+    metadata:
+      labels: {{- include "foundry.labels" (dict "root" . "component" "web") | nindent 8 }}
+    spec:
+      containers:
+        - name: web
+          image: {{ .Values.images.web }}
+          imagePullPolicy: {{ .Values.pullPolicy }}
+          ports:
+            - { name: http, containerPort: 4002 }
+          env:
+            - { name: NODE_ENV, value: production }
+            - { name: PARENT_API_URL, value: "http://server:4000" }
+            - { name: FOUNDRY_WORKSPACE, value: {{ .Values.public.workspace | quote }} }
+            {{- with .Values.public.authUrl }}
+            - { name: AUTH_URL, value: {{ . | quote }} }
+            {{- end }}
+            {{- with .Values.public.wsUrl }}
+            - { name: FOUNDRY_WS_URL, value: {{ . | quote }} }
+            {{- end }}
+            {{- include "foundry.secretEnv" (dict "root" . "keys" .Values.secretKeys.web) | nindent 12 }}
+          readinessProbe:
+            tcpSocket: { port: 4002 }
+            periodSeconds: 10
+          resources: {{- toYaml .Values.resources.web | nindent 12 }}

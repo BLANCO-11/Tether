@@ -1,0 +1,16 @@
+{{- range $name, $s := dict "sandboxes" .Values.storage.sandboxes "mocks" .Values.storage.mocks }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: foundry-{{ $name }}
+  labels: {{- include "foundry.labels" (dict "root" $ "component" $name) | nindent 4 }}
+spec:
+  accessModes: [{{ $s.accessMode }}]
+  {{- if $s.storageClass }}
+  storageClassName: {{ $s.storageClass }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ $s.size }}
+---
+{{- end }}

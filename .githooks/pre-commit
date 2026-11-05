@@ -1,0 +1,104 @@
+#!/usr/bin/env bash
+# Layer-2 spec-compliance gate: runs at commit time for ANY agent or human.
+# Installed via `git config core.hooksPath .githooks` (done by setup.sh).
+#
+# Checks the STAGED changes only. Bypassable with `git commit --no-verify`
+# (intended for hotfixes); the CI gate is the authoritative backstop.
+
+set -uo pipefail
+
+ROOT=$(git rev-parse --show-toplevel)
+. "$ROOT/ci/spec-policy.sh"
+
+[ "${SPECKIT_ENFORCE:-1}" = "0" ] && exit 0
+[ -f "$ROOT/.speckit-template-dev" ] && exit 0
+
+# Secret scan FIRST - applies to every branch including hotfix/*, and to
+# allowlisted paths too (a key pasted into specs/notes.md is still a leak).
+if ! bash "$ROOT/ci/check-secrets.sh" staged; then
+    echo "" >&2
+    echo "[spec-gate] COMMIT BLOCKED: possible secrets in staged changes (see SECRET-BLOCK above)." >&2
+    echo "[spec-gate] Move credentials to environment variables / Azure Key Vault; put local" >&2
+    echo "[spec-gate] values in .env (gitignored) and placeholders in .env.example." >&2
+    echo "[spec-gate] False positive? Reword the line or see ci/secret-policy.sh (is_placeholder_line)." >&2
+    exit 1
+fi
+
+BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")
+
+# Hotfix escape hatch: allowed, but loudly.
+if printf '%s' "$BRANCH" | grep -Eq "$HOTFIX_BRANCH_REGEX"; then
+    echo "[spec-gate] WARNING: hotfix branch - spec gate skipped." >&2
+    echo "[spec-gate] A follow-up /speckit-backfill PR is required within 2 working days." >&2
+    exit 0
+fi
+
+# Collect staged files that are NOT always-editable (i.e. source files).
+SOURCE_CHANGES=()
+while IFS= read -r f; do
+    [ -z "$f" ] && continue
+    is_always_editable "$f" && continue
+    SOURCE_CHANGES+=("$f")
+done < <(git diff --cached --name-only --diff-filter=ACMRD)
+
+# Docs/spec-only commits are always fine (this also lets specs be committed
+# before any source exists).
+[ ${#SOURCE_CHANGES[@]} -eq 0 ] && exit 0
+
+fail() {
+    echo "" >&2
+    echo "[spec-gate] COMMIT BLOCKED: $1" >&2
+    echo "[spec-gate] Fix: run /speckit-backfill (retro-fit spec/plan/tasks), or complete" >&2
+    echo "[spec-gate] the spec-kit workflow (/speckit-specify -> /speckit-plan -> /speckit-tasks)." >&2
+    echo "[spec-gate] Emergency bypass: git commit --no-verify (CI will still enforce on the PR)." >&2
+    exit 1
+}
+
+# Gate 1: source changes require a feature branch.
+if ! printf '%s' "$BRANCH" | grep -Eq "$FEATURE_BRANCH_REGEX"; then
+    fail "source files staged on branch '$BRANCH', which is not a spec-kit feature branch (pattern: YYYYMMDD-HHMMSS-name)."
+fi
+
+# Gate 2: resolve the feature dir (feature.json first, else newest specs dir
+# touched in this commit or existing in the tree) and require all artifacts.
+FEATURE_DIR=""
+if [ -f "$ROOT/.specify/feature.json" ] && command -v jq >/dev/null 2>&1; then
+    fd=$(jq -r '.feature_directory // empty' "$ROOT/.specify/feature.json" 2>/dev/null)
+    [ -n "$fd" ] && FEATURE_DIR="$ROOT/$fd"
+fi
+if [ -z "$FEATURE_DIR" ] || [ ! -d "$FEATURE_DIR" ]; then
+    # Fall back to a specs/ dir whose name matches the branch, then newest.
+    if [ -d "$ROOT/specs/$BRANCH" ]; then
+        FEATURE_DIR="$ROOT/specs/$BRANCH"
+    else
+        newest=$(ls -1d "$ROOT"/specs/*/ 2>/dev/null | sort | tail -1)
+        [ -n "$newest" ] && FEATURE_DIR="${newest%/}"
+    fi
+fi
+[ -n "$FEATURE_DIR" ] && [ -d "$FEATURE_DIR" ] || fail "no feature directory found under specs/."
+
+for a in spec.md plan.md tasks.md; do
+    [ -f "$FEATURE_DIR/$a" ] || fail "missing $(basename "$FEATURE_DIR")/$a - complete the spec-kit workflow first."
+done
+
+# Gate 3: every staged source file must be referenced in tasks.md
+# (full path or basename), unless tasks.md itself is being updated in this
+# same commit (the backfill/implement flow updates both together).
+TASKS="$FEATURE_DIR/tasks.md"
+TASKS_STAGED=false
+git diff --cached --name-only | grep -qx "$(realpath --relative-to="$ROOT" "$TASKS" 2>/dev/null || echo "__none__")" && TASKS_STAGED=true
+
+UNCOVERED=()
+for f in "${SOURCE_CHANGES[@]}"; do
+    grep -qF "$f" "$TASKS" 2>/dev/null && continue
+    grep -qF "$(basename "$f")" "$TASKS" 2>/dev/null && continue
+    $TASKS_STAGED && continue
+    UNCOVERED+=("$f")
+done
+
+if [ ${#UNCOVERED[@]} -gt 0 ]; then
+    printf '[spec-gate]   uncovered: %s\n' "${UNCOVERED[@]}" >&2
+    fail "staged source files are not referenced by $(realpath --relative-to="$ROOT" "$TASKS") ."
+fi
+
+exit 0

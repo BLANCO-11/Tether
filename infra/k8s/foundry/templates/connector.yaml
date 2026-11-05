@@ -1,0 +1,120 @@
+{{- if .Values.plugins.enabled }}
+{{- $p := .Values.plugins -}}
+# ── connector: runs Activepieces pieces; each run in its own worker process, as its own uid ───────────────────
+apiVersion: v1
+kind: Service
+metadata:
+  name: connector
+  labels: {{- include "foundry.labels" (dict "root" . "component" "connector") | nindent 4 }}
+spec:
+  selector: {{- include "foundry.selector" (dict "root" . "component" "connector") | nindent 4 }}
+  ports:
+    - { name: http, port: 4010, targetPort: 4010 }
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: foundry-connector
+  labels: {{- include "foundry.labels" (dict "root" . "component" "connector") | nindent 4 }}
+spec:
+  accessModes: [ReadWriteOnce]
+  {{- with $p.storage.storageClass }}
+  storageClassName: {{ . }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ $p.storage.size }}
+---
+# ONE replica: the installed-pieces manifest and the piece store live on its volume and in its memory. Recreate,
+# because two pods on one ReadWriteOnce volume would both write the manifest.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: connector
+  labels: {{- include "foundry.labels" (dict "root" . "component" "connector") | nindent 4 }}
+spec:
+  replicas: 1
+  strategy: { type: Recreate }
+  selector:
+    matchLabels: {{- include "foundry.selector" (dict "root" . "component" "connector") | nindent 6 }}
+  template:
+    metadata:
+      labels: {{- include "foundry.labels" (dict "root" . "component" "connector") | nindent 8 }}
+    spec:
+      {{- with .Values.sandbox.runtimeClassName }}
+      runtimeClassName: {{ . }}
+      {{- end }}
+      shareProcessNamespace: true
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      containers:
+        - name: connector
+          image: {{ .Values.images.connector }}
+          imagePullPolicy: {{ .Values.pullPolicy }}
+          securityContext:
+            # SETUID/SETGID to start each worker as its own uid; KILL to stop one at its timeout (EPERM without it).
+            {{- include "foundry.sandboxSecurity" (dict "caps" (list "SETUID" "SETGID" "KILL") "appArmor" "") | nindent 12 }}
+          ports:
+            - { name: http, containerPort: 4010 }
+          env:
+            - { name: CONNECTOR_EGRESS_URL, value: "http://connector-egress:3128" }
+            - { name: CONNECTOR_RUN_TIMEOUT_MS, value: {{ $p.runTimeoutMs | int64 | quote }} }
+            - name: CONNECTOR_SECRET
+              valueFrom: { secretKeyRef: { name: {{ .Values.secretName }}, key: PLUGINS_CONNECTOR_SECRET } }
+            - name: CONNECTOR_EGRESS_SECRET
+              valueFrom: { secretKeyRef: { name: {{ .Values.secretName }}, key: PLUGINS_EGRESS_SECRET } }
+          readinessProbe:
+            httpGet: { path: /healthz, port: 4010 }
+            periodSeconds: 10
+          resources: {{- toYaml .Values.resources.connector | nindent 12 }}
+          volumeMounts:
+            - { name: data, mountPath: /data }
+      volumes:
+        - name: data
+          persistentVolumeClaim: { claimName: foundry-connector }
+---
+# ── connector-egress: the only way out of the connector — per-run signed allowlist, no private addresses ─────
+apiVersion: v1
+kind: Service
+metadata:
+  name: connector-egress
+  labels: {{- include "foundry.labels" (dict "root" . "component" "connector-egress") | nindent 4 }}
+spec:
+  selector: {{- include "foundry.selector" (dict "root" . "component" "connector-egress") | nindent 4 }}
+  ports:
+    - { name: proxy, port: 3128, targetPort: 3128 }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: connector-egress
+  labels: {{- include "foundry.labels" (dict "root" . "component" "connector-egress") | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {{- include "foundry.selector" (dict "root" . "component" "connector-egress") | nindent 6 }}
+  template:
+    metadata:
+      labels: {{- include "foundry.labels" (dict "root" . "component" "connector-egress") | nindent 8 }}
+    spec:
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      securityContext: { runAsNonRoot: true, runAsUser: 1000, runAsGroup: 1000 }
+      containers:
+        - name: connector-egress
+          image: {{ .Values.images.connector }}
+          imagePullPolicy: {{ .Values.pullPolicy }}
+          command: ["node", "src/egress.mjs"]
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: { drop: ["ALL"] }
+          ports:
+            - { name: proxy, containerPort: 3128 }
+          env:
+            - name: CONNECTOR_EGRESS_SECRET
+              valueFrom: { secretKeyRef: { name: {{ .Values.secretName }}, key: PLUGINS_EGRESS_SECRET } }
+          readinessProbe:
+            tcpSocket: { port: 3128 }
+            periodSeconds: 10
+          resources: {{- toYaml .Values.resources.connectorEgress | nindent 12 }}
+{{- end }}

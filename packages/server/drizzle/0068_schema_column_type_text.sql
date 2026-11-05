@@ -1,0 +1,18 @@
+-- `schemas.column_type` was varchar(100) and a real schema overflowed it.
+--
+-- ⚠ The overflow is a 500 on `POST …/schema/refresh`, which is the one action
+-- that makes a datasource usable at all — measured on a tenant's 46-table
+-- Prisma database the moment enum MEMBERS started being recorded
+-- (`user-defined:ActivityFeedRelationType(...)` is past 100 characters before
+-- the first member is written).
+--
+-- ⚠ THE LIMIT WAS ALREADY REACHABLE AND THIS IS NOT A NEW CONSTRAINT.
+-- `mysql.introspector.ts` has always recorded `COLUMN_TYPE` verbatim, which for
+-- a MySQL enum is `enum('a','b','c',...)` — so any MySQL datasource with a
+-- handful of members could have hit exactly this. Recording Postgres enum
+-- members surfaced a latent bound rather than introducing one.
+--
+-- `text` rather than a bigger varchar: a type name plus its members has no
+-- honest upper bound, and a second arbitrary number is a second thing to
+-- overflow. Postgres stores the two identically.
+ALTER TABLE "schemas" ALTER COLUMN "column_type" TYPE text;

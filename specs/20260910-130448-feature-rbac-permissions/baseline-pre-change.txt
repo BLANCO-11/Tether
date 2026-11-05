@@ -1,0 +1,175 @@
+T001 — PRE-CHANGE REGRESSION BASELINE
+====================================
+
+Taken 2026-09-12 on branch 20260910-130448-feature-rbac-permissions at its creation
+point, commit 6ff72f8, BEFORE any RBAC code was written. Node v22.23.2.
+
+⚠ THE FAILURES BELOW ARE RECORDED DELIBERATELY. SC-009 is a DIFF, and a baseline that
+omits pre-existing failures makes them look like this feature's. Five server tests, three
+client tests, one e2e hard failure and four client TS errors are red BEFORE this feature
+touches anything. If any of them is still red at T102, that is unchanged, not a
+regression. If a SIXTH server failure appears, that one is ours.
+
+
+1. pnpm test  (= pnpm -r test)                                       EXIT 1
+------------------------------------------------------------------------------
+⚠ `pnpm -r test` STOPS AT THE FIRST FAILING PACKAGE. @foundry/server fails, so the
+client never ran in that invocation and its line below was taken by running
+`pnpm --filter @foundry/client test` separately. A future run that reports "6 of 8
+projects" is not a smaller suite, it is an earlier stop.
+
+  package          files                 tests                        verdict
+  redact           1 passed (1)          7 passed (7)                 pass
+  mcp-bridge       2 passed (2)          9 passed (9)                 pass
+  shared           8 passed (8)          106 passed (106)             pass
+  flow-edit        7 passed (7)          265 passed (265)             pass
+  ops-api          5 passed (5)          31 passed (31)               pass
+  server           3 failed | 165 passed (168)   5 failed | 2650 passed (2655)   FAIL
+  client *         2 failed | 151 passed (153)   3 failed | 2479 passed (2482)   FAIL
+
+  * run separately; see the note above.
+
+  TOTAL PASSING AT BASELINE: 5547 tests across 340 files.
+
+  The 5 failing server tests:
+    src/services/flow-branch-schemas.test.ts
+      > every schema declaring a branch step > carries `elseOf` through rather than
+        stripping it
+    src/services/node-type-schema.test.ts
+      > node-type-derived stepSchema > every registry property on code survives storage
+      > node-type-derived stepSchema > every registry property on llm survives storage
+      > node-type-derived stepSchema > every registry property on http survives storage
+        (all three: registry property "<kind>.failureMode" stripped)
+    src/services/flow-replay.test.ts
+      > 6.1 replay authorisation > does not report an unreachable engine as a purged
+        execution
+
+  The 3 failing client tests:
+    src/app/(app)/runs/[id]/page.test.tsx
+      > the live run stops fabricating > does not print the literal DRAFT V4 eyebrow
+      > the live run stops fabricating > the sandbox caveat does NOT render over a
+        production run
+    src/lib/workspace-placeholder.test.ts
+      > getMe never sends the placeholder > CONTROL: getMe is still the only consumer of
+        the raw context value
+
+  ⚠ FOUR OF THE FIVE SERVER FAILURES AND THE ONE e2e HARD FAILURE SHARE ONE ROOT CAUSE:
+  step properties (`elseOf`, `failureMode`) are being stripped on their way through the
+  storage schema. That is a live defect on this branch and it is NOT this feature's to
+  fix — but it means `branch` steps are partly broken at baseline, which is worth knowing
+  before Phase 3 touches anything that compiles or validates a flow.
+
+  ⚠ `datasource-target.test.ts` is documented in CLAUDE.md as flaky (5s timeouts against
+  a live Postgres, 2 failures on one run and 1 on the next with identical code). It
+  PASSED on this run. A failure from it later is environmental, not ours.
+
+
+2. bash scripts/ui-honesty-check.sh                                  EXIT 0
+------------------------------------------------------------------------------
+  229 PASS  ·  0 FAIL
+
+  ⚠ CLAUDE.md's most recent figure is "212 PASS / 12 FAIL". That is stale — the check is
+  now fully green at 229 assertions. Do not diff against the number in CLAUDE.md; diff
+  against this one.
+
+
+3. pnpm --filter @foundry/server e2e:ui                              EXIT 1
+------------------------------------------------------------------------------
+  66 MATCH · 1 MISMATCH · 0 GAP · 4 NOTE · 1 FAIL
+
+  The 1 hard FAIL, step 71:
+    POST /workspaces/:ws/flows/generate/jobs  (an if/elif/else chain)  422
+    {"status":"failed","message":"this flow cannot be built as authored",
+     "findings":["branch step \"rest\" has no condition"]}
+
+  This is the SAME `elseOf`-stripping defect as the unit failures in §1, reaching the
+  wire. The journey cannot complete as intended at baseline.
+
+  The 1 MISMATCH, step 68: a declared `row_count eq 18` expectation evaluated against a
+  run that produced 11 rows. Pre-existing.
+
+  ⚠ RISK R-2 / T101: this journey holds PARENT_API_KEY and mints its own identities. With
+  zero members on this deployment (§5), every workspace-scoped route it calls will refuse
+  once Phase 3 mounts the guard, unless it presents an identity from SUPER_ADMIN_EMAILS.
+  Expect the change to be broader than the one membership step — the journey exercises
+  workspace-scoped routes throughout. Budget for it.
+
+
+4. typecheck, per package
+------------------------------------------------------------------------------
+  server 0 · shared 0 · flow-edit 0 · redact 0 · ops-api 0 · mcp-bridge 0
+  client 4 errors — ALL FOUR ARE STALE BUILD ARTEFACTS, NOT SOURCE ERRORS:
+
+    .next/types/app/(app)/admin/downtime/page.ts(2,24) TS2307
+    .next/types/app/(app)/admin/downtime/page.ts(5,29) TS2307
+    .next/types/app/(app)/admin/policies/page.ts(2,24) TS2307
+    .next/types/app/(app)/admin/policies/page.ts(5,29) TS2307
+
+  ⚠ AND THEY CARRY A CORRECTION TO T092. Both directories are GONE from
+  `packages/client/src/app/(app)/`; only `.next/types` still remembers them. T092 says
+  "THERE ARE 36 PAGES, NOT 15" and lists `admin/downtime` and `admin/policies` among the
+  twenty-one it found. THERE ARE 34. The real set, walked from the filesystem:
+
+    admin  admin/audit  admin/break-glass  admin/gates  admin/incidents  admin/members
+    ai-provider  apps  approvals  approvals/[id]  dashboard  data-sources
+    data-sources/[id]  data-sources/new  email-box  flows  flows/[id]
+    flows/[id]/builder  flows/[id]/publish  flows/new  history  incidents
+    incidents/break-glass  keys  live  organization  resources  resources/[id]
+    resources/[id]/impact  resources/new  runs/[id]  runs/[id]/recover  tools  triggers
+
+  T092's other correction stands: there is no `runs/page.tsx`, only `runs/[id]`.
+
+  ⚠ CLAUDE.md records "packages/flow-edit's typecheck fails on 2 errors in
+  from-model.test.ts". It reports 0 here, because that package's `typecheck` script does
+  not include tests. The errors are still there under `tsconfig.typecheck.json`; the
+  script simply does not look. Not this feature's.
+
+
+5. THE DEPLOYMENT ITSELF  (T003a pre-flight — read this before mounting the guard)
+------------------------------------------------------------------------------
+  workspace_members ................ 0
+  workspace_member_capabilities .... 0
+  platform_users ................... 7
+  workspaces (live) ................ 8
+  workspaces (soft-deleted) ........ 0
+  SUPER_ADMIN_EMAILS ............... set (non-empty)
+
+  ⚠ THE SPEC RECORDED 2 PLATFORM USERS AND 8 WORKSPACES. It is 7 and 8 now. Five of the
+  seven platform_users rows are test debris — `test-sub-123/456/789`,
+  `ordinary@example.com`, `super@example.com` — written by suites that present a minted
+  identity. The two real ones are `mayank.lohani@microland.com` (Entra OID subject
+  51d5d879-…) and `local-admin` (admin@ml.com). Re-measure; do not quote the spec.
+
+  ⚠ THE WORKSPACE COUNT MOVES WHILE THE TEST SUITE RUNS. A first reading during the
+  `pnpm test` run said 10; a reading after it finished said 8. `datasource-target.test.ts`
+  creates and deletes throwaway workspaces. Take deployment measurements with the suite
+  idle, or record which you did.
+
+  ⚠ THIS IS BEHAVIOUR CHANGE 6, AND IT IS ACCEPTED RATHER THAN FIXED (spec D-5). The day
+  the MVP ships, all EIGHT workspaces refuse every non-super-admin, because there is
+  nobody to carry forward. `SUPER_ADMIN_EMAILS` is the only way in, and with
+  `POST …/members/claim` deleted it is the only way to create the first member. It is
+  seen here, before the guard is mounted, rather than discovered by the first person who
+  signs in.
+
+  ⚠ AND IT MAKES SC-003 VACUOUS. "No member's effective access changed" is trivially true
+  over zero members. See baseline-access.json. Do not tick a task on a run that had
+  nothing to examine.
+
+
+6. MIGRATION PRECONDITIONS  (T003)
+------------------------------------------------------------------------------
+  drizzle.__drizzle_migrations rows ....... 62
+  _journal.json entries ................... 62
+  applied == journal ...................... YES  → this is NOT the 0033 re-run condition
+  watermark = max(created_at) ............. 1789100000000
+  journal max(when) ....................... 1789100000000
+  watermark == journal max ................ YES
+  last journal tag ........................ 0061_flow_chat_config
+
+  ⚠ ASSERT THE RELATIONSHIP, NEVER THE LITERAL. The original T003 pinned
+  `1789000000000` and would have failed on this healthy database and misdiagnosed it as
+  the 0033 re-run condition. 0061_flow_chat_config landed after the plan was written.
+
+  T016–T020 add 0062–0065 at when = 1789200000000 / 1789300000000 / 1789400000000 /
+  1789500000000. All four exceed 1789100000000. Precondition satisfied.

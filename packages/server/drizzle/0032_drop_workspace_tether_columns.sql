@@ -1,0 +1,37 @@
+-- Drop the two per-workspace Tether columns. Phase 1 task 1.8 · D-116 · I-131.
+--
+-- ── WHY THIS IS A PLAIN DROP AND NOT AN ARCHIVE-THEN-DROP ───────────────────
+--
+-- Both columns were written by exactly one function — `tenantMapper
+-- .provisionForWorkspace`, reached only when `createWorkspaceSchema
+-- .provisionTetherTenant` was `true` — and **no caller anywhere passed `true`**.
+-- The four provisioners, the slug test and the client all passed `false` or
+-- omitted the field, and the field defaulted to `false`.
+--
+-- Measured on this deployment immediately before writing this migration:
+--
+--     select count(*), count(tether_tenant_id), count(tether_api_key)
+--       from workspaces;   →   4 | 0 | 0
+--
+-- So there is nothing to archive. The measurement is recorded here rather than
+-- in a plan file because this is the statement that destroys the evidence for
+-- it: a reader asking "was anything lost?" a year from now needs the number, not
+-- the reasoning that led to taking it.
+--
+-- ── ⚠ WHAT THIS IS NOT ─────────────────────────────────────────────────────
+--
+-- This does **not** remove the per-workspace Tether credential, which is a live,
+-- working feature and never lived here. That is a `workspace_secrets` row read
+-- by `agentRuntimeService.resolveKey()`, which returns `{ key, shared,
+-- secretName }` so a workspace running on the shared tenant says so (D-42).
+-- Anyone reaching for a column to hold a workspace's Tether key should reach for
+-- that instead — and should read D-42 first, because `shared` is the whole
+-- mechanism by which the fallback is visible rather than silent.
+--
+-- `tether_api_key` held an ENCRYPTED value, so this also removes a ciphertext
+-- column from every backup taken after it. Nothing is re-keyed: there was never
+-- a value in it on this deployment, and `CREDENTIAL_ENC_KEY`'s fingerprint in a
+-- backup artifact is unaffected.
+
+ALTER TABLE "workspaces" DROP COLUMN IF EXISTS "tether_tenant_id";--> statement-breakpoint
+ALTER TABLE "workspaces" DROP COLUMN IF EXISTS "tether_api_key";

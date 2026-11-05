@@ -1,0 +1,13 @@
+# kind, shaped like AKS: an external Postgres that requires SSL and whose admin is not a superuser (pg-external), and
+# the chat folder on an external NFS share (nfs-external). dry-run.sh starts both. Layered over kind/values.yaml.
+postgres:
+  inCluster: false
+database:
+  host: pg-external
+  caConfigMap: foundry-db-ca
+storage:
+  sandboxes:
+    accessMode: ReadWriteMany
+    storageClass: nfs-static
+ingress:
+  enabled: false   # the main kind release owns the ingress

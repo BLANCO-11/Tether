@@ -1,0 +1,48 @@
+{
+  "name": "foundry-parent-app",
+  "version": "2.37.1",
+  "private": true,
+  "description": "Foundry Parent Application — workspace-centric script generation atop the Tether Foundry Harness.",
+  "scripts": {
+    "postinstall": "pnpm --filter @foundry/redact --filter @foundry/flow-edit --filter @foundry/shared build",
+    "dev": "pnpm -r --parallel dev",
+    "dev:server": "pnpm --filter @foundry/server dev",
+    "dev:client": "pnpm --filter @foundry/client dev",
+    "build": "pnpm -r build",
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm -r test",
+    "db:generate": "pnpm --filter @foundry/server db:generate",
+    "db:migrate": "pnpm --filter @foundry/server db:migrate",
+    "db:push": "pnpm --filter @foundry/server db:push",
+    "infra:up": "docker compose -f infra/docker-compose.yml up -d",
+    "infra:down": "docker compose -f infra/docker-compose.yml down",
+    "dev:bridge": "pnpm --filter @foundry/mcp-bridge dev",
+    "e2e": "node scripts/e2e-smoke.mjs",
+    "ca:check": "./scripts/check-corp-ca-trust.sh",
+    "backup": "bash scripts/backup.sh",
+    "backup:verify": "bash scripts/backup-verify.sh",
+    "restore": "bash scripts/restore.sh"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "packageManager": "pnpm@10.29.2",
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild"
+    ],
+    "overrides": {
+      "proxy-addr@<2.0.8": "^2.0.8",
+      "shell-quote@<1.11.0": "^1.11.0",
+      "fast-uri@<3.1.8": "^3.1.8",
+      "ip-address@<10.7.1": "^10.7.1",
+      "nanoid@<3.3.18": "^3.3.18",
+      "postcss@<8.5.23": "^8.5.23",
+      "source-map-js@<1.2.2": "^1.2.2",
+      "hono@<4.13.11": "^4.13.11",
+      "qs@<6.16.0": "^6.16.0",
+      "@types/express-serve-static-core@^5": "5.0.7",
+      "postcss-selector-parser@<7.1.7": "^7.1.7"
+    }
+  }
+}

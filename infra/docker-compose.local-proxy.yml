@@ -1,0 +1,57 @@
+# LOCAL DEVELOPMENT ONLY — the AI gateway through the developer's SOCKS proxy, when one is running.
+#
+# Not part of any production build (production is infra/k8s and has no proxy). It is switched on by the local .env:
+#   COMPOSE_FILE=infra/docker-compose.yml:infra/docker-compose.local-proxy.yml
+#   LLM_GATEWAY_HOST=<the host of LLM_BASE_URL>
+# Remove those two lines (or start compose with -f infra/docker-compose.yml) to go back to the direct route.
+#
+# The containers that call the gateway (server, forge-egress) map its name to `llm-tunnel`, which forwards each connection through the
+# first SOCKS5 proxy on the host that answers (LLM_SOCKS_PROXIES; default office :1082, then home :1081) and goes
+# direct when none does. TLS is end to end; the tunnel only forwards bytes. See infra/llm-tunnel/llm-tunnel.mjs.
+
+services:
+  llm-tunnel:
+    image: node:22-slim
+    container_name: foundry-llm-tunnel
+    restart: unless-stopped
+    command: ["node", "/tunnel/llm-tunnel.mjs"]
+    volumes:
+      - ./llm-tunnel/llm-tunnel.mjs:/tunnel/llm-tunnel.mjs:ro
+    env_file:
+      - path: ../.env
+        required: true
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      llm-tunnel:
+        ipv4_address: 172.31.250.10
+
+  server:
+    extra_hosts:
+      - "${LLM_GATEWAY_HOST:?set LLM_GATEWAY_HOST in .env to the host of LLM_BASE_URL}:172.31.250.10"
+    networks:
+      - default
+      - runner-net
+      - forge-net
+      - connector-net
+      - llm-tunnel
+    depends_on:
+      llm-tunnel:
+        condition: service_started
+
+  forge-egress:
+    extra_hosts:
+      - "${LLM_GATEWAY_HOST:?set LLM_GATEWAY_HOST in .env to the host of LLM_BASE_URL}:172.31.250.10"
+    networks:
+      - default
+      - forge-net
+      - llm-tunnel
+    depends_on:
+      llm-tunnel:
+        condition: service_started
+
+networks:
+  llm-tunnel:
+    ipam:
+      config:
+        - subnet: 172.31.250.0/24

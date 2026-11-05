@@ -1,0 +1,121 @@
+description = "Verify that actual code changes (the diff, not just the artifacts) comply with the feature's spec/tasks and the project constitution. Read-only findings report."
+
+prompt = """
+
+## User Input
+
+```text
+{{args}}
+```
+
+## Purpose
+
+`/speckit-analyze` checks the ARTIFACTS against each other (spec vs plan vs
+tasks). This command checks the CODE against the artifacts and the
+constitution: is every changed file covered, do the changes honor each
+constitution article, and do tests exist for changed behavior?
+
+Run it before opening a PR, after `/speckit-implement`, and after
+`/speckit-backfill`. It is strictly READ-ONLY.
+
+## Execution Steps
+
+### 1. Load context
+
+- Run `.specify/scripts/bash/check-prerequisites.sh --json --require-tasks --include-tasks`.
+  If it fails, abort with guidance: run `/speckit-specify` (new work) or
+  `/speckit-backfill` (existing uncovered work) first.
+- Load the feature's `spec.md`, `plan.md`, `tasks.md` and
+  `.specify/memory/constitution.md`.
+- Load the project standards if present: `.specify/memory/security.md`,
+  `.specify/memory/design.md` (UI projects), `.specify/memory/frameworks.md`,
+  and the manifest `.specify/memory/standards.json` (for `has_ui`). These are
+  established by `/speckit.start`.
+
+### 2. Compute the change set
+
+- Default branch via `git symbolic-ref refs/remotes/origin/HEAD` (fallback `main`).
+- Committed: `git diff --name-status $(git merge-base HEAD origin/<default>)..HEAD`.
+- Uncommitted: `git status --porcelain`.
+- Partition into SOURCE files vs always-editable files (`specs/`, `.specify/`,
+  `docs/`, agent skill/command dirs, standalone `*.md`).
+
+### 3. Check A - Task coverage
+
+For every changed SOURCE file:
+- Covered if `tasks.md` references its path or basename.
+- Orphan (no reference) → **HIGH** finding: "uncovered change - run /speckit-backfill".
+
+Inverse check: every task marked incomplete `[ ]` whose referenced files WERE
+changed → **MEDIUM** finding: "task not marked complete".
+
+### 4. Check B - Constitution vs code
+
+For EACH article of the constitution, evaluate the DIFF ITSELF (read the
+changed hunks, not just file names). Examples for the starter articles:
+
+- Spec-First: any source change outside the feature scope described in spec.md?
+- Test-First: changed behavior files without corresponding new/updated tests,
+  and no justification in plan.md?
+- Simplicity: new dependencies or abstractions absent from plan.md's Technical
+  Context?
+- Observability: new failure paths (catch blocks, error returns) without
+  actionable logging?
+- Secrets Hygiene: any hardcoded credentials, keys or connection strings in
+  the diff (also run `bash ci/check-secrets.sh range <merge-base>..HEAD`)?
+  New env vars read by the code but missing from `.env.example`?
+- Documentation Currency: behavior changes whose docs/spec sections were not
+  updated in the same diff?
+
+Violations of articles marked NON-NEGOTIABLE → **CRITICAL**. Others → severity
+by impact (HIGH / MEDIUM / LOW).
+
+### 5. Check C - Test coverage of acceptance scenarios
+
+- List changed source files with no matching test change.
+- For each acceptance scenario in spec.md, check (heuristically, by grep and
+  reading test files) that at least one test exercises it. Uncovered
+  scenarios → **MEDIUM**.
+
+### 5b. Check D - Standards conformance
+
+Only if standards are established (`standards.json` status `established`). Read
+the DIFF HUNKS and compare against the standards' CONTENT:
+
+- **Security** (`security.md`): do auth/authz/data/secrets changes honor the
+  documented posture? Contradicting a NON-NEGOTIABLE security rule → **CRITICAL**;
+  other deviations → HIGH/MEDIUM.
+- **Design** (`design.md`, UI only): do UI changes use the approved design tokens
+  and compose from the scaffolded component library, respecting the responsive
+  rules (no fixed widths that break mobile)? Deviations → HIGH/MEDIUM.
+- **Frameworks** (`frameworks.md`): do changes follow the recorded stack? An
+  off-standard framework/library not recorded (nor amended via
+  `/speckit.update-standards`) → HIGH.
+
+Run `bash ci/check-standards-compliance.sh comply` for the cheap decidable
+pre-pass, then apply judgment. Missing required standard → **HIGH** ("run
+/speckit.start"). To change a standard rather than the code, route to
+`/speckit.update-standards`.
+
+### 6. Output
+
+A findings table:
+
+| ID | Category | Severity | Location | Summary | Recommendation |
+|----|----------|----------|----------|---------|----------------|
+
+(IDs like C1, A2 so the user can say "fix C1".) Cap at 50 findings,
+highest severity first. Then a verdict line:
+
+- **PASS** - no CRITICAL or HIGH findings. Ready for PR review.
+- **FAIL** - list the ordered remediation commands (e.g. `/speckit-backfill`,
+  targeted fixes via the normal spec-kit implement flow, `/speckit-tasks` to
+  regenerate).
+
+## Constraints
+
+- NEVER modify any file. Report only.
+- If the user asks you to fix findings, route the fixes through the spec-kit
+  workflow (update tasks first, then implement) - do not edit source directly
+  from this command.
+"""

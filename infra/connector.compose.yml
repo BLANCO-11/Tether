@@ -1,0 +1,57 @@
+# The plugin connector and its egress proxy. Included by docker-compose.yml, which fills this file's `${...}` from
+# the root .env, so a plain `docker compose up --build -d` in infra/ starts both. Not meant to be run on its own.
+services:
+  # The plugin connector (plans/plugins-2026-10-27): runs Activepieces pieces, one worker process per run, each as
+  # uid 30001 with a stripped environment. Its only network is `connector-net` (no gateway); the only way out is
+  # `connector-egress`, with a per-run allowlist signed into the proxy credentials. Secrets are passed one by one,
+  # never the whole .env: this container loads third-party code. Part of every `up` — connectors are integral, not
+  # optional. An unset secret is not refused here; both processes refuse to start instead.
+  connector:
+    build:
+      context: ../packages/connector
+    image: foundry/connector:dev
+    container_name: foundry-connector
+    restart: unless-stopped
+    cap_drop: [ALL]
+    # SETUID/SETGID to start each worker as uid 30001; KILL to stop one — without it a timed-out worker of another
+    # uid cannot be killed (EPERM, measured) and keeps running.
+    cap_add: [SETUID, SETGID, KILL]
+    init: true
+    environment:
+      CONNECTOR_SECRET: ${PLUGINS_CONNECTOR_SECRET:-}
+      CONNECTOR_EGRESS_SECRET: ${PLUGINS_EGRESS_SECRET:-}
+      CONNECTOR_EGRESS_URL: http://connector-egress:3128
+    volumes:
+      - foundry_connector:/data
+    networks:
+      - connector-net
+    depends_on:
+      - connector-egress
+
+  # The only way out of connector-net. Refuses a host the run's credentials do not name, and any private or internal
+  # address, always.
+  connector-egress:
+    # Same image as `connector`. Its own build so a fresh `up` builds it rather than trying to pull it.
+    build:
+      context: ../packages/connector
+    image: foundry/connector:dev
+    container_name: foundry-connector-egress
+    restart: unless-stopped
+    command: ["node", "src/egress.mjs"]
+    user: node
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    environment:
+      CONNECTOR_EGRESS_SECRET: ${PLUGINS_EGRESS_SECRET:-}
+    networks:
+      - default
+      - connector-net
+
+networks:
+  # No gateway. `connector`, `server` and `connector-egress` only: the server calls the connector; the connector's
+  # pieces reach the internet only through the proxy.
+  connector-net:
+    internal: true
+
+volumes:
+  foundry_connector:

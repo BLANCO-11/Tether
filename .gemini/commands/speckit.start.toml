@@ -1,0 +1,128 @@
+description = "Onboard a project by interviewing the user to establish four enforceable foundational standards — Constitution, Frameworks, Security, and (if the project has a UI) Design — before any feature code is written."
+
+prompt = """
+
+## User Input
+
+```text
+{{args}}
+```
+
+You **MUST** consider the user input before proceeding (if not empty). It is an
+optional short description of the project; use it to inform your questions.
+
+## Purpose
+
+`/speckit.start` is the onboarding command for this template. It walks the user
+through establishing four **project-level, enforceable** standards **before**
+feature code exists:
+
+1. **Constitution** — the project's governing principles.
+2. **Frameworks** — the chosen tech stack, and whether the project has a UI.
+3. **Security** — the security posture (required for **every** project).
+4. **Design** — the UI/UX design system (**only when the project has a UI**).
+
+The output is a set of standard files under `.specify/memory/` plus a
+machine-readable manifest `.specify/memory/standards.json` that arms the
+existence gate. Once established, source work is hard-blocked until the required
+standards exist; conformance is checked by `/speckit.comply` and the pull-time
+review.
+
+**This is an interview.** Ask focused questions one topic at a time, attach your
+best guess to each, and wait for the user. Do NOT auto-fill a standard without
+the user's input for that step. Give every step full attention; Design is the
+most iterative.
+
+## Preconditions & resume behavior
+
+1. Confirm a `.specify/` directory exists.
+2. Read `.specify/memory/standards.json` if present:
+   - **absent** → first run (or template-dev); proceed and create it.
+   - **status: pending** → onboarding started (e.g. armed by setup.sh); complete
+     the missing steps.
+   - **status: established** → standards exist. Do NOT clobber them; report what
+     exists and direct changes to `/speckit.update-standards`. Only continue for
+     steps whose files are missing.
+3. Never overwrite an existing standard file or history without explicit
+   confirmation. Report present vs missing standards before starting.
+
+Use the templates in `.specify/templates/` as the starting structure:
+`constitution-template.md`, `frameworks-template.md`, `security-template.md`,
+`design-template.md`, `standards-manifest.schema.json`.
+
+## Step 1 — Constitution
+
+Produce/refresh `.specify/memory/constitution.md`. If a starter exists, interview
+about keep/drop/add rather than starting blank. Preserve NON-NEGOTIABLE articles
+(Spec-First; Secrets Hygiene) unless the user knowingly changes them. Keep the
+version footer current. You may delegate to `/speckit.constitution`. Confirm with
+the user before moving on.
+
+## Step 2 — Frameworks (and UI determination)
+
+Produce `.specify/memory/frameworks.md` and decide `has_ui`:
+1. If the user states it explicitly, use that.
+2. Else infer: a web/desktop/mobile UI framework (Next.js, React, Vue, Svelte,
+   SwiftUI, Tauri, Electron, Flutter) ⇒ has_ui=true; a pure API/CLI/library/data
+   stack ⇒ has_ui=false.
+3. If you cannot confidently infer, ASK.
+Record frameworks, versions/rationale, and an explicit "Has UI: yes/no + how
+decided" statement. Confirm before moving on.
+
+## Step 3 — Security (required for EVERY project)
+
+Produce `.specify/memory/security.md`. Interview across at minimum:
+authentication, authorization/access control, data protection (transit/at rest,
+PII, retention), secrets management, input handling/common vulns,
+dependency/supply chain, logging/audit/incident response; tailor threat notes to
+the stack. NON-NEGOTIABLE (article VIII): never write real credentials — record
+secret NAMES only; if given a real value, refuse and direct it to `.env` +
+`.env.example`. Confirm before moving on. Security runs even for no-UI projects.
+
+## Step 4 — Design (ONLY if has_ui = true)
+
+Skip entirely when has_ui=false. Otherwise run the Design Workshop below to
+produce `.specify/memory/design.md` and scaffold a component library. Do NOT
+finalize design.md without explicit user approval.
+
+## Finalize — write the manifest
+
+1. Write `.specify/memory/standards.json` per
+   `.specify/templates/standards-manifest.schema.json`: schema_version 1,
+   status "established", has_ui (boolean, not null), a `standards` record for
+   constitution/frameworks/security/design (path, required, present) where
+   security/constitution/frameworks required=true and design required=has_ui,
+   frameworks list, revision 1, created = today's known date (do not fabricate),
+   history_log ".specify/memory/standards-history.md".
+2. Create `.specify/memory/standards-history.md` with an onboarding entry.
+3. Report which standards were created, has_ui, and that the gate is armed.
+   Direct future changes to `/speckit.update-standards`; feature work continues
+   with `/speckit.specify`.
+
+## Design Workshop (from Step 4 when has_ui)
+
+Offer two modes: (1) full facilitated workshop (deep design interview), or
+(2) reference/vibe mode (user names a reference; research it, state assumptions).
+In both modes:
+1. Produce resizable static HTML/CSS mockups (no framework/build) under
+   `docs/design/mockups/`, using CSS custom properties for tokens.
+2. Verify responsiveness at ~375px, ~768px, ~1280px — no overlap/clipping/
+   horizontal overflow — BEFORE asking for approval. Use the Chrome DevTools MCP
+   / browser-testing skill when available; otherwise tell the user how to resize
+   and what to check.
+3. Feedback → revise loop: at least one revision round.
+4. Require EXPLICIT approval (not "sounds good"/silence). If withheld, do NOT
+   write design.md; the design gate stays active.
+5. On approval: write design.md from the template with the approved tokens,
+   responsive rules, layout, component inventory, accessibility baseline, mode +
+   reference; then scaffold a framework-native component library (tokens module +
+   primitive components) at a conventional location and record it in design.md.
+
+## Guardrails
+
+- Writing under `.specify/**`, `docs/**`, and skill dirs is always allowed.
+- Never fabricate a date; use the known current date or ask.
+- Never store real secret values (article VIII).
+- Never set status "established" until required standards exist on disk
+  (security always; design iff has_ui).
+- Re-runs must be non-destructive: report and fill gaps, don't clobber."""

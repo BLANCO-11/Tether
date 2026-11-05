@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+# post-merge: read-only standards compliance review after `git pull` / `git merge`.
+# Reviews the changes just merged into the working copy against the project's
+# established standards and REPORTS findings. It never blocks or reverts the
+# merge (post-merge cannot abort anyway); this is purely informational.
+#
+# Installed via `git config core.hooksPath .githooks` (done by setup.sh).
+# See ci/check-standards-compliance.sh and docs/STANDARDS.md.
+
+set -uo pipefail
+
+ROOT=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0
+[ -x "$ROOT/ci/check-standards-compliance.sh" ] || exit 0
+
+# The merge just moved HEAD from ORIG_HEAD to HEAD. Review that range.
+OLD=$(git -C "$ROOT" rev-parse ORIG_HEAD 2>/dev/null || echo "")
+NEW=$(git -C "$ROOT" rev-parse HEAD 2>/dev/null || echo "")
+[ -z "$OLD" ] || [ -z "$NEW" ] && exit 0
+[ "$OLD" = "$NEW" ] && exit 0
+
+bash "$ROOT/ci/check-standards-compliance.sh" range "$OLD" "$NEW" || true
+exit 0

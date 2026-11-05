@@ -1,0 +1,167 @@
+# Foundry chart — defaults. infra/k8s/kind/values.yaml overrides these for the local kind test.
+#
+# Service names are deliberately the compose service names (server, web, ops-api, forge, forge-egress,
+# flow-runner, postgres): the code defaults to them (FORGE_HOST forge:4100, FLOW_RUNNER_URL
+# http://flow-runner:4006, FORGE_EGRESS_PROXY http://forge-egress:3128), so nothing needs renaming.
+
+images:
+  server: infra-server:latest       # also runs the server migrations (init container)
+  web: infra-web:latest
+  opsApi: infra-ops-api:latest      # also runs the ops migrations (init container)
+  forge: foundry/forge:dev          # also runs forge-egress (command: egress)
+  flowRunner: foundry/flow-runner:dev
+  connector: foundry/connector:dev  # also runs connector-egress (node src/egress.mjs)
+  postgres: postgres:16             # in-cluster Postgres, and the psql used by the db-init container
+pullPolicy: IfNotPresent
+
+# The app's secrets: ONE Secret holding the keys of the repo's .env. Each component reads only the keys
+# listed for it below, never the whole Secret (compose handed every service the whole file).
+secretName: foundry-env
+
+secretKeys:
+  server:
+    - PARENT_API_KEY
+    - CREDENTIAL_ENC_KEY
+    - RUNTIME_JWT_SECRET
+    - SUPER_ADMIN_EMAILS
+    - AUTH_SECRET
+    - LLM_BASE_URL
+    - LLM_API_KEY
+    - LLM_MODEL
+    # Legacy names, still read when LLM_MODEL is unset (2026-11-04: one model connection).
+    - LLM_REASONING_MODEL
+    - LLM_FAST_MODEL
+    - OPS_API_KEY
+    - MAIL_SENDER_UPN
+    - MAIL_ALLOWED_RECIPIENT_DOMAINS
+    - MAIL_GRAPH_CLIENT_ID
+    - MAIL_GRAPH_TENANT_ID
+    - MAIL_GRAPH_CLIENT_SECRET_VALUE
+    - FLOW_RUNNER_SECRET
+    - FORGE_HOST_SECRET
+    - PLUGINS_CONNECTOR_SECRET
+  web:
+    - AUTH_SECRET
+    - AUTH_MICROSOFT_ENTRA_ID_ID
+    - AUTH_MICROSOFT_ENTRA_ID_SECRET
+    - AUTH_MICROSOFT_ENTRA_ID_ISSUER
+    - LOCAL_ADMIN_EMAIL
+    - LOCAL_ADMIN_NAME
+    - LOCAL_ADMIN_PASSWORD
+    - PARENT_API_KEY
+    - RUNTIME_JWT_SECRET
+  opsApi:
+    - OPS_API_KEY
+    - LLM_BASE_URL
+    - LLM_API_KEY
+    - LLM_REASONING_MODEL
+    - LLM_FAST_MODEL
+  # Step code runs under flow-runner, and every conversation's commands under forge: each gets the one
+  # value it needs and nothing else (their entrypoints already strip everything else; this keeps the
+  # rest out of the pod spec too).
+  flowRunner:
+    - FLOW_RUNNER_SECRET
+  forge:
+    - FORGE_HOST_SECRET
+  forgeEgress:
+    - LLM_BASE_URL
+
+# Plugins (plans/plugins-2026-10-27): Activepieces pieces run by `connector`, one worker process per run, each as its
+# own uid. Its only way out is `connector-egress`, which allows per run only the hosts signed into that run's proxy
+# credentials and never a private address. Off by default. The connector gets its two secrets from the app Secret's
+# PLUGINS_CONNECTOR_SECRET and PLUGINS_EGRESS_SECRET keys, renamed, and nothing else of it: it loads third-party code.
+plugins:
+  enabled: false
+  runTimeoutMs: 60000
+  storage:
+    size: 5Gi            # installed pieces and run files
+    storageClass: ""
+  # The outer bound under the proxy's per-run allowlist: which ports connector-egress may open to public addresses.
+  egressPorts: [443]
+
+# Database. inCluster: a Postgres StatefulSet in this release (kind, dev). For Azure Database for
+# PostgreSQL set inCluster: false and create the Secret named by `database.secretName` yourself, with
+# keys DATABASE_URL, OPS_DATABASE_URL, ADMIN_DSN, OPS_DB_USER, OPS_DB_PASSWORD (add ?sslmode=require).
+postgres:
+  inCluster: true
+  user: foundry
+  password: foundry
+  database: foundry_parent
+  storage: 5Gi
+database:
+  secretName: foundry-db
+  opsUser: ops
+  opsPassword: ops-db-2026
+  # Where the server creates the demo and sandbox databases, and where ops-api reads hr_demo. In-cluster: the
+  # postgres Service. External: the same host as DATABASE_URL (e.g. foundry.postgres.database.azure.com).
+  host: postgres
+  port: 5432
+  # Optional: a ConfigMap whose key `ca.crt` signs the database's certificate. Azure's is signed by a public CA
+  # that Node and libpq already trust, so leave this empty there; set it for a private CA.
+  caConfigMap: ""
+
+# Public addresses the BROWSER uses. Empty FOUNDRY_WS_URL makes the run page poll instead.
+public:
+  authUrl: ""          # AUTH_URL for the web pod
+  wsUrl: ""            # FOUNDRY_WS_URL, e.g. wss://foundry.example.com (the client appends /ws/flow-execution)
+  workspace: ""        # FOUNDRY_WORKSPACE
+
+storage:
+  # Shared by server and forge, at the SAME path in both (the server names chat folders by path).
+  # On AKS this must be ReadWriteMany with real POSIX ownership: Azure Files NFS or Azure NetApp Files,
+  # root squash OFF. Azure Files SMB breaks per-chat ownership (forge chowns every folder).
+  sandboxes:
+    size: 10Gi
+    accessMode: ReadWriteOnce
+    storageClass: ""
+  mocks:
+    size: 1Gi
+    accessMode: ReadWriteOnce
+    storageClass: ""
+
+# The two sandbox pods remount /proc with hidepid at boot, which needs SYS_ADMIN (dropped again before
+# anything else runs) and an AppArmor profile that allows the remount. On a node without AppArmor the
+# profile setting is ignored.
+sandbox:
+  appArmorProfile: Unconfined   # or Localhost with localhostProfile: <name> once a custom profile exists
+  runtimeClassName: ""          # e.g. kata-mshv-vm-isolation on AKS Pod Sandboxing
+  # Each conversation (forge) and each run (flow-runner) gets its own memory group with this cap, so one that runs
+  # away is killed alone. Without it, Kubernetes on cgroup v2 kills the whole container — every chat, every run.
+  # All of them together are capped a little under the pod's own limit (resources below), leaving the service room.
+  conversationMemoryBytes: 1073741824
+  runMemoryBytes: 1073741824
+
+ingress:
+  enabled: true
+  className: nginx
+  host: ""                # required with TLS, e.g. foundry.example.com
+  wsTimeoutSeconds: "3600"
+  annotations: {}         # extra, e.g. for another controller
+  tls:
+    enabled: false
+    secretName: foundry-tls
+    clusterIssuer: ""     # a cert-manager ClusterIssuer that issues secretName; empty = you create the Secret yourself
+
+networkPolicies:
+  enabled: true
+  # Where kube-dns runs; every restricted pod may reach it on 53.
+  dnsNamespace: kube-system
+  # Forge's only way out is forge-egress, and forge-egress's only way out is HTTPS to these addresses.
+  egressCidr: 0.0.0.0/0
+  egressExcept:
+    - 10.0.0.0/8
+    - 172.16.0.0/12
+    - 192.168.0.0/16
+    - 169.254.0.0/16
+    - 100.64.0.0/10
+
+resources:
+  server:      { requests: { cpu: 100m, memory: 256Mi }, limits: { memory: 1Gi } }
+  web:         { requests: { cpu: 50m,  memory: 192Mi }, limits: { memory: 768Mi } }
+  opsApi:      { requests: { cpu: 50m,  memory: 96Mi },  limits: { memory: 384Mi } }
+  forge:       { requests: { cpu: 100m, memory: 256Mi }, limits: { memory: 2Gi } }
+  forgeEgress: { requests: { cpu: 10m,  memory: 32Mi },  limits: { memory: 128Mi } }
+  flowRunner:  { requests: { cpu: 100m, memory: 128Mi }, limits: { memory: 2Gi } }
+  connector:       { requests: { cpu: 100m, memory: 256Mi }, limits: { memory: 2Gi } }
+  connectorEgress: { requests: { cpu: 10m,  memory: 32Mi },  limits: { memory: 128Mi } }
+  postgres:    { requests: { cpu: 100m, memory: 256Mi }, limits: { memory: 1Gi } }

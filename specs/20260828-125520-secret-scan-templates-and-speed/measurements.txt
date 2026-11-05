@@ -1,0 +1,179 @@
+# Measurements — secret-scan templates and speed
+# Feature: 20260828-125520-secret-scan-templates-and-speed
+# Taken 2026-08-28 on the affected workstation (macOS arm64, bash 3.2.57,
+# Cisco Secure Endpoint active, load ~2.0)
+
+# ─────────────────────────────────────────────────────────────────────────────
+# T-101 — SPEED, before and after. Same command, same corpus.
+# ─────────────────────────────────────────────────────────────────────────────
+# Corpus: 1eb75cd~1..1eb75cd = 265 added lines
+speed.corpus_265_lines.before_ms=363684
+speed.corpus_265_lines.after_ms=299
+speed.corpus_265_lines.factor=1216x
+
+# Full push range: 1e884e3..HEAD = 68 commits, 608 files
+speed.full_push_range.before_ms=~720000   # ~12 min, observed twice on real pushes
+speed.full_push_range.after_ms=4262
+# ⚠ The "before" figure for the full range is OBSERVED, not stopwatch-measured
+# under controlled conditions — two real push attempts each ran past 10 minutes
+# before being interrupted. The 265-line figure is the controlled one and is the
+# number to quote.
+
+# Why a spawn is so expensive here — this is the amplifier, not the cause:
+spawn.1000_shell_builtins_ms=72          # 0.07 ms each — the loop itself is free
+spawn.100x_usr_bin_true_ms=6239          # 62 ms each; normal is 1-3 ms
+spawn.100x_printf_pipe_grep_ms=5345      # ~53 ms per pair
+spawn.amplifier=Cisco Secure Endpoint (ampdaemon 9.9% CPU, ampscansvc 7.2%) inspects every exec
+# Old design: 11 patterns x 265 lines = 2915 grep invocations + 2915 printfs.
+# New design: ONE grep invocation regardless of line count.
+
+# ─────────────────────────────────────────────────────────────────────────────
+# T-102 / T-125 — VERDICT TABLE, before and after. SC-008's evidence.
+# ─────────────────────────────────────────────────────────────────────────────
+#                                        BEFORE              AFTER
+# path                                   name      content   name      content
+# .env.example                           allowed   exempt    allowed   SCANNED   <- changed (FR-004)
+# packages/mcp-bridge/.env.example       allowed   scanned   allowed   scanned
+# packages/client/.env.local.example     FORBIDDEN exempt    ALLOWED   SCANNED   <- changed (FR-001, FR-004)
+# a/b/.env.staging.template              FORBIDDEN exempt    ALLOWED   SCANNED   <- changed (FR-001, FR-004)
+# .env                                   FORBIDDEN exempt    FORBIDDEN exempt
+# .env.local                             FORBIDDEN exempt    FORBIDDEN exempt
+# packages/x/.env.production             FORBIDDEN exempt    FORBIDDEN exempt
+# .env.example.bak                       FORBIDDEN exempt    FORBIDDEN exempt    <- MUST NOT change
+# ci/secret-policy.sh                    allowed   exempt    allowed   exempt
+# other/secret-policy.sh                 allowed   scanned   allowed   scanned
+# id_rsa                                 FORBIDDEN exempt    FORBIDDEN exempt
+# x/key.pem                              FORBIDDEN exempt    FORBIDDEN exempt
+#
+# THREE rows changed, all templates, both columns in the intended direction.
+# Nothing that was refused became allowed except template NAMES.
+verdicts.rows_changed=3
+verdicts.unintended_changes=0
+
+# ─────────────────────────────────────────────────────────────────────────────
+# T-103 — was removing the template CONTENT exemption a no-op? YES.
+# ─────────────────────────────────────────────────────────────────────────────
+# Checked BEFORE the change, because a match here would have been a real leak to
+# report and rotate rather than a reason to keep the exemption.
+t103.env_example_matches=0
+t103.mcp_bridge_env_example_matches=0
+
+# ─────────────────────────────────────────────────────────────────────────────
+# T-111 / T-114 — the suite fails before and passes after
+# ─────────────────────────────────────────────────────────────────────────────
+suite.before_fix=60 passed, 14 failed
+suite.after_fix=74 passed, 0 failed
+
+# ─────────────────────────────────────────────────────────────────────────────
+# T-115 — PERTURBATIONS. Five attempted; FOUR fire. The fifth is recorded as
+# not firing, with the reason, rather than quietly dropped or faked.
+# ─────────────────────────────────────────────────────────────────────────────
+perturb.P1_revert_suffix_to_three_literals=FIRED (13 failures)
+perturb.P2_restore_template_content_exemption=FIRED (6 failures)
+perturb.P3_drop_trailing_tab_strip=FIRED (1 failure)
+perturb.P4_process_substitution_back_to_a_pipe=FIRED (2 failures)
+perturb.P5_drop_grep_dash_a=DID NOT FIRE — and `grep -a` is therefore documented
+#   as DEFENSIVE AND UNREACHABLE rather than required. Measured why: bash's `read`
+#   drops NUL bytes before grep sees them, and `git diff` reports a NUL-carrying
+#   file as "Binary files ... differ" with no `+` lines at all. A lone \001 does
+#   NOT trigger grep's binary heuristic (verified both ways). The flag is kept for
+#   a future caller that streams raw bytes; the comment in check-secrets.sh says
+#   so explicitly, because a comment claiming necessity that no test can prove is
+#   exactly the kind of false assurance this repository keeps warning about.
+
+# ─────────────────────────────────────────────────────────────────────────────
+# T-124 — CONSUMERS
+# ─────────────────────────────────────────────────────────────────────────────
+consumers.stdin_planted_secret=exit 1, reported
+consumers.stdin_placeholder=exit 0
+consumers.stdin_dot_env_exempt=exit 0
+consumers.stdin_template_scanned=exit 1, reported
+consumers.bad_mode=exit 64
+consumers.pre_commit_name_rule=BLOCKED (probe named *.probe -> forbidden family)
+consumers.pre_commit_content_rule=BLOCKED, naming the file
+#   ⚠ The first pre-commit probe passed for the WRONG REASON and was redone. It
+#   was named `.env.local.example.probe`, which the NAME rule correctly forbids,
+#   so the hook never reached the content scan. The rerun used
+#   `.env.probe.example` — allowed by name — so the block could only come from
+#   the content path. That is the chain that makes the widening safe:
+#   template name allowed -> content scanned -> planted secret refused.
+
+# ─────────────────────────────────────────────────────────────────────────────
+# BUGS FOUND BY THE TESTS, not by reading. All three silently skipped content.
+# ─────────────────────────────────────────────────────────────────────────────
+bug1.trailing_tab=git appends a TAB to `+++ b/<path>` when the path contains a
+#   space. The old parser kept it, so `odd dir/.env.local.example` arrived as
+#   `...example<TAB>`, stopped matching `*.example`, was classified FORBIDDEN, and
+#   forbidden files are content-exempt — so a planted key in it was NEVER SCANNED.
+#   Pre-existing. Fixed here.
+bug2.quoted_paths=git QUOTES paths containing non-ASCII bytes
+#   (`+++ "b/pa\303\251th"`), which does not match `+++ b/*`, so every line of
+#   such a file was skipped. Pre-existing. Fixed with `-c core.quotePath=false`.
+bug3.pipe_swallows_exit_code=introduced DURING this change and caught by the
+#   planted-secret tests: `{ ... } | scan_candidates` runs the matcher in a
+#   subshell, so `report`'s FOUND=1 never reaches `exit "$FOUND"`. The scan found
+#   the secret, printed SECRET-BLOCK, and exited 0 — the exact "fast scan that
+#   reports success" failure the plan named as the risky half.
+
+# ─────────────────────────────────────────────────────────────────────────────
+# PLATFORM CONSTRAINT discovered while implementing
+# ─────────────────────────────────────────────────────────────────────────────
+platform.bash_version=3.2.57(1)-release (macOS system bash, 2007)
+platform.constraint=bash 3.2 CANNOT PARSE a `case` statement inside `<( )` or
+#   `$( )` — it dies with "syntax error near unexpected token ';;'". Verified with
+#   a minimal reproduction. This is why `emit_diff_candidates` is a top-level
+#   function rather than an inline block at the call site: inlining it is not a
+#   refactor, it is a syntax error on the platform this repo is developed on.
+
+# ─────────────────────────────────────────────────────────────────────────────
+# KNOWN BOUND, recorded rather than fixed (out of scope)
+# ─────────────────────────────────────────────────────────────────────────────
+bound.binary_files_not_content_scanned=Content inside a file git considers BINARY
+#   is never content-scanned, because git emits no added lines for it. The NAME
+#   rules still apply. Falls out of the grep -a investigation above.
+
+# ─────────────────────────────────────────────────────────────────────────────
+# T-121 — EQUIVALENCE. ⚠ NOT DONE THE WAY THE PLAN SPECIFIED, AND THE
+# SUBSTITUTE IS STRONGER. Read this before quoting it.
+# ─────────────────────────────────────────────────────────────────────────────
+# The plan said: run the OLD scanner and the NEW scanner over the full 608-file
+# push range and diff the reported file sets. That run was STARTED and KILLED
+# after ~12 minutes (session teardown). It is NOT a completed comparison and must
+# not be reported as one.
+#
+# ⚠ AND IT WOULD HAVE PROVEN LESS THAN IT APPEARED TO. Re-run head-to-head over
+# the real corpus, BOTH implementations report ZERO content matches — because the
+# repository genuinely contains no secrets. Zero equals zero. That comparison
+# cannot fail, and a passing run of it would have been the I-38 trap: a control
+# that examines nothing, reported as agreement.
+#
+# What was done instead, in two parts, each of which CAN fail:
+#
+# A. VERDICTS over every real path in the range — old functions vs new functions.
+t121a.paths_compared=608
+t121a.paths_differing=2
+#   .env.example                        allowed/exempt -> allowed/SCANNED
+#   packages/client/.env.local.example   FORBIDDEN/exempt -> allowed/SCANNED
+#   Both are the intended changes (FR-001, FR-004). 606 paths identical.
+#   ⚠ packages/mcp-bridge/.env.example did NOT change - it was already
+#   allowed/scanned, which is the inconsistency this feature removed.
+#
+# B. MATCHER equivalence — is one 11-way alternation exactly the union of the 11
+#    patterns applied separately? This is the ONLY semantic risk in the speed
+#    rewrite, and it is isolated here rather than buried in an end-to-end run.
+#    Corpus: 116,991 real added lines from the full range, PLUS one planted
+#    positive per pattern (11), so the comparison has something to disagree about.
+t121b.corpus_lines=117002
+t121b.planted_positives=11
+t121b.alternation_matched=11
+t121b.union_of_11_matched=11
+t121b.differences=0
+#
+# C. All 11 planted positives through the REAL entry point (stdin mode):
+t121c.reported=11 of 11, exit 1
+#
+# ⚠ WHAT THIS DOES NOT PROVE: that old and new agree on a corpus containing real
+# secrets in real files at real paths. No such corpus exists here, and
+# manufacturing one is what B does in isolation. The residual risk is the
+# interaction of A and B together, which is bounded by the 74-assertion suite and
+# by the end-to-end pre-commit runs recorded above.

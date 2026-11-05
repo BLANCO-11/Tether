@@ -1,0 +1,24 @@
+# The chat folder's storage on AKS: Azure Files Premium over NFS 4.1, with root squash OFF.
+#
+# Root squash must be off: forge (as root) creates each conversation's folder and hands it to that conversation's
+# uid. With root squash on, root is "nobody" on the share and forge refuses to start (measured on kind, 2026-10-26).
+# NFS shares need a Premium (FileStorage) account, and a cluster whose nodes reach it — the CSI driver creates the
+# account in the node resource group with a private endpoint/service endpoint unless one is named.
+#
+#   kubectl apply -f infra/k8s/aks/storageclass.yaml          (once per cluster, before the first deploy)
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: foundry-azurefile-nfs
+provisioner: file.csi.azure.com
+parameters:
+  protocol: nfs
+  skuName: Premium_LRS
+  rootSquashType: NoRootSquash
+reclaimPolicy: Retain           # deleting the release must not delete everyone's chats
+volumeBindingMode: Immediate
+allowVolumeExpansion: true
+mountOptions:
+  - nconnect=4
+  - noresvport
+  - actimeo=30

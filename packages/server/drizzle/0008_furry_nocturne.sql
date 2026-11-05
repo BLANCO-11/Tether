@@ -1,0 +1,2 @@
+ALTER TABLE "schemas" DROP CONSTRAINT "schemas_datasource_id_entity_type_entity_name_column_name_unique";--> statement-breakpoint
+ALTER TABLE "schemas" ADD CONSTRAINT "schemas_datasource_id_entity_type_entity_schema_entity_name_column_name_unique" UNIQUE("datasource_id","entity_type","entity_schema","entity_name","column_name");

@@ -1,0 +1,68 @@
+{{- if .Values.postgres.inCluster }}
+{{- $pg := .Values.postgres -}}
+{{- $db := .Values.database -}}
+# Dev-only database Secret, built from values. With an external database (Azure) this Secret is created
+# outside the chart and never rendered here.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ $db.secretName }}
+  labels: {{- include "foundry.labels" (dict "root" . "component" "postgres") | nindent 4 }}
+type: Opaque
+stringData:
+  DATABASE_URL: postgres://{{ $pg.user }}:{{ $pg.password }}@postgres:5432/{{ $pg.database }}
+  ADMIN_DSN: postgres://{{ $pg.user }}:{{ $pg.password }}@postgres:5432/postgres
+  OPS_DATABASE_URL: postgres://{{ $db.opsUser }}:{{ $db.opsPassword }}@postgres:5432/foundry_ops
+  OPS_DB_USER: {{ $db.opsUser | quote }}
+  OPS_DB_PASSWORD: {{ $db.opsPassword | quote }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  labels: {{- include "foundry.labels" (dict "root" . "component" "postgres") | nindent 4 }}
+spec:
+  selector: {{- include "foundry.selector" (dict "root" . "component" "postgres") | nindent 4 }}
+  ports:
+    - { name: postgres, port: 5432, targetPort: 5432 }
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres
+  labels: {{- include "foundry.labels" (dict "root" . "component" "postgres") | nindent 4 }}
+spec:
+  serviceName: postgres
+  replicas: 1
+  selector:
+    matchLabels: {{- include "foundry.selector" (dict "root" . "component" "postgres") | nindent 6 }}
+  template:
+    metadata:
+      labels: {{- include "foundry.labels" (dict "root" . "component" "postgres") | nindent 8 }}
+    spec:
+      containers:
+        - name: postgres
+          image: {{ .Values.images.postgres }}
+          imagePullPolicy: {{ .Values.pullPolicy }}
+          env:
+            - { name: POSTGRES_USER, value: {{ $pg.user | quote }} }
+            - { name: POSTGRES_PASSWORD, value: {{ $pg.password | quote }} }
+            - { name: POSTGRES_DB, value: {{ $pg.database | quote }} }
+            - { name: PGDATA, value: /var/lib/postgresql/data/pgdata }
+          ports:
+            - { name: postgres, containerPort: 5432 }
+          readinessProbe:
+            exec: { command: ["pg_isready", "-U", {{ $pg.user | quote }}, "-d", {{ $pg.database | quote }}] }
+            periodSeconds: 5
+          resources: {{- toYaml .Values.resources.postgres | nindent 12 }}
+          volumeMounts:
+            - { name: data, mountPath: /var/lib/postgresql/data }
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: {{ $pg.storage }}
+{{- end }}

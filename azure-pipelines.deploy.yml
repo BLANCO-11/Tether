@@ -1,0 +1,142 @@
+# Deploy pipeline — builds the five images, pushes them to the registry, deploys the Helm chart to the cluster.
+#
+# The two steps are infra/k8s/build-push.sh and infra/k8s/deploy.sh: the same scripts infra/k8s/kind/dry-run.sh runs
+# locally, so what this pipeline does has already run on a laptop. Setup (once) is in infra/k8s/README.md,
+# "Deploying to AKS". In short:
+#   Library > Variable group `foundry-deploy`   REGISTRY_NAME, CLUSTER_RG, CLUSTER_NAME, NAMESPACE
+#   Library > Variable group `foundry-app`      the app's environment (secrets marked secret) + the 5 database keys
+#   Service connection                          an Azure Resource Manager connection, named by `armConnection` below
+#   Environments                                `foundry-prod` (add an approval check to gate deploys on a person)
+#
+# Manual by default. To deploy after every green prod build, uncomment `resources` below.
+
+trigger: none
+pr: none
+
+# Known before the run, so they are parameters: Azure DevOps authorises a service connection and picks a pool before
+# any variable group is read.
+parameters:
+  - name: armConnection
+    displayName: Azure service connection (push to the registry, read the cluster's credentials)
+    type: string
+    default: foundry-azure
+  - name: deployPool
+    displayName: Agent pool for the deploy (the cluster is private — a pool inside its network)
+    type: string
+    default: AKS Cluster
+
+# resources:
+#   pipelines:
+#     - pipeline: prodBuild
+#       source: <name of the azure-pipelines.prod.yml pipeline in Azure DevOps>
+#       trigger: { branches: { include: [prod] } }
+
+variables:
+  - group: foundry-deploy
+  - group: foundry-app
+  # The commit is the image tag: immutable, and `kubectl get pods -o wide` names exactly what is running.
+  - name: TAG
+    value: $[ substring(variables['Build.SourceVersion'], 0, 8) ]
+
+stages:
+  - stage: Build
+    displayName: Build and push images
+    jobs:
+      - job: images
+        pool: { vmImage: ubuntu-latest }   # amd64, like the cluster's nodes (never push images built on an arm Mac)
+        steps:
+          - checkout: self
+          - task: AzureCLI@2
+            displayName: Build and push to $(REGISTRY_NAME)
+            inputs:
+              azureSubscription: ${{ parameters.armConnection }}
+              scriptType: bash
+              scriptLocation: inlineScript
+              inlineScript: |
+                set -euo pipefail
+                az acr login --name "$(REGISTRY_NAME)"
+                REGISTRY="$(REGISTRY_NAME).azurecr.io" TAG="$(TAG)" ./infra/k8s/build-push.sh
+
+  - stage: Deploy
+    displayName: Deploy to the cluster
+    dependsOn: Build
+    jobs:
+      - deployment: chart
+        environment: foundry-prod
+        pool: { name: "${{ parameters.deployPool }}" }   # needs az, kubectl and helm
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - checkout: self
+                # The app's env file, from `foundry-app`. Secret variables reach a script only when mapped here, by name.
+                - bash: |
+                    set -euo pipefail
+                    umask 077
+                    f="$(Agent.TempDirectory)/foundry.env"; : > "$f"; empty=""
+                    for k in AUTH_MICROSOFT_ENTRA_ID_ID AUTH_MICROSOFT_ENTRA_ID_ISSUER AUTH_MICROSOFT_ENTRA_ID_SECRET AUTH_SECRET CREDENTIAL_ENC_KEY FLOW_RUNNER_SECRET FORGE_HOST_SECRET LLM_API_KEY LLM_BASE_URL LLM_MODEL LLM_FAST_MODEL LLM_REASONING_MODEL LOCAL_ADMIN_EMAIL LOCAL_ADMIN_NAME LOCAL_ADMIN_PASSWORD MAIL_ALLOWED_RECIPIENT_DOMAINS MAIL_GRAPH_CLIENT_ID MAIL_GRAPH_CLIENT_SECRET_VALUE MAIL_GRAPH_TENANT_ID MAIL_SENDER_UPN OPS_API_KEY PARENT_API_KEY RUNTIME_JWT_SECRET SUPER_ADMIN_EMAILS DATABASE_URL OPS_DATABASE_URL ADMIN_DSN OPS_DB_USER OPS_DB_PASSWORD; do
+                      v="${!k:-}"
+                      # A variable missing from the group arrives as the literal "$(NAME)": treat it as empty, never as a
+                      # value (LLM_MODEL wins over the legacy LLM_REASONING_MODEL / LLM_FAST_MODEL, so text there would be the model).
+                      case "$v" in '$('*) v="";; esac
+                      [ -n "$v" ] || empty="$empty $k"
+                      printf '%s=%s\n' "$k" "$v" >> "$f"
+                    done
+                    case "$empty" in *DATABASE_URL*|*ADMIN_DSN*|*OPS_DB_PASSWORD*)
+                      echo "##vso[task.logissue type=error]fill in the database keys in the foundry-app variable group:$empty"; exit 1;;
+                    esac
+                    [ -z "$empty" ] || echo "##vso[task.logissue type=warning]empty in foundry-app:$empty"
+                  displayName: Write foundry.env from foundry-app
+                  env:
+                    AUTH_MICROSOFT_ENTRA_ID_ID: $(AUTH_MICROSOFT_ENTRA_ID_ID)
+                    AUTH_MICROSOFT_ENTRA_ID_ISSUER: $(AUTH_MICROSOFT_ENTRA_ID_ISSUER)
+                    AUTH_MICROSOFT_ENTRA_ID_SECRET: $(AUTH_MICROSOFT_ENTRA_ID_SECRET)
+                    AUTH_SECRET: $(AUTH_SECRET)
+                    CREDENTIAL_ENC_KEY: $(CREDENTIAL_ENC_KEY)
+                    FLOW_RUNNER_SECRET: $(FLOW_RUNNER_SECRET)
+                    FORGE_HOST_SECRET: $(FORGE_HOST_SECRET)
+                    LLM_API_KEY: $(LLM_API_KEY)
+                    LLM_BASE_URL: $(LLM_BASE_URL)
+                    LLM_MODEL: $(LLM_MODEL)
+                    LLM_FAST_MODEL: $(LLM_FAST_MODEL)
+                    LLM_REASONING_MODEL: $(LLM_REASONING_MODEL)
+                    LOCAL_ADMIN_EMAIL: $(LOCAL_ADMIN_EMAIL)
+                    LOCAL_ADMIN_NAME: $(LOCAL_ADMIN_NAME)
+                    LOCAL_ADMIN_PASSWORD: $(LOCAL_ADMIN_PASSWORD)
+                    MAIL_ALLOWED_RECIPIENT_DOMAINS: $(MAIL_ALLOWED_RECIPIENT_DOMAINS)
+                    MAIL_GRAPH_CLIENT_ID: $(MAIL_GRAPH_CLIENT_ID)
+                    MAIL_GRAPH_CLIENT_SECRET_VALUE: $(MAIL_GRAPH_CLIENT_SECRET_VALUE)
+                    MAIL_GRAPH_TENANT_ID: $(MAIL_GRAPH_TENANT_ID)
+                    MAIL_SENDER_UPN: $(MAIL_SENDER_UPN)
+                    OPS_API_KEY: $(OPS_API_KEY)
+                    PARENT_API_KEY: $(PARENT_API_KEY)
+                    RUNTIME_JWT_SECRET: $(RUNTIME_JWT_SECRET)
+                    SUPER_ADMIN_EMAILS: $(SUPER_ADMIN_EMAILS)
+                    DATABASE_URL: $(DATABASE_URL)
+                    OPS_DATABASE_URL: $(OPS_DATABASE_URL)
+                    ADMIN_DSN: $(ADMIN_DSN)
+                    OPS_DB_USER: $(OPS_DB_USER)
+                    OPS_DB_PASSWORD: $(OPS_DB_PASSWORD)
+                - task: AzureCLI@2
+                  displayName: helm upgrade
+                  inputs:
+                    azureSubscription: ${{ parameters.armConnection }}
+                    scriptType: bash
+                    scriptLocation: inlineScript
+                    inlineScript: |
+                      set -euo pipefail
+                      az aks get-credentials --resource-group "$(CLUSTER_RG)" --name "$(CLUSTER_NAME)" --overwrite-existing
+                      # A cluster with Entra ID auth: let kubectl use this service connection's login.
+                      if grep -q kubelogin "$HOME/.kube/config"; then
+                        command -v kubelogin >/dev/null || az aks install-cli --only-show-errors >/dev/null
+                        kubelogin convert-kubeconfig -l azurecli
+                      fi
+                      kubectl get storageclass foundry-azurefile-nfs >/dev/null \
+                        || { echo "##vso[task.logissue type=error]apply infra/k8s/aks/storageclass.yaml first"; exit 1; }
+                      VALUES="infra/k8s/aks/values.yaml"
+                      [ -f "infra/k8s/aks/values.$(NAMESPACE).yaml" ] && VALUES="$VALUES infra/k8s/aks/values.$(NAMESPACE).yaml"
+                      REGISTRY="$(REGISTRY_NAME).azurecr.io" TAG="$(TAG)" NAMESPACE="$(NAMESPACE)" \
+                        ENV_FILE="$(Agent.TempDirectory)/foundry.env" VALUES="$VALUES" ./infra/k8s/deploy.sh
+                - bash: rm -f "$(Agent.TempDirectory)/foundry.env"
+                  displayName: Remove foundry.env
+                  condition: always()

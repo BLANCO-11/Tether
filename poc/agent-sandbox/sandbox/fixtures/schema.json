@@ -1,0 +1,53 @@
+{
+  "tables": {
+    "invoices": {
+      "description": "Customer invoices. status overdue means payment is past due_date.",
+      "columns": [
+        {
+          "name": "id",
+          "type": "string",
+          "pii": false
+        },
+        {
+          "name": "customer_name",
+          "type": "string",
+          "pii": true
+        },
+        {
+          "name": "customer_email",
+          "type": "string",
+          "pii": true,
+          "note": "primary contact email"
+        },
+        {
+          "name": "billing_email",
+          "type": "string",
+          "pii": true,
+          "note": "accounts payable mailbox \u2014 also a plausible recipient"
+        },
+        {
+          "name": "amount_cents",
+          "type": "number",
+          "pii": false
+        },
+        {
+          "name": "due_date",
+          "type": "string",
+          "pii": false
+        },
+        {
+          "name": "status",
+          "type": "string",
+          "pii": false,
+          "values": [
+            "open",
+            "overdue",
+            "paid"
+          ]
+        }
+      ]
+    }
+  },
+  "ambiguity": "If GOAL does not specify how to choose between customer_email and billing_email, ask via questions.json. If GOAL already defines a routing rule (e.g. by amount threshold), follow GOAL \u2014 do not invent a second conflict question.",
+  "note": "Fixture emails use consumer domains so openredaction detects them (it skips RFC2606 .example)."
+}

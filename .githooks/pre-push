@@ -1,0 +1,46 @@
+#!/usr/bin/env bash
+# Secret scan on every push: catches secrets that slipped past pre-commit
+# (e.g. commits made with --no-verify, or history created before the hooks
+# were installed). Scans only the commits actually being pushed.
+#
+# Installed via `git config core.hooksPath .githooks` (done by setup.sh).
+# Bypassable with `git push --no-verify` - the CI gate remains authoritative.
+
+set -uo pipefail
+
+ROOT=$(git rev-parse --show-toplevel)
+. "$ROOT/ci/spec-policy.sh"
+
+[ "${SPECKIT_ENFORCE:-1}" = "0" ] && exit 0
+[ -f "$ROOT/.speckit-template-dev" ] && exit 0
+
+ZERO=0000000000000000000000000000000000000000
+EMPTY_TREE=4b825dc642cb6eb9a060e54bf8d69288fbee4904
+FAILED=0
+
+# stdin: <local-ref> <local-sha> <remote-ref> <remote-sha> per ref being pushed
+while read -r _local_ref local_sha _remote_ref remote_sha; do
+    [ "$local_sha" = "$ZERO" ] && continue # deleting a remote branch
+
+    if [ "$remote_sha" = "$ZERO" ]; then
+        # New remote branch: scan everything since the default branch, or the
+        # whole history if that cannot be determined.
+        base=$(git merge-base "origin/$DEFAULT_BRANCH" "$local_sha" 2>/dev/null \
+            || git merge-base "$DEFAULT_BRANCH" "$local_sha" 2>/dev/null \
+            || echo "$EMPTY_TREE")
+        range="$base..$local_sha"
+    else
+        range="$remote_sha..$local_sha"
+    fi
+
+    if ! bash "$ROOT/ci/check-secrets.sh" range "$range"; then
+        echo "" >&2
+        echo "[spec-gate] PUSH BLOCKED: possible secrets in outgoing commits ($range)." >&2
+        echo "[spec-gate] Remove the secret from history before pushing (git rebase -i /" >&2
+        echo "[spec-gate] git commit --amend), rotate the credential if it was ever real," >&2
+        echo "[spec-gate] and move it to .env / a secret store." >&2
+        FAILED=1
+    fi
+done
+
+exit "$FAILED"

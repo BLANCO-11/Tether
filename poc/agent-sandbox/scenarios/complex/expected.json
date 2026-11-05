@@ -1,0 +1,20 @@
+{
+  "description": "Overdue only, amount desc, threshold 100000 → billing else customer. Exact subject.",
+  "outbox": [
+    {
+      "to": "accounts.delta@yahoo.com",
+      "subject": "Invoice INV-1004 is overdue",
+      "bodyContains": ["INV-1004", "210000", "2026-08-30"]
+    },
+    {
+      "to": "ap.acme@yahoo.com",
+      "subject": "Invoice INV-1001 is overdue",
+      "bodyContains": ["INV-1001", "125000", "2026-09-01"]
+    },
+    {
+      "to": "bob.smith@gmail.com",
+      "subject": "Invoice INV-1002 is overdue",
+      "bodyContains": ["INV-1002", "89000", "2026-09-15"]
+    }
+  ]
+}

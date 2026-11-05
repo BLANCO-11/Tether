@@ -1,0 +1,90 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: ops-api
+  labels: {{- include "foundry.labels" (dict "root" . "component" "ops-api") | nindent 4 }}
+spec:
+  selector: {{- include "foundry.selector" (dict "root" . "component" "ops-api") | nindent 4 }}
+  ports:
+    - { name: http, port: 4004, targetPort: 4004 }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ops-api
+  labels: {{- include "foundry.labels" (dict "root" . "component" "ops-api") | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {{- include "foundry.selector" (dict "root" . "component" "ops-api") | nindent 6 }}
+  template:
+    metadata:
+      labels: {{- include "foundry.labels" (dict "root" . "component" "ops-api") | nindent 8 }}
+    spec:
+      initContainers:
+        {{- include "foundry.waitForDb" . | nindent 8 }}
+        # compose's ops-db-init, unchanged in substance: idempotent, three separate psql calls (one
+        # implicit transaction would make CREATE DATABASE fail).
+        - name: ops-db-init
+          image: {{ .Values.images.postgres }}
+          imagePullPolicy: {{ .Values.pullPolicy }}
+          command:
+            - /bin/bash
+            - -c
+            - |
+              set -euo pipefail
+              psql "$ADMIN_DSN" -v ON_ERROR_STOP=1 -tAc "SELECT 1 FROM pg_roles WHERE rolname='$OPS_DB_USER'" | grep -q 1 \
+                || psql "$ADMIN_DSN" -v ON_ERROR_STOP=1 -c "CREATE ROLE $OPS_DB_USER LOGIN PASSWORD '$OPS_DB_PASSWORD'"
+              # A non-superuser admin (Azure's) may own a database only as a member of the owner role: PG16 refuses
+              # CREATE DATABASE ... OWNER with "must be able to SET ROLE". The creator holds ADMIN on the role, so it
+              # can grant it to itself; a no-op for a superuser.
+              psql "$ADMIN_DSN" -v ON_ERROR_STOP=1 -c "GRANT $OPS_DB_USER TO CURRENT_USER"
+              psql "$ADMIN_DSN" -v ON_ERROR_STOP=1 -tAc "SELECT 1 FROM pg_database WHERE datname='foundry_ops'" | grep -q 1 \
+                || psql "$ADMIN_DSN" -v ON_ERROR_STOP=1 -c "CREATE DATABASE foundry_ops OWNER $OPS_DB_USER"
+              psql "$ADMIN_DSN" -v ON_ERROR_STOP=1 -c "REVOKE CONNECT ON DATABASE foundry_parent FROM PUBLIC"
+              psql "$ADMIN_DSN" -v ON_ERROR_STOP=1 -c "REVOKE ALL ON DATABASE foundry_parent FROM $OPS_DB_USER"
+              psql "$ADMIN_DSN" -v ON_ERROR_STOP=1 -c "GRANT CONNECT ON DATABASE foundry_parent TO CURRENT_USER"
+              echo "[ops-db-init] foundry_ops + $OPS_DB_USER ready"
+          env:
+            {{- include "foundry.dbEnv" (dict "root" . "name" "ADMIN_DSN") | nindent 12 }}
+            {{- include "foundry.dbEnv" (dict "root" . "name" "OPS_DB_USER") | nindent 12 }}
+            {{- include "foundry.dbEnv" (dict "root" . "name" "OPS_DB_PASSWORD") | nindent 12 }}
+            {{- include "foundry.dbCaEnv" . | nindent 12 }}
+          volumeMounts:
+            {{- include "foundry.dbCaMount" . | nindent 12 }}
+        - name: ops-migrate
+          image: {{ .Values.images.opsApi }}
+          imagePullPolicy: {{ .Values.pullPolicy }}
+          command: ["node", "packages/ops-api/dist/db/migrate.js"]
+          env:
+            {{- include "foundry.dbEnv" (dict "root" . "name" "OPS_DATABASE_URL") | nindent 12 }}
+            {{- include "foundry.secretEnv" (dict "root" . "keys" (list "OPS_API_KEY")) | nindent 12 }}
+            {{- include "foundry.dbCaEnv" . | nindent 12 }}
+          volumeMounts:
+            {{- include "foundry.dbCaMount" . | nindent 12 }}
+      containers:
+        - name: ops-api
+          image: {{ .Values.images.opsApi }}
+          imagePullPolicy: {{ .Values.pullPolicy }}
+          ports:
+            - { name: http, containerPort: 4004 }
+          env:
+            - { name: PORT, value: "4004" }
+            - { name: NODE_ENV, value: production }
+            - { name: OPS_PUBLIC_BASE, value: "http://ops-api:4004" }
+            - { name: HR_DB_HOST, value: {{ .Values.database.host | quote }} }
+            - { name: HR_DB_PORT, value: {{ .Values.database.port | quote }} }
+            {{- include "foundry.dbEnv" (dict "root" . "name" "OPS_DATABASE_URL") | nindent 12 }}
+            {{- include "foundry.secretEnv" (dict "root" . "keys" .Values.secretKeys.opsApi) | nindent 12 }}
+            {{- include "foundry.dbCaEnv" . | nindent 12 }}
+          volumeMounts:
+            {{- include "foundry.dbCaMount" . | nindent 12 }}
+          readinessProbe:
+            httpGet: { path: /healthz, port: 4004 }
+            periodSeconds: 10
+          resources: {{- toYaml .Values.resources.opsApi | nindent 12 }}
+      {{- with .Values.database.caConfigMap }}
+      volumes:
+        - name: db-ca
+          configMap: { name: {{ . }} }
+      {{- end }}

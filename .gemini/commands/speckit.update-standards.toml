@@ -1,0 +1,75 @@
+description = "Amend an established project standard (constitution, frameworks, security, or design) mid-project: interview the user for the change, update only the relevant file(s), and record a tracked, auditable history entry."
+
+prompt = """
+
+## User Input
+
+```text
+{{args}}
+```
+
+You **MUST** consider the user input before proceeding (if not empty). It is an
+optional description of the change the user wants.
+
+## Purpose
+
+`/speckit.update-standards` is the governed path for changing a project's
+foundational standards after `/speckit.start` established them. It interviews the
+user, updates only the relevant standard file(s), records a tracked history
+entry, and bumps the manifest revision — never a silent edit. If standards are
+not established yet (`standards.json` absent or `status: pending`), tell the user
+to run `/speckit.start` first.
+
+## Steps
+
+### 1. Load current state
+Read `.specify/memory/standards.json`; if absent or status != established, STOP
+and direct the user to `/speckit.start`. Read the current standard files
+(constitution.md, frameworks.md, security.md, design.md if present) and
+`.specify/memory/standards-history.md` if it exists.
+
+### 2. Interview for the change
+Identify which standard(s) the change touches; ask if unclear. Interview for
+specifics — what changes and WHY (the rationale is recorded). If the change
+affects the UI determination, plan to update frameworks.md and the manifest
+(has_ui + standards.design.required); if a UI is being added, design.md becomes
+required — run the Design Workshop (see /speckit.start) or direct the user to it.
+
+### 3. Guardrails — refuse non-negotiable violations
+Do NOT apply a change that violates a non-negotiable principle. In particular
+(article VIII): never introduce hardcoded credentials, never weaken secrets
+hygiene, never silently remove a NON-NEGOTIABLE article. Surface the conflict and
+propose a compliant alternative instead.
+
+### 4. Apply the change
+Edit ONLY the relevant standard file(s), minimally and consistent with the
+template. For a constitution change, update its version footer (or delegate to
+/speckit.constitution).
+
+### 5. Record history + bump the manifest
+Append to `.specify/memory/standards-history.md` (create if missing):
+
+```markdown
+## <YYYY-MM-DD> — revision <N>
+
+- **Standard(s)**: <constitution|frameworks|security|design>
+- **Change**: <what changed>
+- **Why**: <rationale>
+```
+
+Update `standards.json`: increment `revision`, set `last_amended` to today's
+known date (do not fabricate), update changed present/required flags and has_ui
+if the UI determination changed. Keep it valid against
+`.specify/templates/standards-manifest.schema.json`.
+
+### 6. Report
+Summarize which standard(s) changed, the new revision, and the history entry.
+Remind the user that `/speckit.comply` and the pull-time review will check
+existing code against the amended standard.
+
+## Guardrails
+- Writing under `.specify/**` and `docs/**` is always allowed.
+- Never fabricate a date; use the known current date or ask.
+- Never store real secret values (article VIII); record secret NAMES only.
+- Update only what the user approved. One amendment = one history entry = one
+  revision bump."""

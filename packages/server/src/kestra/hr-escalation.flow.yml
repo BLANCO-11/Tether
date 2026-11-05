@@ -1,0 +1,132 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Phase 1 — scenario B: escalate flagged employees to their managers.
+# archive/kestra-migration/progress/phase-1.md
+#
+# Hand-written, like scenario A. The compiler is Phase 5.
+#
+# ── Why this scenario exists ─────────────────────────────────────────────────
+#
+# Scenario A is row-level fan-OUT: N flagged employees → N emails. This is
+# fan-IN: N flagged employees → **M tickets**, M < N, because two people can
+# report to the same manager. That is the interesting difference. A monolithic
+# script that loops over the flagged list emits one ticket per employee and looks
+# entirely reasonable while doing it — 11 tickets instead of 10 is not an error
+# anything raises. Here the grouping is a declared step whose output is scored.
+#
+# It also exercises two things scenario A never touches:
+#
+#   * `ticket_create` is the ONE authenticated tool in the workspace (X-API-Key).
+#     The key never reaches this flow — `applyAuth()` attaches it server-side from
+#     `workspace_secrets`. Kestra cannot see it (R2).
+#   * A manager with no mailbox must yield a ticket with NO assignee, rather than
+#     a ticket assigned to `null` or no ticket at all.
+# ─────────────────────────────────────────────────────────────────────────────
+id: hr-manager-escalation
+namespace: foundry.default.hr
+
+inputs:
+  - id: period
+    type: STRING
+    defaults: "2026-06"
+
+variables:
+  foundry: "http://server:4000"
+
+tasks:
+  - id: begin
+    type: io.kestra.plugin.core.http.Request
+    uri: "{{ vars.foundry }}/api/executions/begin"
+    method: POST
+    contentType: application/json
+    headers:
+      Authorization: "Bearer {{ secret('FOUNDRY_CALLBACK') }}"
+    body: |
+      {
+        "namespace": "{{ flow.namespace }}",
+        "flowId": "{{ flow.id }}",
+        "executionId": "{{ execution.id }}",
+        "inputs": { "period": "{{ inputs.period }}" }
+      }
+
+  # The recursive walk up `manager_id` lives in the named query, not here — see
+  # hr-scenarios.queries.ts for why a plain join gets it wrong.
+  - id: flagged
+    type: io.kestra.plugin.core.http.Request
+    uri: "{{ vars.foundry }}/api/steps/datasource"
+    method: POST
+    contentType: application/json
+    headers:
+      Authorization: "Bearer {{ json(outputs.begin.body).token }}"
+    body: |
+      {
+        "ref": "hr_demo.flagged_with_escalation_target",
+        "stepId": "flagged",
+        "taskrunId": "{{ taskrun.id }}",
+        "params": [{ "period": "{{ inputs.period }}" }]
+      }
+
+  # ── The fan-in. No credential, so it stays in Kestra (R2). ──────────────────
+  # Rows with a NULL escalation_manager_id are separated, not filtered away: an
+  # employee nobody can be escalated to is a REPORTABLE gap, and silently
+  # dropping them is the exact shape of "emailed 0 of 11 and reported success".
+  - id: group_by_manager
+    type: io.kestra.plugin.core.debug.Return
+    format: >
+      {{ json(outputs.flagged.body).results[0].data
+         | jq('{
+               tickets: [ .[] | select(.escalation_manager_id != null) ]
+                        | group_by(.escalation_manager_id)
+                        | map({
+                            manager_id: .[0].escalation_manager_id,
+                            manager_name: .[0].escalation_manager_name,
+                            manager_email: .[0].escalation_manager_email,
+                            report_ids: [.[].employee_id] | sort,
+                            report_names: [.[].full_name] | sort,
+                            lines: [ .[] | "  - " + .full_name + " (" + .department_code + "): "
+                                     + (.attendance_rate|tostring) + "% against a minimum of "
+                                     + (.min_attendance_rate|tostring) + "%" ] | join("\n")
+                          })
+                        | sort_by(.manager_id),
+               unescalatable: [ .[] | select(.escalation_manager_id == null)
+                                | {employee_id, full_name} ]
+             }')
+         | first }}
+
+  # One taskrun for M tickets (M1). `assignee` is the manager's address or null —
+  # the stub rejects a malformed address with 422, so a null here is the
+  # difference between an unassigned ticket and a failed step.
+  - id: raise_tickets
+    type: io.kestra.plugin.core.http.Request
+    uri: "{{ vars.foundry }}/api/steps/tool"
+    method: POST
+    contentType: application/json
+    options:
+      readIdleTimeout: PT120S
+    headers:
+      Authorization: "Bearer {{ json(outputs.begin.body).token }}"
+    body: |
+      {
+        "ref": "ticket_create",
+        "stepId": "raise_tickets",
+        "taskrunId": "{{ taskrun.id }}",
+        "params": {{ json(outputs.group_by_manager.value).tickets
+                     | jq('[.[] | {
+                             title: ("Attendance below policy — " + (.report_ids|length|tostring)
+                                     + " report(s) for " + .manager_name),
+                             description: ("Period {{ inputs.period }}. The following direct reports were below their department attendance threshold:\n" + .lines),
+                             priority: "high",
+                             assignee: .manager_email,
+                             labels: ["attendance", "period-{{ inputs.period }}"]
+                           }]')
+                     | first }}
+      }
+
+  - id: complete
+    type: io.kestra.plugin.core.http.Request
+    uri: "{{ vars.foundry }}/api/executions/{{ json(outputs.begin.body).flowExecutionId }}/complete"
+    method: POST
+    contentType: application/json
+    headers:
+      Authorization: "Bearer {{ json(outputs.begin.body).token }}"
+    body: |
+      { "status": "succeeded" }

@@ -1,0 +1,59 @@
+# Foundry on AKS. Layered over the chart's defaults; deploy.sh sets the five image names from REGISTRY and TAG.
+#
+# Before the first deploy (once per cluster), see infra/k8s/README.md "Deploying to AKS":
+#   - storageclass.yaml applied (Azure Files NFS, root squash OFF)
+#   - an ingress controller + cert-manager (or a TLS Secret you create)
+#   - the app env file uploaded to Azure DevOps as a Secure File, holding the external database keys
+#
+# Everything marked CHANGE ME is per-deployment; nothing secret belongs in this file.
+
+pullPolicy: IfNotPresent      # tags are immutable (the commit), so a node never needs to re-pull one
+
+postgres:
+  inCluster: false            # Azure Database for PostgreSQL — Flexible Server
+database:
+  host: CHANGE-ME.postgres.database.azure.com   # same host as DATABASE_URL in the env file
+  port: 5432
+  caConfigMap: ""             # Azure's certificate chains to a public CA that Node and libpq already trust
+
+public:
+  authUrl: https://CHANGE-ME.example.com        # the address people sign in on (Entra redirect URI: <this>/api/auth/callback/microsoft-entra-id)
+  wsUrl: wss://CHANGE-ME.example.com            # same host; run pages fall back to polling if empty
+  workspace: ""
+
+ingress:
+  enabled: true
+  className: nginx            # ingress-nginx, or webapprouting.kubernetes.azure.com (AKS app routing add-on, also nginx)
+  host: CHANGE-ME.example.com
+  tls:
+    enabled: true
+    secretName: foundry-tls
+    clusterIssuer: letsencrypt   # a cert-manager ClusterIssuer; "" if you create the foundry-tls Secret yourself
+
+storage:
+  sandboxes:
+    # Shared by server and forge. MUST be NFS with root squash off: forge refuses to start otherwise
+    # ("sandboxes_unusable"). SMB cannot work at all (no per-chat owners).
+    accessMode: ReadWriteMany
+    storageClass: foundry-azurefile-nfs
+    size: 100Gi               # Premium file shares bill for provisioned size, minimum 100 GiB
+  mocks:
+    accessMode: ReadWriteOnce
+    storageClass: managed-csi
+    size: 4Gi
+
+sandbox:
+  # AKS's Ubuntu and Azure Linux node images run AppArmor; the sandboxes need the /proc remount it would refuse.
+  appArmorProfile: Unconfined
+  runtimeClassName: ""        # kata-vm-isolation with AKS Pod Sandboxing (optional, a separate node pool)
+
+networkPolicies:
+  enabled: true               # needs a policy engine on the cluster: --network-policy azure|calico|cilium
+  # forge-egress may only reach PUBLIC addresses on 443. If the AI gateway is reached over a private endpoint,
+  # remove its range from this list (and nothing else).
+  egressExcept:
+    - 10.0.0.0/8
+    - 172.16.0.0/12
+    - 192.168.0.0/16
+    - 169.254.0.0/16
+    - 100.64.0.0/10

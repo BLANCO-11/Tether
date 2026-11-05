@@ -1,0 +1,1 @@
+ALTER TABLE "flow_approvals" ADD COLUMN "revoked_by" varchar(255);

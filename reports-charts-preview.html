@@ -1,0 +1,495 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cost &amp; usage, charts preview</title>
+<style>
+/* Layout: header → tabs → scope (workspace chips + period) → drill trail → tiles → stacked daily cost → treemap + ranked bars → table behind a toggle.
+   Advanced tab: previous-period lines, runs-vs-cost scatter, cost by outcome, weekday × hour heatmap. Charts are the way in; a click drills. */
+:root {
+  --bg: #f5f6f4; --surface: #fff; --fg: #16201d; --muted: #5d6b66; --line: #dde2df;
+  --accent: #0b6e5f; --accent-soft: #dff0ec; --ok: #2f7d3b; --warn: #b9791a; --bad: #b3372c;
+  --c1: #0b6e5f; --c2: #3b6fb6; --c3: #a8610a; --c4: #8a4fa0; --c5: #5f7f2a; --c6: #b3372c;
+  --shadow: 0 8px 24px rgba(16, 32, 28, .14);
+  --font: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: ui-monospace, "SF Mono", Menlo, monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #101614; --surface: #171f1c; --fg: #e5ece9; --muted: #98a8a2; --line: #28332f;
+    --accent: #4fc4af; --accent-soft: #19332e; --ok: #6cc07a; --warn: #e0a24c; --bad: #ee7b6f;
+    --c1: #4fc4af; --c2: #6f9ee0; --c3: #e0a24c; --c4: #bf8ad6; --c5: #9bbd57; --c6: #ee7b6f;
+    --shadow: 0 8px 24px rgba(0, 0, 0, .5); color-scheme: dark;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 14px/1.45 var(--font); }
+.wrap { max-width: 1180px; margin: 0 auto; padding: 24px 16px 56px; display: flex; flex-direction: column; gap: 18px; }
+button { font: inherit; color: inherit; cursor: pointer; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.note { align-self: flex-start; font-size: 12px; color: var(--muted); background: var(--accent-soft); border-radius: 6px; padding: 6px 10px; }
+.eyebrow { font-size: 11px; letter-spacing: .09em; text-transform: uppercase; color: var(--muted); }
+h1 { margin: 2px 0; font-size: 26px; font-weight: 600; }
+.purpose { margin: 0; color: var(--muted); }
+header { display: flex; flex-wrap: wrap; gap: 12px 24px; align-items: end; justify-content: space-between; }
+.actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.btn { border: 1px solid var(--line); background: var(--surface); border-radius: 8px; padding: 6px 12px; font-weight: 500; }
+.btn:hover { border-color: var(--accent); color: var(--accent); }
+.tabs { display: flex; gap: 22px; border-bottom: 1px solid var(--line); }
+.tabs button { background: none; border: 0; border-bottom: 2px solid transparent; padding: 8px 2px; color: var(--muted); font-weight: 500; margin-bottom: -1px; }
+.tabs button[aria-selected="true"] { color: var(--fg); border-bottom-color: var(--accent); }
+.scope { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: center; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: var(--surface); }
+.seg button { border: 0; background: none; padding: 6px 12px; color: var(--muted); }
+.seg button[aria-pressed="true"] { background: var(--accent); color: #fff; }
+.wschips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.wsl { font-size: 12px; color: var(--muted); margin-right: 2px; }
+.wchip { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--line); border-radius: 999px; padding: 3px 11px; background: var(--surface); }
+.wchip i { width: 9px; height: 9px; border-radius: 2px; display: inline-block; }
+.wchip[aria-pressed="false"] { opacity: .45; }
+.trail { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-height: 30px; }
+.chip { display: inline-flex; align-items: center; gap: 6px; background: var(--accent-soft); border: 1px solid var(--line); border-radius: 999px; padding: 3px 4px 3px 10px; }
+.chip small { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; }
+.chip button { border: 0; background: none; width: 20px; height: 20px; border-radius: 50%; color: var(--muted); }
+.chip button:hover { background: var(--line); color: var(--fg); }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+.tile { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; min-width: 0; }
+.tile.main { border-color: var(--accent); }
+.tile .k { font-size: 12px; color: var(--muted); }
+.tile .v { font-size: 24px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.tile.main .v { font-size: 30px; color: var(--accent); }
+.tile .s { font-size: 12px; color: var(--muted); }
+.delta.up { color: var(--bad); } .delta.down { color: var(--ok); }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; min-width: 0; }
+.card h2 { margin: 0 0 2px; font-size: 14px; font-weight: 600; }
+.card .sub { margin: 0 0 10px; font-size: 12px; color: var(--muted); }
+.grid2 { display: grid; grid-template-columns: 1.15fr 1fr; gap: 14px; }
+@media (max-width: 860px) { .grid2 { grid-template-columns: 1fr; } }
+.head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px; color: var(--muted); margin-top: 8px; }
+.legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; vertical-align: -1px; }
+svg { display: block; width: 100%; height: auto; }
+svg text { fill: var(--muted); font-size: 11px; font-family: var(--font); }
+.axis line, .grid line { stroke: var(--line); }
+.bar { cursor: pointer; }
+.bar:hover { filter: brightness(1.12); }
+/* ranked bars */
+.rows { display: flex; flex-direction: column; gap: 6px; }
+.row { display: grid; grid-template-columns: minmax(80px, 38%) 1fr auto; gap: 10px; align-items: center; border: 0; background: none; text-align: left; padding: 3px 4px; border-radius: 6px; width: 100%; }
+button.row:hover { background: var(--accent-soft); }
+.row .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.row .nm small { display: block; color: var(--muted); font-size: 11px; }
+.row .tr { height: 10px; background: var(--line); border-radius: 5px; overflow: hidden; }
+.row .fl { height: 100%; border-radius: 5px; }
+.row .val { font-variant-numeric: tabular-nums; font-weight: 600; text-align: right; min-width: 58px; }
+.row .val small { display: block; color: var(--muted); font-weight: 400; font-size: 11px; }
+/* treemap */
+.tm { position: relative; width: 100%; aspect-ratio: 2 / 1; border-radius: 6px; overflow: hidden; background: var(--line); }
+.tm .ws { position: absolute; border: 2px solid var(--surface); border-radius: 6px; overflow: hidden; }
+.tm .wl { position: absolute; border: 0; text-align: left; padding: 5px 7px; overflow: hidden; color: #fff; font-size: 11px; line-height: 1.25; border-radius: 3px; outline: 1px solid rgba(255,255,255,.35); outline-offset: -1px; }
+.tm .wl:hover { filter: brightness(1.15); }
+.tm .wl b { display: block; font-weight: 600; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tm .wt { position: absolute; left: 0; top: 0; right: 0; padding: 3px 7px; font-size: 11px; font-weight: 600; color: #fff; text-transform: uppercase; letter-spacing: .05em; cursor: pointer; border: 0; background: rgba(0,0,0,.28); text-align: left; }
+/* heatmap */
+.heat { display: grid; grid-template-columns: 34px repeat(24, 1fr); gap: 2px; font-size: 10px; color: var(--muted); }
+.heat .h { height: 18px; border-radius: 2px; background: var(--accent); }
+.heat .d { display: flex; align-items: center; }
+.heat .hh { text-align: center; }
+/* table */
+.tbl { overflow-x: auto; margin-top: 10px; border-top: 1px solid var(--line); }
+table { border-collapse: collapse; width: 100%; min-width: 560px; }
+th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+th { font-size: 11px; font-weight: 500; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+th.num, td.num { text-align: right; font-variant-numeric: tabular-nums; }
+.pill { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 12px; border: 1px solid var(--line); }
+.link { background: none; border: 0; color: var(--accent); padding: 0; }
+.lenses { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+.lenses button { border: 1px solid var(--line); background: var(--surface); border-radius: 8px; padding: 6px 12px; display: inline-flex; gap: 8px; }
+.lenses button[aria-selected="true"] { border-color: var(--accent); background: var(--accent-soft); font-weight: 500; }
+.lenses .c { font-family: var(--mono); font-size: 12px; color: var(--muted); }
+.tip { position: fixed; z-index: 30; pointer-events: none; background: var(--fg); color: var(--bg); border-radius: 6px; padding: 6px 9px; font-size: 12px; box-shadow: var(--shadow); max-width: 260px; }
+.tip b { font-weight: 600; }
+.foot { font-size: 12px; color: var(--muted); }
+[hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="note">Preview with example data. Every chart is clickable and re-scopes the page, the way a table row does today.</div>
+
+  <header>
+    <div>
+      <div class="eyebrow">Reports</div>
+      <h1>Cost &amp; usage</h1>
+      <p class="purpose">What the model calls behind your workspaces, workflows, runs and people cost.</p>
+    </div>
+    <div class="actions">
+      <div class="seg" role="group" aria-label="Period" id="period"></div>
+      <button class="btn" type="button">Download report</button>
+      <button class="btn" type="button">Email report</button>
+    </div>
+  </header>
+
+  <div class="tabs" role="tablist">
+    <button role="tab" id="tab-o" aria-selected="true">Overview</button>
+    <button role="tab" id="tab-a" aria-selected="false">Advanced</button>
+  </div>
+
+  <div class="scope">
+    <div class="wschips wsChips" id="wsChips" style="display:flex;flex-wrap:wrap;gap:6px;align-items:center"></div>
+  </div>
+  <div class="trail" id="trail"></div>
+  <div class="tiles" id="tiles"></div>
+
+  <!-- OVERVIEW -->
+  <div id="overview" style="display:flex;flex-direction:column;gap:14px">
+    <section class="card">
+      <div class="head"><div><h2>Cost per day</h2><p class="sub">Split by what spent it. Hover a day for the exact figures.</p></div></div>
+      <div id="daily"></div>
+      <div class="legend" id="kindLegend"></div>
+    </section>
+
+    <div class="grid2">
+      <section class="card">
+        <h2>Where the money sits</h2>
+        <p class="sub">Area is cost. Blocks are workflows grouped by workspace. Click a block to open that workflow's runs, or a workspace title to open the workspace.</p>
+        <div class="tm" id="treemap"></div>
+      </section>
+      <section class="card">
+        <div class="head"><div><h2 id="barsTitle">Cost by workspace</h2><p class="sub" id="barsSub">Click a bar to drill in.</p></div></div>
+        <div class="lenses" role="tablist" id="lenses"></div>
+        <div class="rows" id="bars"></div>
+        <div style="margin-top:10px"><button class="link" id="tblToggle" type="button">Show table</button></div>
+        <div class="tbl" id="tbl" hidden></div>
+      </section>
+    </div>
+  </div>
+
+  <!-- ADVANCED -->
+  <div id="advanced" style="display:none;flex-direction:column;gap:14px">
+    <div class="grid2">
+      <section class="card">
+        <div class="head"><div><h2>This period against the one before</h2><p class="sub" id="prevSub"></p></div></div>
+        <div id="prevLine"></div>
+        <div class="legend"><span><i style="background:var(--accent)"></i>This period</span><span><i style="background:var(--muted)"></i>Previous period</span></div>
+      </section>
+      <section class="card">
+        <h2>Busy or expensive?</h2>
+        <p class="sub">Each dot is a workflow. Right means it runs often, up means each run costs more. Size is total cost. Click a dot to open it.</p>
+        <div id="scatter"></div>
+      </section>
+    </div>
+    <div class="grid2">
+      <section class="card">
+        <h2>Cost by outcome</h2>
+        <p class="sub">How much was spent on runs that did not succeed.</p>
+        <div class="rows" id="outcome"></div>
+      </section>
+      <section class="card">
+        <h2>When the money is spent</h2>
+        <p class="sub">Weekday by hour (UTC). Darker means more cost.</p>
+        <div class="heat" id="heat"></div>
+      </section>
+    </div>
+  </div>
+
+  <p class="foot">Cost is model (LLM) spend only, priced at the rate in effect when each call happened. Charts and the table behind them read the same figures.</p>
+</div>
+<div class="tip" id="tip" hidden></div>
+
+<script>
+(function () {
+  "use strict";
+  // ---------- example data (seeded, so it is stable) ----------
+  function rng(seed) { return function () { seed |= 0; seed = seed + 0x6D2B79F5 | 0; var t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+  var rand = rng(7);
+  var WS = ['Finance', 'Customer Support', 'Orders & Fulfilment', 'Recruitment', 'HR'];
+  var WSCOL = {}; WS.forEach(function (w, i) { WSCOL[w] = 'var(--c' + (i + 1) + ')'; });
+  var WF = [
+    ['Finance', 'Invoice chase', 0.021], ['Finance', 'Expense policy check', 0.034], ['Finance', 'Budget variance report', 0.12],
+    ['Customer Support', 'Chase missed-target tickets', 0.018], ['Customer Support', 'Open ticket digest', 0.09], ['Customer Support', 'CSAT weekly summary', 0.07],
+    ['Orders & Fulfilment', 'Late order notices', 0.026], ['Orders & Fulfilment', 'Partial shipment chase', 0.019],
+    ['Recruitment', 'Offer expiry chase', 0.015], ['Recruitment', 'Funnel digest', 0.085],
+    ['HR', 'Monthly attendance check', 0.04], ['HR', 'Department digest', 0.11]
+  ];
+  var PEOPLE = {
+    'Finance': ['Priya Raman', 'Daniel Okafor', 'Mei Tanaka'], 'Customer Support': ['Sam Whitfield', 'Priya Raman', 'Lucia Moreno'],
+    'Orders & Fulfilment': ['Daniel Okafor', 'Hanna Berg'], 'Recruitment': ['Lucia Moreno', 'Arjun Patel'], 'HR': ['Arjun Patel', 'Mei Tanaka', 'Sam Whitfield']
+  };
+  var RUNS = [], i;
+  for (i = 0; i < 1500; i++) {
+    var w = WF[Math.floor(Math.pow(rand(), 1.4) * WF.length)];
+    var pp = PEOPLE[w[0]], pr = rand();
+    var purpose = pr < 0.62 ? 'live' : pr < 0.84 ? 'test' : 'building';
+    var mult = purpose === 'building' ? 6 + rand() * 8 : purpose === 'test' ? 0.8 + rand() : 0.6 + rand() * 0.9;
+    var st = rand(), age = Math.floor(Math.pow(rand(), 1.1) * 180);
+    // weekday/hour pattern: weekdays and office hours spend more
+    var hour = Math.floor(8 + rand() * 11 + (rand() < 0.15 ? -6 : 0)); if (hour < 0) hour = 2;
+    RUNS.push({ ws: w[0], wf: w[1], person: pp[Math.floor(rand() * pp.length)], purpose: purpose,
+      status: st < 0.86 ? 'succeeded' : st < 0.95 ? 'failed' : 'stopped', cost: w[2] * mult, age: age, hour: hour, id: ('r' + Math.floor(rand() * 1e7).toString(16)).slice(0, 6) });
+  }
+  var DAY = 86400000, TODAY = new Date(Date.UTC(2026, 9, 26));
+  var dateOf = function (age) { return new Date(TODAY.getTime() - age * DAY); };
+  var dayLabel = function (age) { return dateOf(age).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', timeZone: 'UTC' }); };
+  RUNS.forEach(function (r) { var d = dateOf(r.age).getUTCDay(); r.dow = (d + 6) % 7; });
+
+  // ---------- state ----------
+  var S = { days: 30, off: {}, drill: { ws: null, wf: null, person: null }, lens: 'workspaces', tab: 'o', table: false };
+  var $ = function (id) { return document.getElementById(id); };
+  var usd = function (n) { return n >= 100 ? '$' + n.toFixed(0) : n >= 1 ? '$' + n.toFixed(2) : '$' + n.toFixed(3); };
+  var esc = function (s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); };
+  var sum = function (a, f) { return a.reduce(function (x, r) { return x + f(r); }, 0); };
+  var uniq = function (a, f) { var m = {}; a.forEach(function (r) { m[f(r)] = 1; }); return Object.keys(m).length; };
+
+  function inScope(r) {
+    return !S.off[r.ws] && (!S.drill.ws || r.ws === S.drill.ws) && (!S.drill.wf || r.wf === S.drill.wf) && (!S.drill.person || r.person === S.drill.person);
+  }
+  var current = function () { return RUNS.filter(function (r) { return r.age < S.days && inScope(r); }); };
+  var previous = function () { return RUNS.filter(function (r) { return r.age >= S.days && r.age < S.days * 2 && inScope(r); }); };
+
+  function group(rows, keyf, namef, extra) {
+    var m = {};
+    rows.forEach(function (r) { var k = keyf(r); (m[k] = m[k] || { key: k, rows: [] }).rows.push(r); });
+    var total = sum(rows, function (r) { return r.cost; }) || 1;
+    return Object.keys(m).map(function (k) {
+      var rs = m[k].rows, c = sum(rs, function (r) { return r.cost; });
+      var g = { key: k, name: namef(rs[0]), cost: c, runs: rs.length, share: c / total, wfs: uniq(rs, function (r) { return r.wf; }), ppl: uniq(rs, function (r) { return r.person; }), ws: rs[0].ws, rows: rs };
+      if (extra) extra(g, rs[0]);
+      return g;
+    }).sort(function (a, b) { return b.cost - a.cost; });
+  }
+
+  // ---------- tooltip ----------
+  var tip = $('tip');
+  function showTip(e, html) { tip.innerHTML = html; tip.hidden = false; var x = e.clientX + 14, y = e.clientY + 14; if (x + 270 > innerWidth) x = e.clientX - 270; tip.style.left = x + 'px'; tip.style.top = y + 'px'; }
+  function hideTip() { tip.hidden = true; }
+  document.addEventListener('mouseover', function (e) { var t = e.target.closest('[data-tip]'); if (t) showTip(e, t.getAttribute('data-tip')); else hideTip(); });
+  document.addEventListener('mousemove', function (e) { if (!tip.hidden) { var t = e.target.closest('[data-tip]'); if (t) showTip(e, t.getAttribute('data-tip')); else hideTip(); } });
+
+  // ---------- header controls ----------
+  function renderControls() {
+    $('period').innerHTML = [7, 30, 90].map(function (d) { return '<button type="button" data-d="' + d + '" aria-pressed="' + (S.days === d) + '">' + d + ' days</button>'; }).join('');
+    $('wsChips').innerHTML = '<span class="wsl">Workspaces</span>' + WS.map(function (w) {
+      return '<button type="button" class="wchip" data-w="' + esc(w) + '" aria-pressed="' + (!S.off[w]) + '"><i style="background:' + WSCOL[w] + '"></i>' + esc(w) + '</button>';
+    }).join('');
+    var d = S.drill, parts = [];
+    if (d.ws) parts.push(['ws', 'Workspace', d.ws]); if (d.wf) parts.push(['wf', 'Workflow', d.wf]); if (d.person) parts.push(['person', 'Person', d.person]);
+    $('trail').innerHTML = '<span class="wsl">Showing</span>' + (parts.length ? parts.map(function (p) {
+      return '<span class="chip"><small>' + p[1] + '</small>' + esc(p[2]) + '<button type="button" data-x="' + p[0] + '" aria-label="Remove ' + p[1] + ' filter">×</button></span>';
+    }).join('<span class="wsl">›</span>') + ' <button class="link" id="clear" type="button">Clear all</button>' : '<span class="chip" style="padding-right:10px">Everything you can report on</span>');
+  }
+
+  function renderTiles(rows, prev) {
+    var c = sum(rows, function (r) { return r.cost; }), pc = sum(prev, function (r) { return r.cost; });
+    var d = pc ? (c - pc) / pc : null;
+    var delta = d === null ? '' : ' <span class="delta ' + (d > 0 ? 'up' : 'down') + '">' + (d > 0 ? '▲ ' : '▼ ') + Math.abs(Math.round(d * 100)) + '%</span>';
+    var t = [['main', 'Total cost', usd(c) + delta, 'vs the previous ' + S.days + ' days'], ['', 'Workspaces', uniq(rows, function (r) { return r.ws; }), 'with usage'],
+      ['', 'Workflows', uniq(rows, function (r) { return r.wf; }), 'with usage'], ['', 'Runs', rows.length, rows.length ? usd(c / rows.length) + ' average' : '—'],
+      ['', 'People', uniq(rows, function (r) { return r.person; }), 'with usage']];
+    $('tiles').innerHTML = t.map(function (x) { return '<div class="tile ' + x[0] + '"><div class="k">' + x[1] + '</div><div class="v">' + x[2] + '</div><div class="s">' + x[3] + '</div></div>'; }).join('');
+  }
+
+  // ---------- chart 1: stacked daily cost ----------
+  var KCOL = { live: 'var(--ok)', test: 'var(--warn)', building: 'var(--accent)' }, KWORD = { live: 'Live runs', test: 'Testing', building: 'Building' };
+  function niceMax(v) { var p = Math.pow(10, Math.floor(Math.log10(v || 1))), f = v / p; return (f <= 1 ? 1 : f <= 2 ? 2 : f <= 5 ? 5 : 10) * p; }
+  function renderDaily(rows) {
+    var n = S.days, W = 800, H = 230, L = 46, R = 8, T = 10, B = 24, pw = W - L - R, ph = H - T - B;
+    var b = []; for (var k = 0; k < n; k++) b.push({ live: 0, test: 0, building: 0 });
+    rows.forEach(function (r) { b[n - 1 - r.age][r.purpose] += r.cost; });
+    var max = niceMax(Math.max.apply(null, b.map(function (x) { return x.live + x.test + x.building; }).concat([0.001])));
+    var bw = pw / n, h = '<g class="grid">';
+    for (var t = 0; t <= 4; t++) { var y = T + ph - ph * t / 4; h += '<line x1="' + L + '" x2="' + (W - R) + '" y1="' + y + '" y2="' + y + '"/><text x="' + (L - 6) + '" y="' + (y + 4) + '" text-anchor="end">' + usd(max * t / 4) + '</text>'; }
+    h += '</g>';
+    b.forEach(function (d, i) {
+      var y = T + ph, x = L + i * bw, tot = d.live + d.test + d.building;
+      var tipHtml = '<b>' + dayLabel(n - 1 - i) + '</b><br>' + usd(tot) + ' total<br>Live ' + usd(d.live) + '<br>Testing ' + usd(d.test) + '<br>Building ' + usd(d.building);
+      h += '<g data-tip="' + esc(tipHtml) + '">';
+      ['building', 'test', 'live'].forEach(function (k2) { var bh = d[k2] / max * ph; y -= bh; if (bh > 0) h += '<rect x="' + (x + bw * 0.14).toFixed(2) + '" y="' + y.toFixed(2) + '" width="' + (bw * 0.72).toFixed(2) + '" height="' + bh.toFixed(2) + '" fill="' + KCOL[k2] + '"/>'; });
+      h += '<rect x="' + x.toFixed(2) + '" y="' + T + '" width="' + bw.toFixed(2) + '" height="' + ph + '" fill="transparent"/></g>';
+    });
+    var xs = [0, Math.floor(n / 2), n - 1]; xs.forEach(function (i, j) { h += '<text x="' + (L + i * bw + bw / 2) + '" y="' + (H - 6) + '" text-anchor="' + (j === 0 ? 'start' : j === 2 ? 'end' : 'middle') + '">' + dayLabel(n - 1 - i) + '</text>'; });
+    $('daily').innerHTML = '<svg viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Cost per day, split by live, test and building">' + h + '</svg>';
+    var tot = { live: 0, test: 0, building: 0 }; rows.forEach(function (r) { tot[r.purpose] += r.cost; });
+    var all = tot.live + tot.test + tot.building || 1;
+    $('kindLegend').innerHTML = ['live', 'test', 'building'].map(function (k2) { return '<span><i style="background:' + KCOL[k2] + '"></i>' + KWORD[k2] + ' ' + usd(tot[k2]) + ' · ' + Math.round(tot[k2] / all * 100) + '%</span>'; }).join('');
+  }
+
+  // ---------- chart 2: treemap ----------
+  function squarify(items, x, y, w, h) {
+    var out = [], total = sum(items, function (i) { return i.v; }) || 1;
+    var rest = items.filter(function (i) { return i.v > 0; }).map(function (i) { return Object.assign({}, i, { a: i.v / total * w * h }); });
+    function worst(row, side) { var s = sum(row, function (r) { return r.a; }), mx = Math.max.apply(null, row.map(function (r) { return r.a; })), mn = Math.min.apply(null, row.map(function (r) { return r.a; })); return Math.max(side * side * mx / (s * s), s * s / (side * side * mn)); }
+    while (rest.length) {
+      var side = Math.min(w, h), row = [rest[0]], j = 1;
+      while (j < rest.length) { var t = row.concat(rest[j]); if (worst(t, side) <= worst(row, side)) { row = t; j++; } else break; }
+      rest = rest.slice(row.length);
+      var s = sum(row, function (r) { return r.a; });
+      if (w >= h) { var cw = s / h, cy = y; row.forEach(function (r) { var rh = r.a / cw; out.push(Object.assign({}, r, { x: x, y: cy, w: cw, h: rh })); cy += rh; }); x += cw; w -= cw; }
+      else { var rh2 = s / w, cx = x; row.forEach(function (r) { var rw = r.a / rh2; out.push(Object.assign({}, r, { x: cx, y: y, w: rw, h: rh2 })); cx += rw; }); y += rh2; h -= rh2; }
+    }
+    return out;
+  }
+  function renderTreemap(rows) {
+    var wss = group(rows, function (r) { return r.ws; }, function (r) { return r.ws; });
+    var top = squarify(wss.map(function (g) { return { v: g.cost, g: g }; }), 0, 0, 100, 50), h = '';
+    var pct = function (v, base) { return (v / base * 100).toFixed(3) + '%'; };
+    top.forEach(function (t) {
+      h += '<div class="ws" style="left:' + pct(t.x, 100) + ';top:' + pct(t.y, 50) + ';width:' + pct(t.w, 100) + ';height:' + pct(t.h, 50) + ';background:' + WSCOL[t.g.name] + '">';
+      var hdr = 3.4, wfs = group(t.g.rows, function (r) { return r.wf; }, function (r) { return r.wf; });
+      var inner = squarify(wfs.map(function (g) { return { v: g.cost, g: g }; }), 0, hdr, t.w, Math.max(t.h - hdr, 0.1));
+      h += '<button class="wt" type="button" data-tmws="' + esc(t.g.name) + '" data-tip="' + esc('<b>' + t.g.name + '</b><br>' + usd(t.g.cost) + ' · ' + t.g.runs + ' runs') + '">' + esc(t.g.name) + ' · ' + usd(t.g.cost) + '</button>';
+      inner.forEach(function (c) {
+        var big = c.w > 14 && c.h > 7;
+        h += '<button type="button" class="wl" data-tmwf="' + esc(c.g.name) + '" data-tmw="' + esc(t.g.name) + '" style="left:' + pct(c.x, t.w) + ';top:' + pct(c.y, t.h) + ';width:' + pct(c.w, t.w) + ';height:' + pct(c.h, t.h) + ';background:color-mix(in srgb,' + WSCOL[t.g.name] + ' 70%, #000)" data-tip="' + esc('<b>' + c.g.name + '</b><br>' + t.g.name + '<br>' + usd(c.g.cost) + ' · ' + c.g.runs + ' runs · ' + Math.round(c.g.share * 100) + '% of this scope') + '">' + (big ? '<b>' + esc(c.g.name) + '</b>' + usd(c.g.cost) : '') + '</button>';
+      });
+      h += '</div>';
+    });
+    $('treemap').innerHTML = h || '<p style="padding:16px;color:var(--muted)">No usage in this selection.</p>';
+  }
+
+  // ---------- chart 3: ranked bars (+ table) ----------
+  var LENS = [['workspaces', 'Workspaces'], ['workflows', 'Workflows'], ['people', 'People'], ['runs', 'Runs']];
+  function lensGroups(rows) {
+    if (S.lens === 'workspaces') return group(rows, function (r) { return r.ws; }, function (r) { return r.ws; });
+    if (S.lens === 'workflows') return group(rows, function (r) { return r.wf; }, function (r) { return r.wf; });
+    return group(rows, function (r) { return r.person; }, function (r) { return r.person; });
+  }
+  function renderBars(rows) {
+    var cnt = { workspaces: uniq(rows, function (r) { return r.ws; }), workflows: uniq(rows, function (r) { return r.wf; }), people: uniq(rows, function (r) { return r.person; }), runs: rows.length };
+    $('lenses').innerHTML = LENS.map(function (l) { return '<button type="button" role="tab" data-l="' + l[0] + '" aria-selected="' + (S.lens === l[0]) + '">' + l[1] + '<span class="c">' + cnt[l[0]] + '</span></button>'; }).join('');
+    var title = { workspaces: 'Cost by workspace', workflows: 'Cost by workflow', people: 'Cost by person', runs: 'Runs, most expensive first' }[S.lens];
+    $('barsTitle').textContent = title;
+    $('barsSub').textContent = S.lens === 'runs' ? 'Each row is one run.' : 'Click a bar to drill in.';
+    var el = $('bars'), tbl = $('tbl'), tg = $('tblToggle');
+    if (S.lens === 'runs') {
+      el.innerHTML = ''; tg.hidden = true; tbl.hidden = false;
+      var top = rows.slice().sort(function (a, b) { return b.cost - a.cost; }).slice(0, 15);
+      tbl.style.borderTop = '0'; tbl.style.marginTop = '0';
+      tbl.innerHTML = '<table><thead><tr><th>When</th><th>Workflow</th><th>Person</th><th>Kind</th><th>Outcome</th><th class="num">Cost</th></tr></thead><tbody>' + top.map(function (r) {
+        return '<tr><td>' + dayLabel(r.age) + ' ' + String(r.hour).padStart(2, '0') + ':00</td><td>' + esc(r.wf) + '</td><td>' + esc(r.person) + '</td><td>' + KWORD[r.purpose] + '</td><td><span class="pill">' + r.status + '</span></td><td class="num">' + usd(r.cost) + '</td></tr>';
+      }).join('') + '</tbody></table><p class="foot" style="margin:8px 10px">Top 15 of ' + rows.length + ' runs. The real page loads 50 at a time; the download carries every run.</p>';
+      return;
+    }
+    tg.hidden = false; tbl.style.borderTop = ''; tbl.style.marginTop = '';
+    var gs = lensGroups(rows), max = gs.length ? gs[0].cost : 1, shown = gs.slice(0, 8), rest = gs.slice(8);
+    var h = shown.map(function (g, i) {
+      var col = S.lens === 'workspaces' ? WSCOL[g.name] : S.lens === 'workflows' ? WSCOL[g.ws] : 'var(--accent)';
+      var sub = S.lens === 'workflows' ? '<small>' + esc(g.ws) + '</small>' : '';
+      return '<button type="button" class="row" data-g="' + i + '" data-tip="' + esc('<b>' + g.name + '</b><br>' + usd(g.cost) + ' · ' + g.runs + ' runs<br>' + Math.round(g.share * 100) + '% of this scope') + '"><span class="nm">' + esc(g.name) + sub + '</span><span class="tr"><span class="fl" style="display:block;width:' + (g.cost / max * 100) + '%;background:' + col + '"></span></span><span class="val">' + usd(g.cost) + '<small>' + Math.round(g.share * 100) + '%</small></span></button>';
+    }).join('');
+    if (rest.length) { var rc = sum(rest, function (g) { return g.cost; }); h += '<div class="row" style="opacity:.75"><span class="nm">Other (' + rest.length + ')</span><span class="tr"><span class="fl" style="display:block;width:' + (rc / max * 100) + '%;background:var(--muted)"></span></span><span class="val">' + usd(rc) + '</span></div>'; }
+    el.innerHTML = h || '<p style="color:var(--muted)">No usage in this selection.</p>';
+    el._groups = shown;
+    tg.textContent = S.table ? 'Hide table' : 'Show table';
+    tbl.hidden = !S.table;
+    if (S.table) tbl.innerHTML = '<table><thead><tr><th>' + { workspaces: 'Workspace', workflows: 'Workflow', people: 'Person' }[S.lens] + '</th><th class="num">Workflows</th><th class="num">People</th><th class="num">Runs</th><th class="num">Cost</th><th class="num">Share</th></tr></thead><tbody>' + gs.map(function (g) {
+      return '<tr><td>' + esc(g.name) + '</td><td class="num">' + g.wfs + '</td><td class="num">' + g.ppl + '</td><td class="num">' + g.runs + '</td><td class="num">' + usd(g.cost) + '</td><td class="num">' + Math.round(g.share * 100) + '%</td></tr>';
+    }).join('') + '</tbody></table>';
+  }
+
+  // ---------- advanced ----------
+  function renderPrev(rows, prev) {
+    var n = S.days, W = 800, H = 220, L = 46, R = 10, T = 10, B = 24, pw = W - L - R, ph = H - T - B;
+    var a = new Array(n).fill(0), p = new Array(n).fill(0);
+    rows.forEach(function (r) { a[n - 1 - r.age] += r.cost; });
+    prev.forEach(function (r) { p[n - 1 - (r.age - n)] += r.cost; });
+    var max = niceMax(Math.max.apply(null, a.concat(p).concat([0.001])));
+    var X = function (i) { return L + (n === 1 ? pw / 2 : i / (n - 1) * pw); }, Y = function (v) { return T + ph - v / max * ph; };
+    var line = function (arr) { return arr.map(function (v, i) { return (i ? 'L' : 'M') + X(i).toFixed(1) + ' ' + Y(v).toFixed(1); }).join(' '); };
+    var h = '<g class="grid">';
+    for (var t = 0; t <= 4; t++) { var y = T + ph - ph * t / 4; h += '<line x1="' + L + '" x2="' + (W - R) + '" y1="' + y + '" y2="' + y + '"/><text x="' + (L - 6) + '" y="' + (y + 4) + '" text-anchor="end">' + usd(max * t / 4) + '</text>'; }
+    h += '</g><path d="' + line(p) + '" fill="none" stroke="var(--muted)" stroke-width="1.6" stroke-dasharray="4 3"/>';
+    h += '<path d="' + line(a) + ' L' + X(n - 1).toFixed(1) + ' ' + (T + ph) + ' L' + X(0).toFixed(1) + ' ' + (T + ph) + ' Z" fill="var(--accent)" opacity=".12"/>';
+    h += '<path d="' + line(a) + '" fill="none" stroke="var(--accent)" stroke-width="2"/><circle cx="' + X(n - 1) + '" cy="' + Y(a[n - 1]) + '" r="3.5" fill="var(--accent)"/>';
+    for (var i2 = 0; i2 < n; i2++) h += '<rect x="' + (X(i2) - pw / n / 2) + '" y="' + T + '" width="' + (pw / n) + '" height="' + ph + '" fill="transparent" data-tip="' + esc('<b>Day ' + (i2 + 1) + ' of ' + n + '</b><br>This period ' + usd(a[i2]) + '<br>Previous ' + usd(p[i2])) + '"/>';
+    h += '<text x="' + L + '" y="' + (H - 6) + '">' + dayLabel(n - 1) + '</text><text x="' + (W - R) + '" y="' + (H - 6) + '" text-anchor="end">' + dayLabel(0) + '</text>';
+    $('prevLine').innerHTML = '<svg viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Cost per day, this period against the previous one">' + h + '</svg>';
+    var c = sum(rows, function (r) { return r.cost; }), pc = sum(prev, function (r) { return r.cost; });
+    $('prevSub').textContent = pc ? 'Total ' + usd(c) + ' against ' + usd(pc) + ' before: ' + (c >= pc ? 'up ' : 'down ') + Math.abs(Math.round((c - pc) / pc * 100)) + '%.' : 'There is no earlier period to compare with.';
+  }
+  function renderScatter(rows) {
+    var gs = group(rows, function (r) { return r.wf; }, function (r) { return r.wf; });
+    var W = 800, H = 250, L = 52, R = 14, T = 12, B = 30, pw = W - L - R, ph = H - T - B;
+    var mx = Math.max.apply(null, gs.map(function (g) { return g.runs; }).concat([1])) * 1.1, my = niceMax(Math.max.apply(null, gs.map(function (g) { return g.cost / g.runs; }).concat([0.001])) * 1.1), mc = Math.max.apply(null, gs.map(function (g) { return g.cost; }).concat([1]));
+    var h = '<g class="grid">';
+    for (var t = 0; t <= 4; t++) { var y = T + ph - ph * t / 4; h += '<line x1="' + L + '" x2="' + (W - R) + '" y1="' + y + '" y2="' + y + '"/><text x="' + (L - 6) + '" y="' + (y + 4) + '" text-anchor="end">' + usd(my * t / 4) + '</text>'; }
+    h += '</g><text x="' + (W - R) + '" y="' + (H - 6) + '" text-anchor="end">runs →</text><text x="' + L + '" y="' + (T + 2) + '" dy="-1">cost per run ↑</text>';
+    gs.forEach(function (g, i) {
+      var x = L + g.runs / mx * pw, y2 = T + ph - (g.cost / g.runs) / my * ph, r = 5 + Math.sqrt(g.cost / mc) * 15;
+      h += '<circle class="bar" data-sc="' + i + '" cx="' + x.toFixed(1) + '" cy="' + y2.toFixed(1) + '" r="' + r.toFixed(1) + '" fill="' + WSCOL[g.ws] + '" fill-opacity=".72" stroke="var(--surface)" stroke-width="1.5" data-tip="' + esc('<b>' + g.name + '</b><br>' + g.ws + '<br>' + g.runs + ' runs · ' + usd(g.cost / g.runs) + ' per run<br>' + usd(g.cost) + ' total') + '"/>';
+    });
+    $('scatter').innerHTML = '<svg viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Runs against cost per run, one dot per workflow">' + h + '</svg>';
+    $('scatter')._groups = gs;
+  }
+  function renderOutcome(rows) {
+    var by = { succeeded: 0, failed: 0, stopped: 0 }, cnt = { succeeded: 0, failed: 0, stopped: 0 };
+    rows.forEach(function (r) { by[r.status] += r.cost; cnt[r.status]++; });
+    var total = by.succeeded + by.failed + by.stopped || 1, col = { succeeded: 'var(--ok)', failed: 'var(--bad)', stopped: 'var(--muted)' };
+    $('outcome').innerHTML = ['succeeded', 'failed', 'stopped'].map(function (k) {
+      return '<div class="row" data-tip="' + esc('<b>' + k + '</b><br>' + cnt[k] + ' runs · ' + usd(by[k])) + '"><span class="nm">' + k[0].toUpperCase() + k.slice(1) + '<small>' + cnt[k] + ' runs</small></span><span class="tr"><span class="fl" style="display:block;width:' + (by[k] / total * 100) + '%;background:' + col[k] + '"></span></span><span class="val">' + usd(by[k]) + '<small>' + Math.round(by[k] / total * 100) + '%</small></span></div>';
+    }).join('');
+  }
+  function renderHeat(rows) {
+    var grid = []; for (var d = 0; d < 7; d++) grid.push(new Array(24).fill(0));
+    rows.forEach(function (r) { grid[r.dow][r.hour] += r.cost; });
+    var max = Math.max.apply(null, [].concat.apply([], grid).concat([0.0001])), names = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    var h = '<span></span>'; for (var hr = 0; hr < 24; hr++) h += '<span class="hh">' + (hr % 6 === 0 ? hr : '') + '</span>';
+    grid.forEach(function (row, di) {
+      h += '<span class="d">' + names[di] + '</span>';
+      row.forEach(function (v, hi) { h += '<span class="h" style="opacity:' + (v ? 0.12 + 0.88 * v / max : 0.06).toFixed(2) + '" data-tip="' + esc('<b>' + names[di] + ' ' + String(hi).padStart(2, '0') + ':00</b><br>' + usd(v)) + '"></span>'; });
+    });
+    $('heat').innerHTML = h;
+  }
+
+  function render() {
+    var rows = current(), prev = previous();
+    renderControls(); renderTiles(rows, prev);
+    if (S.tab === 'o') { renderDaily(rows); renderTreemap(rows); renderBars(rows); }
+    else { renderPrev(rows, prev); renderScatter(rows); renderOutcome(rows); renderHeat(rows); }
+    hideTip();
+  }
+
+  // ---------- events ----------
+  $('period').addEventListener('click', function (e) { var d = e.target.getAttribute('data-d'); if (d) { S.days = +d; render(); } });
+  $('wsChips').addEventListener('click', function (e) {
+    var b = e.target.closest('[data-w]'); if (!b) return; var w = b.getAttribute('data-w');
+    var onCount = WS.filter(function (x) { return !S.off[x]; }).length;
+    if (!S.off[w] && onCount === 1) return;          // keep at least one workspace
+    S.off[w] = !S.off[w]; if (S.drill.ws && S.off[S.drill.ws]) { S.drill.ws = null; S.drill.wf = null; } render();
+  });
+  $('trail').addEventListener('click', function (e) {
+    var x = e.target.getAttribute('data-x');
+    if (x) { S.drill[x] = null; if (x === 'ws') S.drill.wf = null; render(); }
+    if (e.target.id === 'clear') { S.drill = { ws: null, wf: null, person: null }; S.lens = 'workspaces'; render(); }
+  });
+  $('lenses').addEventListener('click', function (e) { var b = e.target.closest('[data-l]'); if (b) { S.lens = b.getAttribute('data-l'); render(); } });
+  $('tblToggle').addEventListener('click', function () { S.table = !S.table; render(); });
+  $('bars').addEventListener('click', function (e) {
+    var b = e.target.closest('[data-g]'); if (!b) return; var g = $('bars')._groups[+b.getAttribute('data-g')];
+    if (S.lens === 'workspaces') { S.drill.ws = g.name; S.lens = 'workflows'; }
+    else if (S.lens === 'workflows') { S.drill.ws = g.ws; S.drill.wf = g.name; S.lens = 'runs'; }
+    else { S.drill.person = g.name; S.lens = 'workflows'; }
+    render();
+  });
+  $('treemap').addEventListener('click', function (e) {
+    var wf = e.target.closest('[data-tmwf]'), w = e.target.closest('[data-tmws]');
+    if (wf) { S.drill.ws = wf.getAttribute('data-tmw'); S.drill.wf = wf.getAttribute('data-tmwf'); S.lens = 'runs'; render(); }
+    else if (w) { S.drill.ws = w.getAttribute('data-tmws'); S.lens = 'workflows'; render(); }
+  });
+  $('scatter').addEventListener('click', function (e) {
+    var c = e.target.closest('[data-sc]'); if (!c) return; var g = $('scatter')._groups[+c.getAttribute('data-sc')];
+    S.drill.ws = g.ws; S.drill.wf = g.name; S.lens = 'runs'; S.tab = 'o'; tabs(); render();
+  });
+  function tabs() {
+    $('tab-o').setAttribute('aria-selected', String(S.tab === 'o')); $('tab-a').setAttribute('aria-selected', String(S.tab === 'a'));
+    $('overview').style.display = S.tab === 'o' ? 'flex' : 'none'; $('advanced').style.display = S.tab === 'a' ? 'flex' : 'none';
+  }
+  $('tab-o').onclick = function () { S.tab = 'o'; tabs(); render(); };
+  $('tab-a').onclick = function () { S.tab = 'a'; tabs(); render(); };
+  tabs(); render();
+})();
+</script>
+</body>
+</html>

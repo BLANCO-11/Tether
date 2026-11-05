@@ -1,0 +1,86 @@
+# Baseline — taken 2026-09-13, BEFORE any task in tasks.md ran
+# Commit: bcd45bb  Branch: 20260910-130448-feature-rbac-permissions
+# Node: v22.23.2 (~/.local/share/node-versions/v22.23.2/bin — vitest.config.ts throws below 22)
+
+## T001 — pnpm --filter @foundry/client test
+
+Test Files  2 failed | 157 passed (159)
+     Tests  3 failed | 2542 passed (2545)
+    Errors  10 errors
+
+THE THREE FAILURES, BY NAME. Any failure NOT on this list is ours.
+
+  1. src/app/(app)/runs/[id]/page.test.tsx
+       > the live run stops fabricating > does not print the literal DRAFT V4 eyebrow
+  2. src/app/(app)/runs/[id]/page.test.tsx
+       > the live run stops fabricating > the sandbox caveat DOES render over a sandbox run
+  3. src/lib/workspace-placeholder.test.ts
+       > getMe never sends the placeholder
+       > CONTROL: getMe is still the only consumer of the raw context value
+
+  The 10 "errors" are all one cause: runs/[id]/page.test.tsx's `vi.mock("@/lib/api")`
+  omits `emailsForRun`, which ToolActivity.tsx reads. A whole-module vi.mock returns
+  undefined for anything omitted. Documented as flaky/pre-existing in CLAUDE.md; verified
+  present at HEAD before this feature started.
+
+  ⚠ The run is UNSTABLE at the margin: an earlier pass of the same command reported the
+  same 2 files but the third assertion in runs/[id] ("the sandbox caveat does NOT render
+  over a production run") also appeared. Treat "2 files / 3 tests" as the ceiling and the
+  FILE names as the stable part.
+
+## T001 — pnpm --filter @foundry/client typecheck
+
+  Exit 2, FOUR errors, all in .next/types, all stale build artefacts:
+    .next/types/app/(app)/admin/downtime/page.ts(2,24)  TS2307
+    .next/types/app/(app)/admin/downtime/page.ts(5,29)  TS2307
+    .next/types/app/(app)/admin/policies/page.ts(2,24)  TS2307
+    .next/types/app/(app)/admin/policies/page.ts(5,29)  TS2307
+
+  ⚠ `admin/downtime` and `admin/policies` DO NOT EXIST in src. These are not source
+  errors and they are not ours. Zero errors under src/.
+
+## T001 — bash scripts/ui-honesty-check.sh
+
+  239 PASS / 0 FAIL
+
+## T002 — route inventory under app/(app)/
+
+  37 page.tsx files. The two this feature DELETES (Phase 5, T055):
+    app/(app)/organization/platform-roles/page.tsx
+    app/(app)/organization/roles/page.tsx
+  So the post-feature count is 35. ui-honesty-check.sh derives this by walking the
+  filesystem, so the count follows the deletion on its own.
+
+  Full list at baseline:
+    admin/audit  admin/break-glass  admin/gates  admin/incidents  admin/members  admin
+    ai-provider  approvals/[id]  approvals  apps  dashboard  data-sources/[id]
+    data-sources/new  data-sources  email-box  flows/[id]/builder  flows/[id]
+    flows/[id]/publish  flows/new  flows  history  incidents/break-glass  incidents
+    keys  live  no-access  organization  organization/platform-roles  organization/roles
+    resources/[id]/impact  resources/[id]  resources/new  resources  runs/[id]
+    runs/[id]/recover  tools  triggers
+
+## T002 — lib/alpha-registry.ts keys
+
+  37 keys, one per page. The two deleted in Phase 5 have entries (T070 removes them):
+    /organization/platform-roles
+    /organization/roles
+
+## T003 — the Phase 1 premise, CHECKED not assumed
+
+  `me.capabilities` carries PERMISSION KEYS and cannot contain "admin".
+
+  Evidence:
+    - services/workspace-member-capabilities.service.ts:35
+        export const CAPABILITIES = WORKSPACE_PERMISSIONS;
+    - services/workspace-member-capabilities.service.ts:26
+        "⚠ getCapabilities DELEGATES to the resolver. It does not re-derive anything."
+    - routes/me.ts:57 calls getCapabilities for the `capabilities` field.
+    - auth/permissions.ts — every key is `<domain>.<action>`; grep for a bare "admin"
+      entry returns nothing.
+    - drizzle/0065_capability_rename.sql:14-15   admin -> DROPPED, platform-admin -> DROPPED
+    - drizzle/0065_capability_rename.sql:95
+        DELETE FROM "workspace_member_capabilities" WHERE "capability" IN ('admin','platform-admin');
+
+  => `!superAdmin && !capabilities.includes("admin")` in app/(app)/admin/members/page.tsx
+     is a DEAD BRANCH. The page is super-admin-only in practice while reading otherwise.

@@ -1,0 +1,19 @@
+# Keep host artifacts out of the build context. Critical: the package Dockerfiles
+# run `pnpm install` first and then `COPY packages/<pkg> packages/<pkg>` — without
+# this, that COPY overlays the host's node_modules (pnpm symlinks into a host-only
+# .pnpm store) on top of the freshly-installed one, breaking module resolution.
+**/node_modules
+**/.next
+**/dist
+**/*.tsbuildinfo
+
+# VCS / local dev noise
+.git
+**/.git
+**/.turbo
+**/coverage
+**/.DS_Store
+
+# Never bake secrets into an image (Dockerfiles inject env at runtime instead).
+**/.env
+**/.env.*
