@@ -27,6 +27,8 @@ secretKeys:
     - AUTH_SECRET
     - LLM_BASE_URL
     - LLM_API_KEY
+    - LLM_MODEL
+    # Legacy names, still read when LLM_MODEL is unset (2026-11-04: one model connection).
     - LLM_REASONING_MODEL
     - LLM_FAST_MODEL
     - OPS_API_KEY

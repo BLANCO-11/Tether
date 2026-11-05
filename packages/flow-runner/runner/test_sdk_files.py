@@ -73,6 +73,33 @@ class SavedFiles(unittest.TestCase):
         sent = json.loads(SEEN[1][2])["params"][0]["attachments"]
         self.assertEqual(sent, [{"name": "LOP report.xlsx", "file": "f-1"}])
 
+    def test_a_missing_attachment_path_names_the_runs_folder_and_sends_nothing(self):
+        with tempfile.TemporaryDirectory() as d:
+            old = os.getcwd()
+            os.chdir(d)
+            try:
+                with self.assertRaisesRegex(foundry.FoundryError, "run's folder") as cm:
+                    foundry.call("foundry_email_send", {"subject": "s", "attachments": [{"name": "r.xlsx", "path": "report.xlsx"}]})
+            finally:
+                os.chdir(old)
+        self.assertNotIn("It is at", str(cm.exception))
+        self.assertEqual([s for s in SEEN if s[0] == "/api/steps/files"], [])
+
+    def test_a_file_in_another_steps_folder_is_pointed_to(self):
+        with tempfile.TemporaryDirectory() as d:
+            os.makedirs(os.path.join(d, "steps", "build_report"))
+            with open(os.path.join(d, "steps", "build_report", "report.xlsx"), "wb") as f:
+                f.write(b"PK")
+            old = os.getcwd()
+            os.chdir(d)
+            try:
+                with self.assertRaises(foundry.FoundryError) as cm:
+                    foundry.save_file("report.xlsx")
+            finally:
+                os.chdir(old)
+        self.assertIn("It is at steps/build_report/report.xlsx", str(cm.exception))
+        self.assertEqual(SEEN, [])
+
     def test_an_oversized_call_is_refused_before_sending(self):
         with self.assertRaisesRegex(foundry.FoundryError, r"at most 5\.0 MB.*attach it by path"):
             foundry.call("foundry_email_send", {"subject": "s", "body": "x" * (6 * 1024 * 1024)})
@@ -88,6 +115,66 @@ class SavedFiles(unittest.TestCase):
         sent = json.loads(SEEN[1][2])["params"][0]
         self.assertEqual(sent["attachments"], [{"name": "Muster Report.xlsx", "file": "f-1"}])
         self.assertNotIn("attach_rows", sent)
+
+    def test_write_xlsx_writes_the_rows_as_a_sheet(self):
+        import openpyxl
+
+        path = os.path.join(tempfile.mkdtemp(), "r.xlsx")
+        rows = [{"emp": "E1", "hours": 8}, {"emp": "E2", "note": None, "tags": ["a"]}]
+        self.assertEqual(foundry.write_xlsx(path, rows), path)
+        got = [list(r) for r in openpyxl.load_workbook(path).active.iter_rows(values_only=True)]
+        self.assertEqual(got, [["emp", "hours", "note", "tags"], ["E1", 8, None, None], ["E2", None, None, '["a"]']])
+
+    def test_write_xlsx_refuses_more_rows_than_a_sheet_holds(self):
+        old, foundry.XLSX_MAX_ROWS = foundry.XLSX_MAX_ROWS, 2
+        try:
+            with self.assertRaisesRegex(foundry.FoundryError, "Write a CSV instead"):
+                foundry.write_xlsx(os.path.join(tempfile.mkdtemp(), "r.xlsx"), [{"a": 1}] * 3)
+        finally:
+            foundry.XLSX_MAX_ROWS = old
+
+    def test_write_xlsx_writes_several_sheets_in_order(self):
+        import openpyxl
+
+        path = os.path.join(tempfile.mkdtemp(), "r.xlsx")
+        data = {"Attendance Report": [{"emp": "E1", "hours": 8}], "Report": [{"total": 8}, {"total": 9, "x": "y"}]}
+        self.assertEqual(foundry.write_xlsx(path, data), path)
+        wb = openpyxl.load_workbook(path)
+        self.assertEqual(wb.sheetnames, ["Attendance Report", "Report"])
+        self.assertEqual([list(r) for r in wb["Attendance Report"].iter_rows(values_only=True)],
+                         [["emp", "hours"], ["E1", 8]])
+        self.assertEqual([list(r) for r in wb["Report"].iter_rows(values_only=True)],
+                         [["total", "x"], [8, None], [9, "y"]])
+
+    def test_write_xlsx_sheet_validation_errors_write_nothing(self):
+        cases = [
+            ({}, "at least one sheet"),
+            ({"A": {"a": 1}}, "'A' must be a list"),
+            ({"": [{"a": 1}]}, "not allowed"),
+            ({"x" * 32: [{"a": 1}]}, "not allowed"),
+            ({"Bad/Name": [{"a": 1}]}, "not allowed"),
+            ({"Bad[1]": [{"a": 1}]}, "not allowed"),
+            ({"'Quoted": [{"a": 1}]}, "not allowed"),
+            ({"History": [{"a": 1}]}, "not allowed"),
+            ({5: [{"a": 1}]}, "not allowed"),
+            ({"Data": [{"a": 1}], "data": [{"a": 1}]}, "'data' is used twice"),
+            ("rows", "list of dicts or a dict"),
+        ]
+        for arg, msg in cases:
+            path = os.path.join(tempfile.mkdtemp(), "r.xlsx")
+            with self.assertRaisesRegex(foundry.FoundryError, msg):
+                foundry.write_xlsx(path, arg)
+            self.assertFalse(os.path.exists(path), msg)
+
+    def test_write_xlsx_row_cap_applies_per_sheet_and_names_it(self):
+        old, foundry.XLSX_MAX_ROWS = foundry.XLSX_MAX_ROWS, 2
+        path = os.path.join(tempfile.mkdtemp(), "r.xlsx")
+        try:
+            with self.assertRaisesRegex(foundry.FoundryError, "Sheet 'Big' has 3 rows.*Write a CSV instead"):
+                foundry.write_xlsx(path, {"Small": [{"a": 1}], "Big": [{"a": 1}] * 3})
+        finally:
+            foundry.XLSX_MAX_ROWS = old
+        self.assertFalse(os.path.exists(path))
 
     def test_rows_past_the_file_limit_become_a_zipped_csv(self):
         old = foundry.FILE_MAX_BYTES

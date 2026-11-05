@@ -41,6 +41,8 @@ W = {
  ('POST','pi-builder/sessions/:sessionId/compact'):'flows.write',
  ('POST','pi-builder/sessions/:sessionId/mode'):'flows.write',
  ('POST','pi-builder/sessions/:sessionId/thinking'):'flows.write',
+ ('POST','pi-builder/sessions/:sessionId/model'):'flows.write',
+ ('POST','pi-builder/sessions/:sessionId/steer'):'flows.write',
  # Workflow references (2026-10-17): listing what can be referenced and the chat's references is reading; adding,
  # moving a pin and removing one change what the build learns from. Same-workspace and per-chat rules are in the service.
  ('GET','pi-builder/sessions/:sessionId/referenceable'):'flows.read',
@@ -263,6 +265,7 @@ D = {
  ('GET','/api/reports/summary'):'— (the report spans workspaces; `reports.read` is checked per workspace inside, and the answer is limited to those)',
  ('GET','/api/reports/runs'):'— (the report spans workspaces; `reports.read` is checked per workspace inside, and the answer is limited to those)',
  ('GET','/api/reports/export'):'— (the report spans workspaces; `reports.read` is checked per workspace inside, and the answer is limited to those)',
+ ('GET','/api/reports/forecast'):'— (the report spans workspaces; `reports.read` is checked per workspace inside, and the answer is limited to those)',
  ('POST','/api/reports/email'):'— (the report spans workspaces; `reports.read` is checked per workspace inside, and the answer is limited to those)',
  ('GET','/api/invitations'):'— (an invitation spans workspaces; `members.grant` is checked per workspace inside, the platform role by the grantable check)',
  ('POST','/api/invitations'):'— (an invitation spans workspaces; `members.grant` is checked per workspace inside, the platform role by the grantable check)',
@@ -275,11 +278,7 @@ D = {
  ('GET','/api/engine/plugins/:name/credentials'):'requireIdentity',
  ('GET','/api/signals'):'platform.signals.read',
  ('GET','/api/observability'):'platform.signals.read',
- ('GET','/api/generation/llm/provider'):'requireIdentity',
- ('POST','/api/generation/llm/models'):'requireIdentity',
- ('POST','/api/generation/llm/test'):'requireIdentity',
- ('PUT','/api/generation/llm/provider'):'platform.generation.write',
- ('DELETE','/api/generation/llm/provider'):'platform.generation.write',
+# 2026-11-04: the builder-model routes are gone; /api/runtime-model/* is the one model connection.
  # The runtime model (AI models → Runtime), served by Foundry since 2026-10-30 (was /api/ops/llm/* through ops-api).
  ('GET','/api/runtime-model/provider'):'platform.toolmodel.read',
  ('POST','/api/runtime-model/models'):'platform.toolmodel.read',

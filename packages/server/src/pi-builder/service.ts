@@ -32,7 +32,9 @@ import { confined, folderUsage, readBundle, restoreWorkflowSnapshot, workflowSna
 import { explainModelError, turnFailure } from "./forge-errors.js";
 import { existsSync, lstatSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { MODE_NAME, writeSystemPrompt, type ChatMode } from "./instructions.js";
-import { DEFAULT_THINKING, isThinkingLevel, reasoningEffort, type ThinkingLevel } from "./thinking.js";
+import { resolveGenerationProvider } from "../services/generation-provider.service.js";
+import { bareModel, effectiveModel, modelChoices, modelNote, type Generation } from "./model-choice.js";
+import { DEFAULT_THINKING, isThinkingLevel, reasoningEffort, thinkingNote, type ThinkingLevel } from "./thinking.js";
 import { MAX_REFERENCES, cardsBlock, clearReferences, writeReferences } from "./references.js";
 import {
   folderRefs,
@@ -69,6 +71,8 @@ import {
   type PiAttachment,
 } from "./attachments.js";
 import { SANDBOXES_ROOT, TEMPLATE_ROOT } from "./paths.js";
+import { allowedEmptyOutputs, emptyReadsOf, filesBesideTables, largeTablesRead, realDataVerdict } from "./test-data-kind.js";
+import { droppedSources, fixPrompt, noProgress, routeFailure, sourceList } from "./fix-loop.js";
 import { firstNameOf, newWelcome, savedWelcome, type WelcomeCatalogue } from "./welcome.js";
 import { workspaceRepo } from "../repositories/workspace.repo.js";
 import { projectService } from "../services/project.service.js";
@@ -90,6 +94,7 @@ import { accountLine, accountOptions, askMessage, resolveAccount, type AccountOp
 import { inMySpace, piecesUsed, type PiRunAs } from "../services/run-as.service.js";
 import { changesAllowed, checkValues, MAX_PROPOSALS_PER_TURN, outcomeLine, performConfirmed, proposable } from "./agent-changes.js";
 import { datasourceRepo } from "../repositories/datasource.repo.js";
+import { schemaRepo } from "../repositories/schema.repo.js";
 import { filesUsedBy, workspaceFileService } from "../services/workspace-file.service.js";
 import { stepApprovalService } from "../services/step-approval.service.js";
 import { usageService } from "../services/usage.service.js";
@@ -105,6 +110,8 @@ import {
   saysYes,
   withAllowance,
   withoutAllowances,
+  withRoots,
+  keyOf as allowanceKey,
   writeQuestionsRaw,
   writeWorkflowRaw,
   BLANK_PREFIX,
@@ -115,6 +122,7 @@ import {
   type BlankColumns,
   type HeldAllowance,
 } from "./empty-allowance.js";
+import { steerRefusal } from "./steer.js";
 import { checkAnswer, multiChoices, toStored } from "./question-kinds.js";
 import type {
   PiAnswered,
@@ -161,7 +169,7 @@ type Session = {
   messages: PiChatMessage[];
   liveActivities: PiActivity[];
   lastVerify: { ok: boolean; detail: string } | null;
-  lastTestRun: { ok: boolean; detail: string; summary?: string; at: string; runId: string | null; waiting?: PiTestWaiting | null } | null;
+  lastTestRun: { ok: boolean; detail: string; summary?: string; at: string; runId: string | null; waiting?: PiTestWaiting | null; needsRealData: boolean } | null;
   acceptedSnapshotId: string | null;
   savedRevision: number | null;
   createdAt: string;
@@ -189,6 +197,33 @@ type Session = {
   allowancesAtTurn: string[];
   /** Whole-output allowances taken out after a turn and put to the person (`empty-allowance.ts`), until answered. */
   heldAllowances: HeldAllowance[];
+  /**
+   * Whole-output allowances the person answered NO to ("step:output"). Forge adding one again is stripped without
+   * asking: the question was answered. Kept for the session in memory only — a reopened chat may be asked once more.
+   */
+  declinedAllowances: string[];
+  /**
+   * The fix rounds now running follow a test the person started on REAL data. Their automatic re-test reads real data
+   * too: a failure found there and re-tested on invented rows "passes" on data that never showed it (chat eb205c03).
+   * Cleared when the person starts a turn — their consent was to that test and the fixes it set off.
+   */
+  fixOnRealData: boolean;
+  /**
+   * Whether the last test read real data. A card that test raised (blank columns, an empty result) is answered and
+   * the test runs again — on the SAME data (chat 1c2f85e5): a real-data test of 103,974 rows asked about two blank
+   * columns, and the re-test after the answer ran on test data, found no rows for the month and failed.
+   */
+  lastTestRealData: boolean;
+  /**
+   * The failure the running fix round was started on. A fix round that fails with the same text again made no
+   * progress, so the loop stops instead of spending another round. Cleared when the person starts a turn.
+   */
+  lastFixFailure: string | null;
+  /**
+   * 2026-11-03: the large-table list last told to the person in this session ('' = none), so a passing re-test
+   * does not repeat the same note.
+   */
+  lastVolumeNote: string;
   /** The columns the last test run found blank in every row (empty-allowance.ts `blankColumnsOf`); [] once it passed. */
   lastBlank: BlankColumns[];
   /** The last test's empty-data findings, told to Forge with the person's next message (then cleared). */
@@ -206,6 +241,10 @@ type Session = {
   mode: ChatMode;
   /** How hard Forge Agent thinks (0119). Its process runs with this effort; a change restarts it. */
   thinking: ThinkingLevel;
+  /** The model this chat chose (0135); null = the builder's default. A change restarts Forge. */
+  model: string | null;
+  /** The builder's models as last read (resolveGenerationProvider): at open, every turn, and a model change. */
+  generation: Generation | null;
   /** Whether the workspace offers Forge Agent, as last read (at open, at every turn, at a switch). */
   agentAllowed: boolean;
   /** A Forge Agent turn changed the workflow and it was put back: the next turn tells Forge so. */
@@ -242,21 +281,46 @@ type Session = {
 function holdNewAllowances(s: Session): boolean {
   const raw = readWorkflowRaw(s.workspaceId, s.id);
   if (!raw) return false;
-  const held = newWholeOutputAllowances(raw, s.allowancesAtTurn);
-  if (!held.length) return false;
-  writeWorkflowRaw(s.workspaceId, s.id, withoutAllowances(raw, held));
+  const fresh = newWholeOutputAllowances(raw, s.allowancesAtTurn);
+  if (!fresh.length) return false;
+  // An allowance the person already answered NO to is not asked again (it was, in chat eb205c03).
+  const refused = fresh.filter((h) => s.declinedAllowances.includes(allowanceKey(h.stepId, h.output)));
+  let wf = withoutAllowances(raw, refused);
+  for (const h of refused)
+    pushNote(s, `"${h.output}" was answered earlier: it must not come back empty, so Forge's allowance was not applied.`);
+  const held = withRoots(wf, fresh.filter((h) => !refused.includes(h)));
+  // Derived only from allowances the person already accepted: empty because its inputs may be — that answer stands.
+  const inherited = held.filter((h) => h.follows && !h.follows.length);
+  for (const h of inherited) {
+    s.allowancesAtTurn = [...s.allowancesAtTurn, allowanceKey(h.stepId, h.output)];
+    pushNote(s, `"${h.output}" may come back empty: it is built only from outputs you already said may be empty.`);
+  }
+  const pending = held.filter((h) => !inherited.includes(h));
+  wf = withoutAllowances(wf, pending);
+  writeWorkflowRaw(s.workspaceId, s.id, wf);
   // "The whole output may have no rows" is not an answer to "these columns are blank in every row" — the test found
   // rows. Asked as the whole-output question it gets an honest "no" and the columns are left failing (chat 25d67dbd).
   // So on an output the last test found blank columns in, the person is asked about those columns instead.
   const blankOf = (h: HeldAllowance) => s.lastBlank.find((b) => b.stepId === h.stepId && b.output === h.output);
-  const columns = held.filter(blankOf);
-  const ask = held.filter((h) => !blankOf(h));
-  s.heldAllowances = ask;
+  const columns = pending.filter(blankOf);
+  const roots = pending.filter((h) => !blankOf(h) && !h.follows);
+  const rootKeys = new Set(roots.map((h) => allowanceKey(h.stepId, h.output)));
+  // A derived allowance whose roots are not being asked (a blank-columns output instead) is left out with them.
+  const derived = pending
+    .filter((h) => !blankOf(h) && h.follows)
+    .map((h) => ({ ...h, follows: h.follows!.filter((k) => rootKeys.has(k)) }))
+    .filter((h) => h.follows.length);
+  if (!roots.length && !columns.length) {
+    refreshFiles(s);
+    return false;
+  }
+  s.heldAllowances = [...roots, ...derived];
   const existing = (readQuestions(s.workspaceId, s.id).questions ?? []).filter(
     (q) => !q.id.startsWith(HOLD_PREFIX) && !q.id.startsWith(BLANK_PREFIX),
   );
   const blankQs = s.lastBlank.filter((b) => columns.some((h) => h.stepId === b.stepId && h.output === b.output)).map(blankColumnsQuestion);
-  writeQuestionsRaw(s.workspaceId, s.id, [...existing, ...ask.map(heldQuestion), ...blankQs]);
+  const derivedOf = (r: HeldAllowance) => derived.filter((d) => d.follows.includes(allowanceKey(r.stepId, r.output)));
+  writeQuestionsRaw(s.workspaceId, s.id, [...existing, ...roots.map((r) => heldQuestion(r, derivedOf(r))), ...blankQs]);
   if (columns.length) {
     pushNote(
       s,
@@ -288,13 +352,27 @@ function settleHeldAllowances(
     if (!h) continue;
     const q = asked.find((x) => x.id === id);
     answered.push({ id, prompt: q?.prompt ?? id, ...(q?.choices?.length ? { choices: q.choices } : {}), answer });
+    const key = allowanceKey(h.stepId, h.output);
     if (saysYes(answer)) {
       wf = withAllowance(wf, h);
-      s.allowancesAtTurn = [...s.allowancesAtTurn, `${h.stepId}:${h.output}`];
+      s.allowancesAtTurn = [...s.allowancesAtTurn, key];
       lines.push(`"${h.output}" may come back empty.`);
-    } else lines.push(`"${h.output}" must not come back empty: a run that finds nothing stops and says so.`);
+      // What is built only from it follows the answer (empty-allowance.ts `withRoots`).
+      for (const d of s.heldAllowances.filter((x) => x.follows?.includes(key))) {
+        wf = withAllowance(wf, d);
+        s.allowancesAtTurn = [...s.allowancesAtTurn, allowanceKey(d.stepId, d.output)];
+        lines.push(`"${d.output}" may come back empty too: it is built from it.`);
+        s.heldAllowances = s.heldAllowances.filter((x) => x !== d);
+      }
+    } else {
+      s.declinedAllowances = [...s.declinedAllowances, key];
+      lines.push(`"${h.output}" must not come back empty: a run that finds nothing stops and says so.`);
+    }
     s.heldAllowances = s.heldAllowances.filter((x) => x !== h);
   }
+  // A derived allowance whose roots were all answered no is left out with them.
+  const open = new Set(s.heldAllowances.filter((x) => !x.follows).map((x) => allowanceKey(x.stepId, x.output)));
+  s.heldAllowances = s.heldAllowances.filter((x) => !x.follows || x.follows.some((k) => open.has(k)));
   writeWorkflowRaw(s.workspaceId, s.id, wf);
   writeQuestionsRaw(
     s.workspaceId,
@@ -394,11 +472,20 @@ const toolTokens = new Map<string, string>();
 /** One live session per (workspace, scope). Scope = flow:<id> | draft:<key>. */
 const scopeIndex = new Map<string, string>();
 
+/** The model a chat's Forge runs with: its own choice while the admin still allows it, else the builder's default. */
+function forgeModelOf(s: Session): string {
+  return effectiveModel(s.model, s.generation, piModel());
+}
+
+async function loadGeneration(): Promise<Generation | null> {
+  return resolveGenerationProvider().then((g) => ({ model: g.model, allowedModels: g.allowedModels })).catch(() => null);
+}
+
 /** Live Forge processes — one per open conversation, timed out and capped (forge-pool.ts). */
 const forgePool = new ForgePool({
   spawn: (workspaceId, sessionId) => {
     const s = sessions.get(sessionId);
-    return new ForgeProcess({ workspaceId, sessionId, effort: s ? reasoningEffort(s.mode, s.thinking) : "none" });
+    return new ForgeProcess({ workspaceId, sessionId, effort: s ? reasoningEffort(s.mode, s.thinking) : "none", model: s ? forgeModelOf(s) : undefined });
   },
   maxLive: config.forge.maxLive,
   maxPerWorkspace: config.forge.maxLivePerWorkspace,
@@ -513,7 +600,7 @@ async function ensureChat(s: Session, title: string, by: PiAuthor | null): Promi
   if (s.chatId) return s.chatId;
   if (!s.chatPending) {
     s.chatPending = piChatRepo
-      .create({ workspaceId: s.workspaceId, flowId: s.flowId, title, goal: s.goal, createdBy: by, mode: s.mode, thinking: s.thinking, projectId: s.projectId })
+      .create({ workspaceId: s.workspaceId, flowId: s.flowId, title, goal: s.goal, createdBy: by, mode: s.mode, thinking: s.thinking, model: s.model, projectId: s.projectId })
       .then(async (id) => {
         s.chatId = id;
         // References picked before the first message are stored with the chat now.
@@ -660,7 +747,8 @@ function publicOf(s: Session): PiSessionPublic {
     lastRunId: s.lastRunId,
     acceptedSnapshotId: s.acceptedSnapshotId,
     savedRevision: s.savedRevision,
-    model: piModel(),
+    model: forgeModelOf(s),
+    models: modelChoices(s.generation, piModel()),
     context: s.context,
     compacting: s.compacting,
     mode: s.mode,
@@ -948,6 +1036,33 @@ async function runHarness(
   });
 }
 
+/**
+ * 2026-11-03: the tables this workflow reads that are large in the workspace's schema catalogue. One row per column
+ * there, so take the biggest estimate per table.
+ */
+async function largeTablesOf(workspaceId: string, reads: unknown) {
+  const tables: { datasource: string; name: string; rows: number | null }[] = [];
+  // Only the datasources a read names: one catalogue query each, on every passing test.
+  const named = new Set(
+    Object.values((reads ?? {}) as Record<string, { datasource?: unknown }>).map((r) => r?.datasource),
+  );
+  if (!named.size) return [];
+  for (const ds of await datasourceRepo.listByWorkspace(workspaceId)) {
+    if (!named.has(ds.name)) continue;
+    const best = new Map<string, { name: string; rows: number | null }>();
+    for (const c of await schemaRepo.listByDatasource(ds.id)) {
+      if (!c.entityName) continue;
+      const key = `${c.entitySchema ?? "public"}.${c.entityName}`;
+      const prev = best.get(key);
+      const n = c.rowCountEstimate ?? null;
+      const rows = prev?.rows == null ? n : n == null ? prev.rows : Math.max(prev.rows, n);
+      best.set(key, { name: c.entityName, rows });
+    }
+    for (const b of best.values()) tables.push({ datasource: ds.name, name: b.name, rows: b.rows });
+  }
+  return largeTablesRead(reads, tables);
+}
+
 /** Verify the bundle, then run it as a draft. Records both on the session and emits both events. */
 async function verifyAndRun(
   s: Session,
@@ -959,7 +1074,7 @@ async function verifyAndRun(
     /** Set on an automatic FIX round: the allow_empty declarations it may not add to. */
     allowancesBefore?: string[];
   } = {},
-): Promise<{ ok: boolean; detail: string; emptyData: boolean; asked: boolean }> {
+): Promise<{ ok: boolean; detail: string; emptyData: boolean; asked: boolean; infra: boolean; retryable?: boolean; realData: { kind: "no-rows" | "files"; summary: string } | null }> {
   let verify = await runHarness(s.workspaceId, s.id, "verifier/verify.mjs");
   if (verify.ok) {
     // The EXECUTOR's own read rules (checkSqlShape + the dialect check), not a copy of them — so a read the run
@@ -983,14 +1098,17 @@ async function verifyAndRun(
   emit(s, { type: "verify", ok: verify.ok, detail: verify.detail, ...(verify.ok ? {} : { summary: CHECKS_REFUSED }) });
   if (!verify.ok) {
     // No run exists: the workflow was refused before one could start.
-    s.lastTestRun = { ok: false, detail: verify.detail, summary: CHECKS_REFUSED, at: new Date().toISOString(), runId: null };
-    emit(s, { type: "test_run", ok: false, detail: verify.detail, summary: CHECKS_REFUSED, runId: null });
-    return { ok: false, detail: verify.detail, emptyData: false, asked: false };
+    s.lastTestRun = { ok: false, detail: verify.detail, summary: CHECKS_REFUSED, at: new Date().toISOString(), runId: null, needsRealData: false };
+    emit(s, { type: "test_run", ok: false, detail: verify.detail, summary: CHECKS_REFUSED, runId: null, needsRealData: false });
+    return { ok: false, detail: verify.detail, emptyData: false, asked: false, infra: false, realData: null };
   }
   let detail: string;
   let summary = "The test could not start.";
   let ok = false;
   let emptyData = false;
+  let infra = false;
+  let retryable = true;
+  let verdict: { kind: "no-rows" | "files"; summary: string } | null = null;
   let blank: BlankColumns[] = [];
   let runId: string | null = null;
   let waiting: PiTestWaiting | null = null;
@@ -1023,18 +1141,50 @@ async function verifyAndRun(
     blank = emptyData ? blankColumnsOf(run.steps) : [];
     detail = describeRun(run);
     summary = summariseRun(run, emptyData);
+    // 2026-11-03: empty on invented test data proves nothing (no rows for these values, or files beside the tables).
+    verdict = realDataVerdict({
+      realData: opts.useProductionData === true,
+      // A run that succeeded with an allowed-empty output on invented data is as inconclusive as one that failed empty.
+      emptyData: emptyData || allowedEmptyOutputs(bundle.workflow, run.steps).length > 0,
+      emptyReads: emptyReadsOf(run.steps),
+      files: filesBesideTables(bundle.workflow),
+      inputs: runInputsOf(bundle.workflow, s.runInputs).values,
+    });
+    if (verdict) summary = verdict.summary;
     s.lastRunId = flowExecutionId;
     runId = flowExecutionId;
   } catch (e) {
     detail = `Could not start the test run: ${(e as Error).message}`;
+    // 2026-11-03: the run never started: not the workflow's fault (settleTest keeps it from Forge). A 4xx is a refusal
+    // the person can act on (e.g. "choose which account"), not an outage to wait out.
+    infra = true;
+    const code = (e as { statusCode?: number }).statusCode;
+    retryable = !(typeof code === "number" && code >= 400 && code < 500);
   }
-  s.lastTestRun = { ok, detail, summary, at: new Date().toISOString(), runId, waiting };
+  s.lastTestRun = { ok, detail, summary, at: new Date().toISOString(), runId, waiting, needsRealData: verdict != null };
+  s.lastTestRealData = opts.useProductionData === true;
   s.lastBlank = blank;
   s.lastEmptyDetail = emptyData ? detail : null;
   touch(s);
-  emit(s, { type: "test_run", ok, detail, summary, runId, waiting });
+  emit(s, { type: "test_run", ok, detail, summary, runId, waiting, needsRealData: verdict != null });
+  // 2026-11-03: a pass on a handful of invented rows says nothing about volume; name the big tables once.
+  if (ok && opts.useProductionData !== true) {
+    try {
+      const big = await largeTablesOf(s.workspaceId, (readBundle(s.workspaceId, s.id).workflow as { reads?: unknown }).reads);
+      const list = big.map((t) => `${t.name} (about ${t.rows.toLocaleString("en-US")} rows)`).join(", ");
+      if (list && list !== s.lastVolumeNote) {
+        s.lastVolumeNote = list;
+        pushNote(
+          s,
+          `Passed on test data, which has a handful of invented rows per table. In production ${list} — volume is not tested here: run it once on real data before relying on it.`,
+        );
+      }
+    } catch (e) {
+      console.warn(`[pi-builder] could not read table sizes for chat ${s.chatId}: ${(e as Error).message}`);
+    }
+  }
   const asked = blank.length > 0 && askBlankColumns(s, blank);
-  return { ok, detail, emptyData, asked };
+  return { ok, detail, emptyData, asked, infra, retryable, realData: verdict };
 }
 
 /**
@@ -1187,7 +1337,7 @@ function recordForgeUsage(s: Session, message: unknown): void {
     actor: s.requester.actor,
     flowId: s.flowId,
     sessionId: s.id,
-    model: m.model ?? piModel(),
+    model: m.model ?? forgeModelOf(s),
     // Pi's `input` is the UNCACHED part of the prompt; the prompt is all three (as the gateway's prompt_tokens is).
     tokensIn: (m.usage.input ?? 0) + (m.usage.cacheRead ?? 0) + (m.usage.cacheWrite ?? 0),
     tokensOut: m.usage.output,
@@ -1203,7 +1353,6 @@ function recordForgeUsage(s: Session, message: unknown): void {
  */
 const MAX_AUTO_FIX = 2;
 
-/** The prompt for an automatic fix turn — the failure verbatim, nothing added (I-57: never paraphrase a finding). */
 /**
  * What happens to a test result — ONE rule, whichever path ran the test: the automatic test after a turn, the
  * person's Test button, or the re-test after they answered (2026-10-13). It used to live in the turn alone, so the
@@ -1213,23 +1362,59 @@ const MAX_AUTO_FIX = 2;
  *   - passed, or waiting at an approval → ready
  *   - EMPTY DATA → the person decides (a note, and the blank-columns card when columns are blank): with test data it
  *     is as likely "nothing fits these values" as a fault, and a fix loop facing it is invited to allow the emptiness
+ *   - EMPTY DATA on test data with no rows for the values (2026-11-03) → one plain note that it needs real data
+ *   - the run could not start (2026-11-03) → an outage: a note to the person, failed, and no fix round. Forge would only edit a correct workflow.
  *   - anything else (the checks refused it, a step crashed, a read timed out) → Forge's own work to correct: the
  *     returned text is what the fix turn is told. The caller bounds the rounds (MAX_AUTO_FIX).
  */
-function settleTest(s: Session, run: { ok: boolean; detail: string; emptyData: boolean; asked: boolean }): string | null {
-  if (run.ok) {
+function settleTest(
+  s: Session,
+  run: {
+    ok: boolean;
+    detail: string;
+    emptyData: boolean;
+    asked: boolean;
+    infra: boolean;
+    retryable?: boolean;
+    realData?: { kind: "no-rows" | "files"; summary: string } | null;
+  },
+  realData = false,
+): string | null {
+  const route = routeFailure(run);
+  if (route === "ready") {
     setStatus(s, "ready");
     return null;
   }
-  if (!run.emptyData) return run.detail;
-  const used = runInputsOf(readBundle(s.workspaceId, s.id).workflow, s.runInputs).values;
+  if (route === "outage") {
+    pushNote(
+      s,
+      run.retryable === false
+        ? `The test could not start: ${run.detail}. Nothing was changed.`
+        : `The test could not run, which is not a fault in the workflow: ${run.detail}. Nothing was changed; try the test again in a moment.`,
+    );
+    setStatus(s, "failed");
+    return null;
+  }
+  if (route === "forge") return run.detail;
+  if (run.realData?.kind === "no-rows" && !run.asked) {
+    pushNote(s, run.realData.summary);
+    setStatus(s, "ready");
+    return null;
+  }
+  const { workflow } = readBundle(s.workspaceId, s.id);
+  const used = runInputsOf(workflow, s.runInputs).values;
+  const files = realData ? [] : filesBesideTables(workflow);
   pushNote(
     s,
     `The test ran${Object.keys(used).length ? ` with ${Object.entries(used).map(([k, v]) => `${k} = ${String(v)}`).join(", ")}` : ""}, ` +
       `and a step returned empty data:\n\n${run.detail}\n\nNothing has been changed. ` +
       (run.asked
         ? `Some columns came back blank in every row: tick on the card the ones that can genuinely be blank.`
-        : `If the test data just has no rows that fit, try the test with other values, or on real data. If the ` +
+        : files.length
+          ? `This workflow compares the workspace's tables with ${files.map((f) => `"${f}"`).join(", ")}. Test data ` +
+            `invents table rows that cannot match the names in a real file, so empty is expected here: test it on ` +
+            `real data to check it.`
+          : `If the test data just has no rows that fit, try the test with other values, or on real data. If the ` +
           `step is keeping the wrong rows, tell me what it should keep.`),
   );
   if (!run.asked) setStatus(s, "ready");
@@ -1242,7 +1427,7 @@ function settleTest(s: Session, run: { ok: boolean; detail: string; emptyData: b
  */
 async function testThenSettle(s: Session, requester: RunRequester, opts: { useProductionData?: boolean; auto?: boolean }) {
   const run = await verifyAndRun(s, requester, opts);
-  const followUp = settleTest(s, run);
+  const followUp = settleTest(s, run, opts.useProductionData === true);
   if (!followUp) return;
   if (s.mode !== "workflow") {
     setStatus(s, "failed");
@@ -1250,17 +1435,9 @@ async function testThenSettle(s: Session, requester: RunRequester, opts: { usePr
   }
   // The allowances as they stand are the baseline the fix may not add to.
   s.allowancesAtTurn = allowancesOf(readWorkflow(s.workspaceId, s.id));
+  s.fixOnRealData = opts.useProductionData === true;
+  s.lastFixFailure = followUp;
   await runTurn(s, fixPrompt(followUp), 1);
-}
-
-function fixPrompt(detail: string): string {
-  return [
-    "Foundry checked and test-ran the workflow, and it did not pass. The result, verbatim:",
-    "",
-    detail,
-    "",
-    "Fix exactly what failed and change nothing else. Do not ask the person; this is your own work to correct.",
-  ].join("\n");
 }
 
 /**
@@ -1282,8 +1459,8 @@ function inBackground(s: Session, work: () => Promise<void>): void {
     .catch((e) => {
       const detail = `The test run could not finish: ${e instanceof Error ? e.message : String(e)}`;
       const summary = "The test could not finish.";
-      s.lastTestRun = { ok: false, detail, summary, at: new Date().toISOString(), runId: null, waiting: null };
-      emit(s, { type: "test_run", ok: false, detail, summary, runId: null });
+      s.lastTestRun = { ok: false, detail, summary, at: new Date().toISOString(), runId: null, waiting: null, needsRealData: false };
+      emit(s, { type: "test_run", ok: false, detail, summary, runId: null, needsRealData: false });
       setStatus(s, "failed");
     })
     .finally(() => {
@@ -1474,6 +1651,10 @@ async function runTurn(
   s.lastTurn = { userText, fixRound };
   s.lastModelError = null;
   if (fixRound === 0 && !retry) s.allowancesAtTurn = allowancesOf(readWorkflow(s.workspaceId, s.id));
+  if (fixRound === 0) {
+    s.fixOnRealData = false;
+    s.lastFixFailure = null;
+  }
   let followUp: string | null = null;
 
   s.liveActivities = [];
@@ -1496,10 +1677,19 @@ async function runTurn(
       applyMode(s, "workflow");
       pushNote(s, "Forge Agent is turned off for this workspace, so this chat is in Workflow Builder now.");
     }
+    // 2026-11-03: the admin's model list is read per turn; a Forge running a model no longer chosen is restarted on the right one.
+    s.generation = (await loadGeneration()) ?? s.generation;
+    const live = forgePool.peek(s.id);
+    if (live && !live.busy && live.model !== forgeModelOf(s)) forgePool.release(s.id);
     // Rewritten every turn from the server's template: Forge can write its own folder, SYSTEM.md included.
     writeSystemPrompt(s.workspaceId, s.id, s.mode);
     // Forge Agent never changes the workflow: what it is now is put back after the turn if it moved.
     const guarded = s.mode === "agent" ? workflowSnapshot(s.workspaceId, s.id) : null;
+    // 2026-11-03: an automatic fix may not drop a source (a File, a read, a tool) to get past a test; checked after the turn.
+    const fixGuard =
+      fixRound > 0 && s.mode === "workflow"
+        ? { snapshot: workflowSnapshot(s.workspaceId, s.id), workflow: readWorkflowRaw(s.workspaceId, s.id) }
+        : null;
     // The conversation's live Forge, or a new one resuming from its session file. Room was checked when the
     // message arrived (`message` / `answer`); an automatic fix round reuses the same process.
     const forge = forgePool.acquire(s.workspaceId, s.id);
@@ -1644,10 +1834,24 @@ async function runTurn(
     const open = q.status === "open" && (q.questions?.length ?? 0) > 0;
     // P0-I1: a question with no prompt reached the person as a blank card. It is Pi's defect to fix, not theirs.
     const blank = open ? q.questions.filter((x) => !x?.prompt || !String(x.prompt).trim()) : [];
+    // 2026-11-03: put back a fix that dropped a source, and stop: whether that source should change is the person's call.
+    // An unreadable workflow.json is not "every source removed": the checks report it and the fix loop corrects it.
+    const after = fixGuard ? readWorkflowRaw(s.workspaceId, s.id) : null;
+    const dropped = fixGuard && after ? droppedSources(fixGuard.workflow, after) : [];
+    if (fixGuard && dropped.length) {
+      restoreWorkflowSnapshot(s.workspaceId, s.id, fixGuard.snapshot, s.goal);
+      pushNote(
+        s,
+        `The automatic fix removed ${sourceList(dropped)}, which the workflow used. That was put back: a fix may not swap a source to get past a test. Tell me whether that source should change.`,
+      );
+    }
     const wf = readWorkflow(s.workspaceId, s.id);
     if (!ok) {
       // Stopped, timed out or crashed: what it wrote is kept, nothing is tested on its behalf.
       setStatus(s, end.ended === "aborted" ? "idle" : "failed");
+    } else if (dropped.length) {
+      // Put back above; nothing is tested and no further round starts.
+      setStatus(s, "failed");
     } else if (open && blank.length === 0) {
       setStatus(s, "awaiting_answers");
       emit(s, { type: "questions", questions: q });
@@ -1665,13 +1869,24 @@ async function runTurn(
     } else if (fixRound === 0 && holdNewAllowances(s)) {
       // Forge declared an output may come back with nothing in it: the person decides that before anything runs.
     } else {
+      const realData = fixRound > 0 && s.fixOnRealData;
       const run = await verifyAndRun(s, s.requester, {
         auto: true,
         ...(fixRound > 0 ? { allowancesBefore: s.allowancesAtTurn } : {}),
+        ...(realData ? { useProductionData: true } : {}),
       });
-      followUp = settleTest(s, run);
+      followUp = settleTest(s, run, realData);
     }
-    if (followUp && fixRound >= MAX_AUTO_FIX) {
+    if (followUp && fixRound > 0 && noProgress(s.lastFixFailure, followUp)) {
+      // The fix changed nothing the test can see: another round would argue with the same check.
+      setStatus(s, "failed");
+      pushNote(
+        s,
+        "The fix did not change the result: the test failed the same way again, so I stopped instead of trying again. " +
+          "The failure is above; tell me what to change.",
+      );
+      followUp = null;
+    } else if (followUp && fixRound >= MAX_AUTO_FIX) {
       setStatus(s, "failed");
       followUp = null;
     }
@@ -1684,7 +1899,10 @@ async function runTurn(
     s.abort = null;
     if (!followUp) emit(s, { type: "done" });
   }
-  if (followUp) await runTurn(s, fixPrompt(followUp), fixRound + 1);
+  if (followUp) {
+    s.lastFixFailure = followUp;
+    await runTurn(s, fixPrompt(followUp), fixRound + 1);
+  }
 }
 
 export type CreatePiSessionOpts = {
@@ -1794,6 +2012,7 @@ export const piBuilderService = {
       })(),
       at: now,
     };
+    const generation = await loadGeneration();
     const s: Session = {
       id,
       workspaceId,
@@ -1827,6 +2046,11 @@ export const piBuilderService = {
       runInputs: {},
       allowancesAtTurn: [],
       heldAllowances: [],
+      declinedAllowances: [],
+      fixOnRealData: false,
+      lastTestRealData: false,
+      lastFixFailure: null,
+      lastVolumeNote: "",
       lastBlank: [],
       lastEmptyDetail: null,
       lastModelError: null,
@@ -1838,6 +2062,8 @@ export const piBuilderService = {
       compacting: false,
       mode,
       thinking: isThinkingLevel(chat?.thinking) ? chat.thinking : DEFAULT_THINKING,
+      model: typeof chat?.model === "string" && chat.model.trim() ? chat.model.trim() : null,
+      generation,
       agentAllowed,
       workflowRestored: false,
       storage: { bytes: 0, limit: config.forge.maxFolderBytes, chat: 0 },
@@ -1935,6 +2161,30 @@ export const piBuilderService = {
       // Only an agent chat's process runs with the level; a workflow chat's effort is unchanged, so it keeps its Forge.
       if (s.mode === "agent") forgePool.release(s.id);
       if (s.chatId) void piChatRepo.update(s.chatId, { thinking: level }).catch((e) => console.warn(`[pi-builder] could not store chat ${s.chatId}'s thinking level: ${(e as Error).message}`));
+      pushNote(s, thinkingNote(level));
+    }
+    return publicOf(s);
+  },
+
+  /**
+   * Set the model this chat's Forge runs with (2026-11-03), from the models turned on for the builder. Applies from the
+   * next message: Forge restarts with it and resumes the conversation. Kept with the chat.
+   */
+  async setModel(workspaceId: string, sessionId: string, model: string): Promise<PiSessionPublic> {
+    const s = getOrThrow(workspaceId, sessionId);
+    if (s.abort || s.testing) throw httpErr("Forge is still working. Wait for it to finish, then change it.", 409);
+    s.generation = (await loadGeneration()) ?? s.generation;
+    const bare = bareModel(model);
+    if (!modelChoices(s.generation, piModel()).includes(bare)) {
+      throw httpErr("That model is not turned on for the Workflow Builder. Choose one from the list.", 400);
+    }
+    const changed = bare !== forgeModelOf(s);
+    if (changed || s.model !== bare) {
+      s.model = bare;
+      // The model applies to both modes, so Forge restarts either way.
+      forgePool.release(s.id);
+      if (s.chatId) void piChatRepo.update(s.chatId, { model: bare }).catch((e) => console.warn(`[pi-builder] could not store chat ${s.chatId}'s model: ${(e as Error).message}`));
+      if (changed) pushNote(s, modelNote(bare));
     }
     return publicOf(s);
   },
@@ -2044,6 +2294,27 @@ export const piBuilderService = {
     return publicOf(s);
   },
 
+  /**
+   * Give a message to the turn that is running (2026-11-03). Works in Workflow Builder and Forge Agent alike. The
+   * ownership and permission checks are the send route's.
+   */
+  async steer(workspaceId: string, sessionId: string, text: string, by?: PiAuthor | null): Promise<PiSessionPublic> {
+    const s = getOrThrow(workspaceId, sessionId);
+    const trimmed = text.trim();
+    if (!trimmed) throw httpErr("message required", 400);
+    const forge = forgePool.peek(s.id);
+    const refusal = steerRefusal({ running: s.abort != null, testing: s.testing, compacting: s.compacting, forgeBusy: forge?.busy === true });
+    if (refusal) throw httpErr(refusal, 409);
+    if (!forge!.steer(trimmed)) throw httpErr("Forge is checking its work now. Your message will wait until it finishes.", 409);
+    const msg: PiChatMessage = { id: randomUUID(), role: "user", text: trimmed, at: new Date().toISOString(), mode: s.mode, ...(by ? { by } : {}) };
+    s.messages.push(msg);
+    emit(s, { type: "message", message: msg });
+    persistChat(s);
+    s.lastSeenAt = Date.now();
+    touch(s);
+    return publicOf(s);
+  },
+
   /** Store a file for this workflow's chat (attachments.ts). It is sent with the next message that names it. */
   attach(workspaceId: string, sessionId: string, body: Buffer, name: string | null): PiAttachment {
     const s = getOrThrow(workspaceId, sessionId);
@@ -2098,7 +2369,7 @@ export const piBuilderService = {
     if ((decided || columns.settled) && Object.keys(answers).length === 0 && !columns.mustFill.length) {
       setStatus(s, "running");
       inBackground(s, async () => {
-        await testThenSettle(s, s.requester, { auto: true });
+        await testThenSettle(s, s.requester, { auto: true, ...(s.lastTestRealData ? { useProductionData: true } : {}) });
       });
       return publicOf(s);
     }
@@ -2248,8 +2519,8 @@ export const piBuilderService = {
       const waiting = waitingOf(run);
       const detail = describeRun(run);
       const summary = summariseRun(run);
-      s.lastTestRun = { ok, detail, summary, at: new Date().toISOString(), runId, waiting };
-      emit(s, { type: "test_run", ok, detail, summary, runId, waiting });
+      s.lastTestRun = { ok, detail, summary, at: new Date().toISOString(), runId, waiting, needsRealData: false };
+      emit(s, { type: "test_run", ok, detail, summary, runId, waiting, needsRealData: false });
       setStatus(s, ok ? "ready" : "failed");
     });
     return publicOf(s);

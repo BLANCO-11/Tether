@@ -381,17 +381,12 @@ Mounted under `/api/workspaces/:workspaceId/`. Each section is one mount in `app
 
 ---
 
-## Deployment-level — 38 handlers
+## Deployment-level — 33 handlers
 
 | Method | Path | Guard after | Today |
 | :--- | :--- | :--- | :--- |
 | GET | `/api/engine/plugins` | `requireIdentity` | — |
 | GET | `/api/engine/plugins/:name/credentials` | `requireIdentity` | — |
-| POST | `/api/generation/llm/models` | `requireIdentity` | — |
-| DELETE | `/api/generation/llm/provider` | `platform.generation.write` | — |
-| GET | `/api/generation/llm/provider` | `requireIdentity` | — |
-| PUT | `/api/generation/llm/provider` | `platform.generation.write` | — |
-| POST | `/api/generation/llm/test` | `requireIdentity` | — |
 | GET | `/api/local-users` | `platform.localusers.write` | — |
 | POST | `/api/local-users` | `platform.localusers.write` | — |
 | DELETE | `/api/local-users/:id` | `platform.localusers.write` | — |

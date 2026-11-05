@@ -47,7 +47,11 @@ const AS_TEXT = new Set<PreviewKind>(["plain", "html", "markdown", "svg", "code"
 
 const withQuery = (href: string, q: string) => `${href}${href.includes("?") ? "&" : "?"}${q}`;
 
-export function ChatFilePreview({ name, href, view = "page" }: { name: string; href: string | null; view?: FileView }) {
+/**
+ * `maxRows` turns this into a SCHEMA view (Resources → Files): only the first N rows of a sheet (or lines of text) are
+ * drawn, and the footer always says the rest is not shown and that downloading gives all of it.
+ */
+export function ChatFilePreview({ name, href, view = "page", maxRows }: { name: string; href: string | null; view?: FileView; maxRows?: number }) {
   const kind = previewKind(name);
   const [state, setState] = useState<{ for: string; preview?: Preview; error?: string } | null>(null);
   const [sheet, setSheet] = useState(0);
@@ -66,9 +70,11 @@ export function ChatFilePreview({ name, href, view = "page" }: { name: string; h
           if (!res.ok) throw new Error(`The file could not be read (${res.status}).`);
           const text = await res.text();
           const limit = VISUAL.has(kind) ? VISUAL_LIMIT : TEXT_LIMIT;
-          if (live) setState({ for: href, preview: { kind: "text", text: text.slice(0, limit), cut: text.length > limit } });
+          const lines = maxRows ? text.split("\n") : null;
+          const clipped = lines && lines.length > maxRows! ? lines.slice(0, maxRows).join("\n") : text;
+          if (live) setState({ for: href, preview: { kind: "text", text: clipped.slice(0, limit), cut: clipped.length < text.length || text.length > limit } });
         } else {
-          const res = await fetch(withQuery(href, "preview=1"), { cache: "no-store" });
+          const res = await fetch(withQuery(href, maxRows ? `preview=1&rows=${maxRows}` : "preview=1"), { cache: "no-store" });
           if (!res.ok) throw new Error(`The preview could not be made (${res.status}).`);
           const { preview } = (await res.json()) as { preview: Preview };
           if (live) setState({ for: href, preview });
@@ -80,7 +86,7 @@ export function ChatFilePreview({ name, href, view = "page" }: { name: string; h
     return () => {
       live = false;
     };
-  }, [href, kind]);
+  }, [href, kind, maxRows]);
 
   if (!href) return <Note>This file is not saved with the chat yet, so it cannot be shown.</Note>;
   if (kind === "image") {
@@ -169,7 +175,13 @@ export function ChatFilePreview({ name, href, view = "page" }: { name: string; h
           </tbody>
         </table>
       </div>
-      {s.totalRows > s.rows.length || s.totalCols > (s.rows[0]?.length ?? 0) ? (
+      {maxRows ? (
+        // w-0 + min-w-full: the note wraps to the table's width instead of stretching the dialog to fit one line.
+        <p className="w-0 min-w-full shrink-0 border-t border-line px-3 py-1.5 text-caption text-dim">
+          Showing the first {s.rows.length} of {s.totalRows} rows{s.totalCols > 40 ? ` and 40 of ${s.totalCols} columns` : ""}, to help you understand the
+          columns. To see the whole data, download the file.
+        </p>
+      ) : s.totalRows > s.rows.length || s.totalCols > (s.rows[0]?.length ?? 0) ? (
         <p className="shrink-0 border-t border-line px-3 py-1.5 text-caption text-dim">
           Showing {s.rows.length} of {s.totalRows} rows{s.totalCols > (s.rows[0]?.length ?? 0) ? ` and ${s.rows[0]?.length ?? 0} of ${s.totalCols} columns` : ""}. Download the file to
           see all of it.

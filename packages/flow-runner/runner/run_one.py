@@ -78,6 +78,23 @@ def step_logs(job: dict, stderr: str) -> str:
     return text[-LOG_CAP:]
 
 
+def oom_message(step_id: str, handed: int) -> str:
+    """What is known when a step is killed for memory: the limit, and how much it was handed. Not a guessed cause —
+    the old sentence blamed the read's SQL, and the measured cases were a spreadsheet built with pandas' `to_excel`
+    and a workbook re-opened with openpyxl `load_workbook` to add a sheet."""
+    limit = RUN_MEMORY_BYTES // 1024**2
+    mb = handed / 1024**2
+    head = f"step {step_id}: ran out of memory — a run may use {limit} MB, and this step was handed {mb:.1f} MB. "
+    if handed * 4 >= RUN_MEMORY_BYTES:
+        return head + "Earlier steps pass it too much: filter, group or total in the read's SQL so less is carried."
+    return head + (
+        "So it grew inside the step: the rows it read, or a file it built. Build a spreadsheet with "
+        "foundry.write_xlsx (pass {\"Sheet name\": rows, ...} for several sheets), never pandas' to_excel, and never "
+        "re-open a large workbook with openpyxl.load_workbook, which loads every cell; filter, group or total in the "
+        "read's SQL."
+    )
+
+
 def run_step(step: dict, workflow: dict, job: dict, workdir: str, params: dict, inputs: dict, captured: dict,
              uid: int, group: str | None = None) -> dict:
     payload = {
@@ -111,8 +128,10 @@ def run_step(step: dict, workflow: dict, job: dict, workdir: str, params: dict, 
     for t in readers:
         t.start()
     assert proc.stdin is not None
+    sent = b""
     try:
-        proc.stdin.write(json.dumps(payload, default=str).encode())
+        sent = json.dumps(payload, default=str).encode()
+        proc.stdin.write(sent)
         proc.stdin.close()
     except BrokenPipeError:
         pass
@@ -129,10 +148,7 @@ def run_step(step: dict, workflow: dict, job: dict, workdir: str, params: dict, 
     if timed_out:
         raise subprocess.TimeoutExpired(proc.args, timeout)
     if oom_kills(group) > kills_before:
-        raise RunError(
-            f"step {step['id']}: ran out of memory — a run may use {RUN_MEMORY_BYTES // 1024**2} MB. "
-            "Filter, group or total in the read's SQL so the step holds less data at once."
-        )
+        raise RunError(oom_message(step["id"], len(sent)))
     out = b"".join(chunks["out"]).decode("utf-8", "replace").strip().splitlines()
     err = b"".join(chunks["err"]).decode("utf-8", "replace")
     captured["logs"] = step_logs(job, err)

@@ -80,6 +80,14 @@ if (process.env.PLUGINS_POC !== undefined) {
   console.warn("PLUGINS_POC is no longer read: connectors are on when PLUGINS_CONNECTOR_URL and PLUGINS_CONNECTOR_SECRET are set. Remove it from the environment.");
 }
 
+/**
+ * One fallback model (2026-11-04). The deployment has one model connection, one enabled-model list and one default
+ * model, saved on the AI models page. `LLM_MODEL` is the fallback for all of them (workflows, the builder, Forge) and is
+ * used only when no model connection is saved there. `LLM_REASONING_MODEL` then `LLM_FAST_MODEL` are still read, in that
+ * order, so existing .env files keep working. `||`, not `??`: an empty `LLM_MODEL=` line falls through to them.
+ */
+const fallbackModel = process.env.LLM_MODEL || process.env.LLM_REASONING_MODEL || process.env.LLM_FAST_MODEL || "";
+
 export const config = {
   env: process.env.NODE_ENV ?? "development",
   port: Number(process.env.PORT ?? 4000),
@@ -489,6 +497,11 @@ export const config = {
     /** Where Forge's tools (ask-data, open-file) call back: this server, as the forge container reaches it. */
     toolUrl: process.env.FORGE_TOOL_URL?.trim() || null,
     /**
+     * The hosts the forge-egress proxy lets Forge reach (comma-separated host:port). Empty means the host of
+     * LLM_BASE_URL. Read here only to warn when a saved gateway is outside it.
+     */
+    egressAllow: process.env.FORGE_EGRESS_ALLOW?.trim() || "",
+    /**
      * How big one conversation's folder may get (its files, Forge's work, its session). The forge host refuses a
      * message past it (FORGE_MAX_FOLDER_BYTES there too, same default); the server warns before and refuses first.
      */
@@ -544,12 +557,12 @@ export const config = {
    * works. Here, every importer pays the check.
    */
   /**
-   * The RUNTIME model — what `llm_complete` calls inside a workflow (2026-10-30, moved here from ops-api). Separate from
-   * `inference` (the model that BUILDS workflows, D-35): its own settings row (`runtime_model_provider`, set on the AI
-   * models page) with these environment values as the fallback until one is saved, and its own limits.
+   * The RUNTIME model — what `llm_complete` calls inside a workflow. Since 2026-11-04 one model connection serves
+   * workflows, the builder and Forge: the `runtime_model_provider` row, set on the AI models page. Its limits for
+   * `llm_complete` are these, below. LLM_BASE_URL / LLM_API_KEY / LLM_MODEL are the fallback until a row is saved.
    */
   runtimeModel: {
-    fallbackModels: [process.env.LLM_FAST_MODEL ?? "", process.env.LLM_REASONING_MODEL ?? ""].filter(Boolean),
+    fallbackModels: fallbackModel ? [fallbackModel] : [],
     maxInstructionChars: Number(process.env.LLM_COMPLETE_MAX_INSTRUCTION_CHARS ?? process.env.OPS_LLM_MAX_INSTRUCTION_CHARS ?? 4_000),
     maxInputChars: Number(process.env.LLM_COMPLETE_MAX_INPUT_CHARS ?? process.env.OPS_LLM_MAX_INPUT_CHARS ?? 32_000),
     defaultMaxTokens: Number(process.env.LLM_COMPLETE_DEFAULT_MAX_TOKENS ?? process.env.OPS_LLM_DEFAULT_MAX_TOKENS ?? 1_024),
@@ -561,8 +574,8 @@ export const config = {
   inference: {
     baseUrl: required("LLM_BASE_URL").replace(/\/+$/, ""),
     apiKey: required("LLM_API_KEY"),
-    /** The reasoning model by preference — generation is the harder call. */
-    model: process.env.LLM_REASONING_MODEL ?? process.env.LLM_FAST_MODEL ?? "",
+    /** The fallback model (LLM_MODEL, then the older LLM_REASONING_MODEL / LLM_FAST_MODEL). */
+    model: fallbackModel,
   },
   /**
    * Strategy B Intent IR path (2026-10-07). Default ON after ship gate —

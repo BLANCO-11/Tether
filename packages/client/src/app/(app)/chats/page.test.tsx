@@ -21,9 +21,14 @@ const chat = (over: Partial<PiChatSummary> = {}): PiChatSummary => ({
   ...over,
 });
 
+const openSelect = () => {
+  fireEvent.click(screen.getByRole("button", { name: "Select" }));
+};
+
 const listPiChats = vi.fn(async (): Promise<PiChatSummary[]> => [chat()]);
 const deletePiChat = vi.fn(async (_id: string): Promise<void> => undefined);
 const renamePiChat = vi.fn(async (id: string, title: string) => ({ id, title }));
+const push = vi.fn();
 const toast = vi.fn();
 Object.assign(toast, { success: toast, error: toast, warn: toast });
 
@@ -33,6 +38,11 @@ vi.mock("@/lib/pi-builder", async (orig) => ({
   deletePiChat: (_ws: string, id: string) => deletePiChat(id),
   renamePiChat: (_ws: string, id: string, title: string) => renamePiChat(id, title),
 }));
+vi.mock("@/lib/api", async (orig) => ({
+  ...(await orig<typeof import("@/lib/api")>()),
+  listWorkspaces: async () => [{ id: "ws-1", name: "Finance Ops", kind: "standard" }],
+}));
+vi.mock("next/navigation", () => ({ useRouter: () => ({ push }) }));
 vi.mock("@/lib/toast", () => ({ useToast: () => toast }));
 vi.mock("@/lib/workspace", () => ({ useWorkspace: () => ({ workspaceId: "ws-1", switchWorkspace: vi.fn() }), useResolvedWorkspace: () => "ws-1" }));
 
@@ -96,7 +106,7 @@ describe("Chats", () => {
     render(<ChatsPage />);
     await screen.findByText("Someone else's");
     expect(screen.queryByLabelText("Select all chats shown")).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Select" }));
+    openSelect();
     expect(screen.queryByLabelText("Select Someone else's")).toBeNull();
     fireEvent.change(screen.getByLabelText("Search chats"), { target: { value: "overdue" } });
     fireEvent.click(screen.getByLabelText("Select all chats shown"));
@@ -118,7 +128,8 @@ describe("Chats", () => {
       if (id === "c-2") throw new Error('403 {"message":"Only the person who started this chat or a workspace admin can delete it."}');
     });
     render(<ChatsPage />);
-    fireEvent.click(await screen.findByRole("button", { name: "Select" }));
+    await screen.findByText("Overdue chase");
+    openSelect();
     fireEvent.click(screen.getByLabelText("Select all chats shown"));
     fireEvent.click(screen.getByRole("button", { name: /^Delete \(\d+\)$/ }));
     fireEvent.click(screen.getByRole("button", { name: "Delete 2" }));
@@ -135,19 +146,19 @@ describe("Chats", () => {
     listPiChats.mockImplementation(async () => [chat()]);
   });
 
-  it("checkboxes are hidden until Select; Delete is disabled with nothing ticked; Clear all and Esc leave", async () => {
+  it("checkboxes are hidden until Select chats; Delete is disabled with nothing ticked; Clear all and Esc leave", async () => {
     listPiChats.mockResolvedValue([chat(), chat({ id: "c-2", title: "Overdue chase" })]);
     render(<ChatsPage />);
     await screen.findByText("Overdue chase");
     expect(screen.queryByLabelText("Select Overdue chase")).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Select" }));
+    openSelect();
     expect(screen.queryByRole("button", { name: "Select" })).toBeNull();
     expect((screen.getByRole("button", { name: "Delete" }) as HTMLButtonElement).disabled).toBe(true);
     fireEvent.click(screen.getByLabelText("Select Overdue chase"));
     expect((screen.getByRole("button", { name: "Delete (1)" }) as HTMLButtonElement).disabled).toBe(false);
     fireEvent.click(screen.getByRole("button", { name: "Clear all" }));
     expect(screen.queryByLabelText("Select Overdue chase")).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Select" }));
+    openSelect();
     expect((screen.getByLabelText("Select Overdue chase") as HTMLInputElement).checked).toBe(false);
     fireEvent.keyDown(window, { key: "Escape" });
     expect(screen.queryByLabelText("Select Overdue chase")).toBeNull();
@@ -164,6 +175,14 @@ describe("Chats", () => {
     listPiChats.mockImplementation(async () => [chat()]);
   });
 
+  it("previews a chat by its goal, or by its message count when it has none", async () => {
+    listPiChats.mockResolvedValueOnce([chat({ goal: "Chase overdue invoices every Monday" }), chat({ id: "c-2", title: "Plain", messageCount: 7 })]);
+    render(<ChatsPage />);
+    expect(await screen.findByText("Chase overdue invoices every Monday")).toBeTruthy();
+    expect(screen.getByText(/7 messages/)).toBeTruthy();
+    expect(screen.queryByText(/4 messages/)).toBeNull();
+  });
+
   it("says when there are none, and when the list could not be read", async () => {
     listPiChats.mockResolvedValueOnce([]);
     render(<ChatsPage />);
@@ -175,6 +194,28 @@ describe("Chats", () => {
   });
 });
 
+describe("Chats — composer and search", () => {
+  it("Enter in the New chat box goes to /chats/new with the text as ?q=", async () => {
+    render(<ChatsPage />);
+    await screen.findByText("Email me the weekly attendance report");
+    const box = screen.getByLabelText("New chat");
+    expect((screen.getByRole("button", { name: "Send" }) as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.change(box, { target: { value: "Chase invoices & more" } });
+    fireEvent.keyDown(box, { key: "Enter" });
+    expect(push).toHaveBeenCalledWith(`/chats/new?q=${encodeURIComponent("Chase invoices & more")}`);
+  });
+
+  it("the search field filters the list as you type", async () => {
+    listPiChats.mockResolvedValueOnce([chat(), chat({ id: "c-2", title: "Overdue chase" })]);
+    render(<ChatsPage />);
+    await screen.findByText("Overdue chase");
+    expect(screen.getByRole("button", { name: "Search" })).toBeTruthy();
+    fireEvent.change(screen.getByLabelText("Search chats"), { target: { value: "overdue" } });
+    expect(screen.queryByText("Email me the weekly attendance report")).toBeNull();
+    expect(screen.getByText("Overdue chase")).toBeTruthy();
+  });
+});
+
 describe("Chats — whose (rbac-observability)", () => {
   it("an Admin listed somebody else's chat can narrow to their own; their own read as You", async () => {
     listPiChats.mockResolvedValueOnce([
@@ -183,8 +224,8 @@ describe("Chats — whose (rbac-observability)", () => {
     ]);
     render(<ChatsPage />);
     await screen.findByText("Theirs");
-    expect(screen.getByText(/^You ·/)).toBeTruthy();
-    expect(screen.getByText(/^Ravi ·/)).toBeTruthy();
+    expect(screen.getByText("You")).toBeTruthy();
+    expect(screen.getByText("Ravi")).toBeTruthy();
     fireEvent.click(screen.getByRole("radio", { name: "Mine" }));
     expect(screen.queryByText("Theirs")).toBeNull();
     expect(screen.getByText("Mine", { selector: "span" })).toBeTruthy();
@@ -231,5 +272,15 @@ describe("where a chat lives (sharing-boundaries phases 5–6)", () => {
     expect(screen.getByText("Move…")).toBeTruthy();
     expect(screen.queryByText("Share to read")).toBeNull();
     expect(screen.queryByText("Make private")).toBeNull();
+  });
+
+  it("is a single-line pill until the text has a newline, then a multi-line box", async () => {
+    render(<ChatsPage />);
+    const box = await screen.findByLabelText("New chat");
+    const form = box.closest("form")!;
+    fireEvent.change(box, { target: { value: "short" } });
+    expect(form.getAttribute("data-multiline")).toBe("false");
+    fireEvent.change(box, { target: { value: "a\nb" } });
+    expect(form.getAttribute("data-multiline")).toBe("true");
   });
 });

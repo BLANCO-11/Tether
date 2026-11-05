@@ -7,10 +7,12 @@ import { useEffect, useId, useRef } from "react";
 import { Close } from "@/components/ui/icons";
 import { IconButton } from "@/components/ui/IconButton";
 
-export function Modal({ open, onClose, title, children, wide }: {
+export function Modal({ open, onClose, title, children, wide, fit }: {
   open: boolean; onClose: () => void; title: string; children: React.ReactNode;
   /** A wider panel, for content that is a table or a document rather than a form. */
   wide?: boolean;
+  /** With `wide`: size the panel to its content (a table) instead of always filling the maximum width. */
+  fit?: boolean;
 }) {
   const panel = useRef<HTMLDivElement>(null);
   const opener = useRef<Element | null>(null);
@@ -73,7 +75,7 @@ export function Modal({ open, onClose, title, children, wide }: {
         aria-modal="true"
         aria-labelledby={titleId}
         tabIndex={-1}
-        className={`overlay-pop depth-7 relative max-h-[90vh] w-full ${wide ? "max-w-4xl" : "max-w-lg"} overflow-y-auto rounded-[16px] border border-line px-6 py-5 outline-none`}
+        className={`overlay-pop depth-7 relative max-h-[90vh] ${wide && fit ? "w-fit min-w-[min(100%,28rem)] max-w-4xl" : `w-full ${wide ? "max-w-4xl" : "max-w-lg"}`} overflow-y-auto rounded-[16px] border border-line px-6 py-5 outline-none`}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mb-4 flex items-start justify-between gap-4">

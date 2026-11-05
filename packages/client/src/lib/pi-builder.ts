@@ -305,14 +305,16 @@ export type PiSession = {
   questions: PiQuestionsFile;
   answers: Record<string, unknown>;
   lastVerify: { ok: boolean; detail: string } | null;
-  /** `detail` is written for Forge; `summary` is the sentence a person reads. */
-  lastTestRun: { ok: boolean; detail: string; summary?: string; at: string; runId: string | null; waiting?: PiTestWaiting | null } | null;
+  /** `detail` is written for Forge; `summary` is the sentence a person reads. `needsRealData`: the test ran on test data and cannot judge the workflow (2026-11-03); absent from an older server. */
+  lastTestRun: { ok: boolean; detail: string; summary?: string; at: string; runId: string | null; waiting?: PiTestWaiting | null; needsRealData?: boolean } | null;
   /** The flow execution of the last test run on flow-runner (pi-runtime P2). */
   lastRunId: string | null;
   acceptedSnapshotId: string | null;
   savedRevision: number | null;
-  /** The model Pi drafts with (the chat head shows it). Absent from an older server. */
+  /** The model this chat's Forge runs with. Absent from an older server. */
   model?: string;
+  /** The models this chat may choose from (enabled for the builder by an admin). Absent from an older server. */
+  models?: string[];
   /** The context meter, as last measured (null until Forge has been asked). */
   context?: PiContext | null;
   compacting?: boolean;
@@ -343,7 +345,7 @@ export type PiEvent =
   | { type: "workflow"; workflow: PiWorkflow; files?: Record<string, string> }
   | { type: "questions"; questions: PiQuestionsFile }
   | { type: "verify"; ok: boolean; detail: string; summary?: string }
-  | { type: "test_run"; ok: boolean; detail: string; summary?: string; runId: string | null; waiting?: PiTestWaiting | null }
+  | { type: "test_run"; ok: boolean; detail: string; summary?: string; runId: string | null; waiting?: PiTestWaiting | null; needsRealData?: boolean }
   | { type: "snapshot"; id: string; label: string }
   | { type: "saved"; flowId: string; revision: number }
   /** The person's first message saved this conversation as a chat. */
@@ -408,6 +410,8 @@ export type PiChatSummary = {
   createdAt: string;
   updatedAt: string;
   messageCount: number;
+  /** What the person asked for, in a line: the chat's preview on the Chats page. Absent from an older server. */
+  goal?: string;
   /** An UNSAVED build in this chat (no workflow yet): how many steps it has, and the name Forge gave it. */
   draftSteps?: number;
   draftName?: string | null;
@@ -672,6 +676,22 @@ export function setPiThinking(wsId: string, sessionId: string, thinking: Thinkin
   return req<{ session: PiSession }>(`/workspaces/${wsId}/pi-builder/sessions/${sessionId}/thinking`, {
     method: "POST",
     body: JSON.stringify({ thinking }),
+  }).then((r) => r.session);
+}
+
+/** Set the model this chat's Forge runs with; it applies from the next message. */
+export function setPiModel(wsId: string, sessionId: string, model: string) {
+  return req<{ session: PiSession }>(`/workspaces/${wsId}/pi-builder/sessions/${sessionId}/model`, {
+    method: "POST",
+    body: JSON.stringify({ model }),
+  }).then((r) => r.session);
+}
+
+/** "Send now" on a queued message: give it to Forge during the turn that is running. Refused (409) when none is. */
+export function steerPiMessage(wsId: string, sessionId: string, text: string) {
+  return req<{ session: PiSession }>(`/workspaces/${wsId}/pi-builder/sessions/${sessionId}/steer`, {
+    method: "POST",
+    body: JSON.stringify({ text }),
   }).then((r) => r.session);
 }
 

@@ -27,8 +27,16 @@ import {
   type ReportWorkspace,
 } from "../services/report.service.js";
 import { buildReportWorkbook, reportFilename, XLSX_CONTENT_TYPE } from "../services/report-workbook.js";
+import { previousWindow } from "../services/report-compare.js";
+import { forecastMonth, monthBounds } from "../services/report-forecast.js";
+import { writeZip } from "../services/zip-lite.js";
+import { buildReportPdf, reportPdfFilename, PDF_CONTENT_TYPE } from "../services/report-pdf.js";
 import { reportShareService } from "../services/report-share.service.js";
 import type { Request, Response } from "express";
+
+const ZIP_CONTENT_TYPE = "application/zip";
+/** `cost-report_finance_2026-10-01_to_2026-10-28.zip`: the workbook's name with the format swapped. */
+const reportZipFilename = (workspaces: readonly string[], window: ReportWindow) => reportFilename(workspaces, window).replace(/\.xlsx$/, ".zip");
 
 export const reportsRouter = Router();
 reportsRouter.use(requireIdentity);
@@ -59,6 +67,9 @@ function checkWindow(v: { from?: string; to?: string }, ctx: z.RefinementCtx) {
 }
 
 const baseQuery = z.object({ ...scopeShape, workspaces: idList }).superRefine(checkWindow);
+/** The workbook is the default, so every existing caller of `/export` is unchanged; `format=pdf` asks for the PDF report and `both` for the two in one zip. */
+const exportQuery = z.object({ ...scopeShape, workspaces: idList, format: z.enum(["xlsx", "pdf", "both"]).optional().default("xlsx") }).superRefine(checkWindow);
+const forecastQuery = z.object({ workspaces: idList, flowId: scopeShape.flowId, subject: scopeShape.subject });
 const runsQuery = z
   .object({
     ...scopeShape,
@@ -76,6 +87,8 @@ const emailBody = z
     /** Who receives it. (`to` is already the end of the period.) */
     recipients: z.preprocess((v) => (typeof v === "string" ? v.split(/[,;\s]+/).filter(Boolean) : v), z.array(z.string().max(254)).min(1).max(200)),
     note: z.string().max(1000).optional(),
+    /** Which files to attach. Both when omitted, so every existing caller is unchanged. */
+    formats: z.array(z.enum(["pdf", "xlsx"])).min(1).max(2).optional(),
   })
   .strict()
   .superRefine(checkWindow);
@@ -88,6 +101,8 @@ interface Loaded {
   all: ReportRun[];
   /** The runs after the workspace picker and the drill. */
   runs: ReportRun[];
+  /** The same for the period of equal length just before; only read when asked for (the PDF's comparison). */
+  previous: ReportRun[];
   filterWords: string[];
   filters: Record<string, string>;
 }
@@ -97,6 +112,7 @@ async function load(
   request: Request,
   res: Response,
   q: { days?: number; from?: string; to?: string; workspaces?: string[]; flowId?: string; subject?: string },
+  o: { previous?: boolean } = {},
 ): Promise<Loaded | null> {
   const allowed = await reportService.allowedWorkspaces(request.user);
   const r = reportService.resolve(allowed, q.workspaces ?? []);
@@ -113,7 +129,10 @@ async function load(
   const window = windowOf(q);
   const names = new Map(allowed.map((w) => [w.id, w.name]));
   const all = await reportService.runs(allowed.map((w) => w.id), window, names);
-  const runs = applyDrill(all, { workspaceIds: r.workspaces.map((w) => w.id), flowId: q.flowId, subject: q.subject });
+  const drill = { workspaceIds: r.workspaces.map((w) => w.id), flowId: q.flowId, subject: q.subject };
+  const runs = applyDrill(all, drill);
+  // Same workspaces, same drill, same permissions: an earlier period must not show anything this one may not.
+  const previous = o.previous ? applyDrill(await reportService.runs(allowed.map((w) => w.id), previousWindow(window), names), drill) : [];
 
   const filterWords: string[] = [];
   const filters: Record<string, string> = {};
@@ -125,7 +144,7 @@ async function load(
     filters.subject = q.subject;
     filterWords.push(`Person: ${all.find((x) => x.subject === q.subject)?.person ?? q.subject}`);
   }
-  return { window, allowed, selected: r.workspaces, all, runs, filterWords, filters };
+  return { window, allowed, selected: r.workspaces, all, runs, previous, filterWords, filters };
 }
 
 /** Tiles, the daily series, the kind split and the three lenses, plus the picker's workspaces with their cost. */
@@ -145,6 +164,18 @@ reportsRouter.get(
   }),
 );
 
+/** Where this calendar month is heading, from the filters the screen has applied (the period picker does not apply: it is always this month). Screen only. */
+reportsRouter.get(
+  "/forecast",
+  asyncHandler(async (req, res) => {
+    const q = forecastQuery.parse(req.query);
+    const now = new Date();
+    const d = await load(req, res, { ...q, ...monthBounds(now) });
+    if (!d) return;
+    res.json(forecastMonth(d.runs, now));
+  }),
+);
+
 /** One page of runs, 50 at a time by default. The download carries the full set. */
 reportsRouter.get(
   "/runs",
@@ -156,17 +187,33 @@ reportsRouter.get(
   }),
 );
 
-/** The whole report as one workbook: every run, not just the page on screen. */
+/** The whole report as one workbook (every run, not just the page on screen), or with `format=pdf` as the PDF report. */
 reportsRouter.get(
   "/export",
   asyncHandler(async (req, res) => {
-    const q = baseQuery.parse(req.query);
-    const d = await load(req, res, q);
+    const q = exportQuery.parse(req.query);
+    const d = await load(req, res, q, { previous: true });
     if (!d) return;
     if (!d.runs.length) return void res.status(422).json({ error: "empty", message: "There is no usage in this selection." });
     const who = req.user?.name || req.user?.email || req.user?.subject || "Foundry";
     const names = d.selected.map((w) => w.name);
-    const file = buildReportWorkbook({ runs: d.runs, window: d.window, workspaces: names, filters: d.filterWords, generatedBy: who });
+    if (q.format === "both") {
+      const pdf = await buildReportPdf({ runs: d.runs, previous: d.previous, window: d.window, workspaces: names, filters: d.filterWords, generatedBy: who });
+      const xlsx = await buildReportWorkbook({ runs: d.runs, previous: d.previous, window: d.window, workspaces: names, filters: d.filterWords, generatedBy: who });
+      const zip = writeZip(new Map([[reportFilename(names, d.window), xlsx], [reportPdfFilename(names, d.window), pdf]]));
+      res.setHeader("Content-Type", ZIP_CONTENT_TYPE);
+      res.setHeader("Content-Disposition", `attachment; filename="${reportZipFilename(names, d.window)}"`);
+      res.setHeader("Access-Control-Expose-Headers", "Content-Disposition");
+      return void res.send(zip);
+    }
+    if (q.format === "pdf") {
+      const pdf = await buildReportPdf({ runs: d.runs, previous: d.previous, window: d.window, workspaces: names, filters: d.filterWords, generatedBy: who });
+      res.setHeader("Content-Type", PDF_CONTENT_TYPE);
+      res.setHeader("Content-Disposition", `attachment; filename="${reportPdfFilename(names, d.window)}"`);
+      res.setHeader("Access-Control-Expose-Headers", "Content-Disposition");
+      return void res.send(pdf);
+    }
+    const file = await buildReportWorkbook({ runs: d.runs, previous: d.previous, window: d.window, workspaces: names, filters: d.filterWords, generatedBy: who });
     const filename = reportFilename(names, d.window);
     res.setHeader("Content-Type", XLSX_CONTENT_TYPE);
     res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
@@ -175,18 +222,20 @@ reportsRouter.get(
   }),
 );
 
-/** Email the same workbook to people who may hold no access here. Recipients are checked against the allowed domains. */
+/** Email the same workbook, and the PDF report, to people who may hold no access here. Recipients are checked against the allowed domains. */
 reportsRouter.post(
   "/email",
   asyncHandler(async (req, res) => {
     const body = emailBody.parse(req.body ?? {});
-    const d = await load(req, res, body);
+    const d = await load(req, res, body, { previous: true });
     if (!d) return;
     const sent = await reportShareService.send({
       sender: { subject: req.user!.subject, email: req.user!.email ?? null, name: req.user!.name ?? null },
       to: body.recipients,
       note: body.note,
+      formats: body.formats,
       runs: d.runs,
+      previous: d.previous,
       window: d.window,
       workspaces: d.selected,
       filterWords: d.filterWords,

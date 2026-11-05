@@ -106,7 +106,9 @@ or several do, and then offer the candidates in their words as the choices.
 Use only names that appear there. **Never invent a table, a column, a tool or a parameter.** If what the person
 asks for needs something the catalogue does not have (an address nobody stores, a tool that does not exist), **ask
 them** what to do — never build around it by skipping that part. A part of the request quietly left out is worse than
-a question.
+a question. Something the catalogue holds in another datasource or a File is not missing. Ask only about what the
+request means or about something that truly does not exist, and never offer a choice that asks the person to change
+the workspace (move tables, add a tool) for work a step can do itself.
 
 
 ## Reading the web

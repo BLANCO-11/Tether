@@ -1,9 +1,9 @@
-// src/app/(app)/ai-provider/page.tsx — configure the LLM behind the
-// `llm_complete` tool: which gateway, which key, which models a flow may name.
+// src/app/(app)/ai-provider/page.tsx — the model connection for the
+// deployment: which gateway, which key, which models may be used.
 //
 // ── Three things this page is deliberately careful about ────────────────────
 //
-//  1. **The key is write-only.** It is posted once, stored inside ops-api, and
+//  1. **The key is write-only.** It is posted once, stored encrypted in Foundry, and
 //     never returned by any route. What comes back is a `keyFingerprint` — eight
 //     hex characters of a salted digest, enough to tell two keys apart and not
 //     enough to reconstruct either. This is the same rule `/keys` follows for
@@ -23,38 +23,19 @@
 //     available is a decision about what a caller may bill, so the page says so
 //     rather than defaulting to all.
 //
-// ⚠ What the FIRST panel configures is RUNTIME inference — a tool a flow calls.
-// The SECOND panel is the model that designs automations. The header says "AI
-// models", plural, and matches the rail row: the old "AI provider" title is what
-// let somebody change `llm_complete` and conclude drafting was still slow.
+// ── 2026-11-04: ONE model connection ────────────────────────────────────────
 //
-// ⚠ **That was half of F2 and the more expensive half.** Reported: *"I changed
-// to 5.4-mini for better speed and it is still slow."* Measured — the ops row
-// said `gpt-5.4-mini` and generation carried on running the environment's model.
-// Adding a second panel without correcting the first sentence would have left
-// the same trap with one more place to fall into it (I-95: copy accurate about
-// one code path, printed over another).
-//
-// ⚠ The two share a gateway by DECISION, not by construction, and only the
-// runtime one's endpoint is editable — so `GenerationModelPanel` says out loud
-// when they have drifted apart. D-35 keeps them separate: different credentials,
-// different processes, no shared abstraction.
-//
-// ── 2026-10-12: structure, not a wall ───────────────────────────────────────
-//
-// Two summary cards (runtime · builder) say what each model is today; below,
-// ONE of the two is open at a time (tabs, in the URL). The runtime settings are
-// three steps — connection, models, save. Nothing about what is saved, or how,
-// changed. 2026-10-30, from the mock: the "About these settings" disclosure is gone
-// (its caveats stay where they act: the payload's own model-list caveat, the test
-// line, the builder's "Separate settings" box); the footer gains "Reset to saved".
+// One gateway, one enabled-model list and one default for the whole deployment,
+// set here and used by workflow steps (llm_complete), the builder and Forge
+// chats. The old Runtime/Builder split (D-35) was reversed by the product owner.
+// Three steps (connection, models, save); the Costs tab holds model prices.
 
 "use client";
 
 import { Suspense } from "react";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { foundryApi, type FAGenerationProvider, type FALlmProvider, type FALlmTest } from "@/lib/foundry-client";
+import { foundryApi, type FALlmProvider, type FALlmTest } from "@/lib/foundry-client";
 import { useAsync } from "@/lib/hooks";
 import { useToast } from "@/lib/toast";
 import { Page, Zone } from "@/components/layout/Page";
@@ -62,110 +43,40 @@ import { PageHeader } from "@/components/layout/PageHeader";
 import { Notice } from "@/components/ui/Notice";
 import { Button } from "@/components/ui/Button";
 import { Field, Input } from "@/components/ui/Field";
-import { StatusPill } from "@/components/ui/Badge";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Search } from "@/components/ui/icons";
-import { GenerationModelPanel } from "@/components/ops/GenerationModelPanel";
 import { ModelPricingPanel } from "@/components/ops/ModelPricingPanel";
 
-type Tab = "runtime" | "builder" | "pricing";
-
-/** The two configured models, each tagged with what it is for: the model workflows call, and the one that builds. */
-function inUseOf(runtime: string | undefined, builder: string | undefined): Record<string, string[]> {
-  const out: Record<string, string[]> = {};
-  if (runtime) (out[runtime] ??= []).push("Workflows");
-  if (builder) (out[builder] ??= []).push("Builder");
-  return out;
-}
-
-/** "https://gateway.example/v1" → "gateway.example". The summary names the host; the field holds the URL. */
-function host(url: string | null | undefined): string {
-  if (!url) return "not set";
-  try {
-    return new URL(url).host;
-  } catch {
-    return url;
-  }
-}
+type Tab = "models" | "pricing";
 
 function AiProviderPageContent() {
   const provider = useAsync<FALlmProvider>(() => foundryApi.getLlmProvider());
-  const gen = useAsync<FAGenerationProvider>(() => foundryApi.getGenerationProvider());
   const params = useSearchParams();
   const router = useRouter();
-  const tab: Tab = params.get("tab") === "builder" ? "builder" : params.get("tab") === "pricing" ? "pricing" : "runtime";
+  const tab: Tab = params.get("tab") === "pricing" ? "pricing" : "models";
 
   const p = provider.data;
-  const g = gen.data;
 
   return (
     <Page>
       <PageHeader
         eyebrow="Admin"
         title="AI models"
-        purpose="The model your workflows call and the model that builds them are set separately. Changing one won't change the other."
+        purpose="One connection for the whole deployment. Workflows, the builder and Forge chats all use the models you enable here."
       />
 
       <Zone name="notices">
-        {provider.error && <Notice tone="danger" title="Could not read the runtime model">{provider.error}</Notice>}
-        {gen.error && <Notice tone="danger" title="Could not read the builder model">{gen.error}</Notice>}
-        {/* ⚠ THE SENTENCE THAT PAYS FOR THE READ-ONLY ENDPOINT. The two share a gateway by decision, not by
-            construction; only the runtime one is editable, so nothing else would say they had drifted apart. */}
-        {p && g?.baseUrl && p.baseUrl && g.baseUrl !== p.baseUrl && (
-          <Notice tone="warn" title="These two point at different gateways">
-            Workflows are built against <code className="font-mono">{g.baseUrl}</code> and{" "}
-            <code className="font-mono">llm_complete</code> calls <code className="font-mono">{p.baseUrl}</code>. That is
-            allowed — they are separate on purpose — but it is rarely intended.
-          </Notice>
+        {provider.error && <Notice tone="danger" title="Could not read the model connection">{provider.error}</Notice>}
+        {p?.forgeReachable === false && p.forgeWarning && (
+          <Notice tone="warn" title="Forge chats cannot reach this gateway">{p.forgeWarning}</Notice>
         )}
       </Zone>
 
       <Zone name="content">
-        {/* ── What each model is today ── */}
-        <div className="grid gap-4 md:grid-cols-2">
-          <SummaryCard
-            title="Runtime"
-            what="Called by llm_complete inside workflows"
-            pill={p ? <StatusPill status={p.configured ? "ok" : "neutral"}>{p.source === "configured" ? "Set here" : "Environment"}</StatusPill> : null}
-            loading={!p && !provider.error}
-            rows={
-              p
-                ? [
-                    ["Default model", <code key="m" className="font-mono">{p.defaultModel || "none"}</code>],
-                    ["Enabled", `${p.allowedModels.length} model${p.allowedModels.length === 1 ? "" : "s"}`],
-                    ["Gateway", host(p.baseUrl)],
-                  ]
-                : []
-            }
-            active={tab === "runtime"}
-            onOpen={() => router.replace("/ai-provider")}
-          />
-          <SummaryCard
-            title="Builder"
-            what="Designs new workflows from what you ask"
-            pill={g ? <StatusPill status={g.source === "configured" ? "ok" : "neutral"}>{g.source === "configured" ? "Set here" : "Environment"}</StatusPill> : null}
-            loading={!g && !gen.error}
-            rows={
-              g
-                ? [
-                    ["Model", <code key="m" className="font-mono">{g.defaultModel}</code>],
-                    // ⚠ A person's name, never their sign-in id (`updatedBy` is the subject).
-                    ["Set", g.source === "environment" ? "by the deployment" : g.updatedByName ? `by ${g.updatedByName}` : "here"],
-                    ["Gateway", host(g.baseUrl)],
-                  ]
-                : []
-            }
-            active={tab === "builder"}
-            onOpen={() => router.replace("/ai-provider?tab=builder")}
-          />
-        </div>
-
-        {/* ── One of the two, open ── */}
         <div role="tablist" aria-label="Which model" className="-mb-2 flex items-center gap-1 border-b border-line px-1">
           {(
             [
-              ["runtime", "Runtime"],
-              ["builder", "Builder"],
+              ["models", "Models"],
               ["pricing", "Costs"],
             ] as const
           ).map(([key, label]) => (
@@ -173,7 +84,7 @@ function AiProviderPageContent() {
               key={key}
               role="tab"
               aria-selected={tab === key}
-              onClick={() => router.replace(key === "runtime" ? "/ai-provider" : `/ai-provider?tab=${key}`)}
+              onClick={() => router.replace(key === "models" ? "/ai-provider" : `/ai-provider?tab=${key}`)}
               className={`-mb-px border-b-2 px-3 py-2 text-body transition-colors duration-150 ${
                 tab === key ? "border-accent font-medium text-text" : "border-transparent text-muted hover:text-text"
               }`}
@@ -185,69 +96,16 @@ function AiProviderPageContent() {
 
         {tab === "pricing" ? (
           <ModelPricingPanel
-            knownModels={[...(p?.allowedModels ?? []), ...(g?.allowedModels ?? [])]}
-            inUse={inUseOf(p?.defaultModel, g?.defaultModel)}
+            knownModels={p?.allowedModels ?? []}
+            inUse={p?.defaultModel ? { [p.defaultModel]: ["Default"] } : {}}
           />
-        ) : tab === "runtime" ? (
-          p ? (
-            <RuntimeSettings p={p} reload={provider.reload} />
-          ) : provider.error ? null : (
-            <div className="pane p-4"><Skeleton rows={6} /></div>
-          )
-        ) : g ? (
-          <GenerationModelPanel g={g} reload={gen.reload} />
-        ) : gen.error ? null : (
-          <div className="pane p-4"><Skeleton rows={4} /></div>
+        ) : p ? (
+          <ModelSettings p={p} reload={provider.reload} />
+        ) : provider.error ? null : (
+          <div className="pane p-4"><Skeleton rows={6} /></div>
         )}
-
       </Zone>
     </Page>
-  );
-}
-
-/** One model, today: what it is for, three facts, and whether it was set here or by the deployment. */
-function SummaryCard({
-  title,
-  what,
-  pill,
-  rows,
-  loading,
-  active,
-  onOpen,
-}: {
-  title: string;
-  what: string;
-  pill: ReactNode;
-  rows: [string, ReactNode][];
-  loading: boolean;
-  active: boolean;
-  onOpen: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onOpen}
-      aria-pressed={active}
-      className={`pane block w-full p-4 text-left transition-colors duration-150 hover:bg-surface-2 ${active ? "border-accent/60 ring-1 ring-inset ring-accent/30" : ""}`}
-    >
-      <div className="flex items-center justify-between gap-2">
-        <span className="text-body font-semibold text-text">{title}</span>
-        {pill}
-      </div>
-      <p className="mt-0.5 text-caption text-dim">{what}</p>
-      {loading ? (
-        <Skeleton rows={3} className="mt-3" />
-      ) : (
-        <dl className="mt-3 space-y-1.5">
-          {rows.map(([k, v]) => (
-            <div key={k} className="flex items-baseline justify-between gap-4 text-caption">
-              <dt className="text-dim">{k}</dt>
-              <dd className="min-w-0 truncate text-right text-text">{v}</dd>
-            </div>
-          ))}
-        </dl>
-      )}
-    </button>
   );
 }
 
@@ -280,7 +138,7 @@ function TestLine({ test }: { test: FALlmTest }) {
   );
 }
 
-function RuntimeSettings({ p, reload }: { p: FALlmProvider; reload: () => void }) {
+function ModelSettings({ p, reload }: { p: FALlmProvider; reload: () => void }) {
   const toast = useToast();
   const [baseUrl, setBaseUrl] = useState("");
   const [apiKey, setApiKey] = useState("");
@@ -342,7 +200,7 @@ function RuntimeSettings({ p, reload }: { p: FALlmProvider; reload: () => void }
         allowedModels: allowed,
       });
       setApiKey("");
-      toast.success("Runtime model saved");
+      toast.success("Models saved");
       reload();
       return saved;
     });
@@ -386,7 +244,7 @@ function RuntimeSettings({ p, reload }: { p: FALlmProvider; reload: () => void }
 
   return (
     <div className="pane">
-      <Step n={1} title="Connection" hint="An OpenAI-compatible gateway used by workflow steps.">
+      <Step n={1} title="Connection" hint="The OpenAI-compatible gateway every model call goes through: workflow steps, the builder and Forge chats.">
         <div className="grid gap-3 md:grid-cols-2">
           <Field label="Gateway base URL">
             <Input value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)} placeholder="https://gateway.example/v1" />
@@ -413,7 +271,7 @@ function RuntimeSettings({ p, reload }: { p: FALlmProvider; reload: () => void }
       <Step
         n={2}
         title="Models"
-        hint={`${allowed.length} of ${choices.length} enabled. Workflows can only choose enabled models.`}
+        hint={`${allowed.length} of ${choices.length} enabled. Forge chats and workflow steps can only choose enabled models; the default is used when none is chosen.`}
         action={
           <Button size="sm" variant="ghost" onClick={discover} disabled={busy !== "" || !baseUrl}>
             {busy === "models" ? "Fetching…" : "Fetch models"}

@@ -18,6 +18,8 @@ import { db } from "../db/index.js";
 import { reportShares } from "../db/schema.js";
 import { config } from "../config/index.js";
 import { mailService } from "./mail.service.js";
+import { periodText, stampText } from "./pdf-charts.js";
+import { buildReportPdf, reportPdfFilename, PDF_CONTENT_TYPE } from "./report-pdf.js";
 import { buildReportWorkbook, reportFilename, XLSX_CONTENT_TYPE } from "./report-workbook.js";
 import { summarise, type ReportRun, type ReportWindow } from "./report.service.js";
 
@@ -47,7 +49,11 @@ export interface SendReportInput {
   sender: { subject: string; email: string | null; name: string | null };
   to: readonly string[];
   note?: string;
+  /** Which files to attach; both when omitted. */
+  formats?: ReadonlyArray<"pdf" | "xlsx">;
   runs: readonly ReportRun[];
+  /** The period of equal length just before, for the PDF's comparison. */
+  previous?: readonly ReportRun[];
   window: ReportWindow;
   workspaces: ReadonlyArray<{ id: string; name: string }>;
   /** Plain-words drill filters, and the raw ones for the record. */
@@ -59,7 +65,6 @@ export type SendReportResult =
   | { ok: true; filename: string; recipients: string[]; bytes: number }
   | { ok: false; status: 400 | 409 | 413 | 422 | 502; message: string; offending?: string[] };
 
-const usd = (n: number) => (n >= 100 ? `$${n.toFixed(0)}` : n >= 1 ? `$${n.toFixed(2)}` : `$${n.toFixed(3)}`);
 
 export const reportShareService = {
   async send(input: SendReportInput): Promise<SendReportResult> {
@@ -69,30 +74,40 @@ export const reportShareService = {
 
     const who = input.sender.name || input.sender.email || input.sender.subject;
     const names = input.workspaces.map((w) => w.name);
-    const filename = reportFilename(names, input.window);
-    const workbook = buildReportWorkbook({
-      runs: input.runs,
-      window: input.window,
-      workspaces: names,
-      filters: input.filterWords,
-      generatedBy: who,
-    });
-    if (workbook.length > config.mail.maxAttachmentBytes) {
+    const wantPdf = !input.formats || input.formats.includes("pdf");
+    const wantXlsx = !input.formats || input.formats.includes("xlsx");
+    if (!wantPdf && !wantXlsx) return { ok: false, status: 422, message: "Choose at least one file to send." };
+    const xlsxName = reportFilename(names, input.window);
+    const pdfName = reportPdfFilename(names, input.window);
+    const attachments: Array<{ name: string; contentType: string; data: Buffer }> = [];
+    if (wantXlsx) {
+      const data = await buildReportWorkbook({ runs: input.runs, previous: input.previous, window: input.window, workspaces: names, filters: input.filterWords, generatedBy: who });
+      attachments.push({ name: xlsxName, contentType: XLSX_CONTENT_TYPE, data });
+    }
+    if (wantPdf) {
+      const data = await buildReportPdf({ runs: input.runs, previous: input.previous, window: input.window, workspaces: names, filters: input.filterWords, generatedBy: who });
+      attachments.push({ name: pdfName, contentType: PDF_CONTENT_TYPE, data });
+    }
+    const filename = attachments[0].name;
+    const total = attachments.reduce((a, f) => a + f.data.length, 0);
+    if (total > config.mail.maxAttachmentBytes) {
       return { ok: false, status: 413, message: "The report is too large to email. Narrow the period or the workspaces, or download it instead." };
     }
 
     const totals = summarise(input.runs, input.window).tiles;
     const note = input.note?.trim();
+    const lines: string[] = [];
+    if (wantPdf) lines.push("• PDF: the summary. Key figures against the previous period, cost per day, and the biggest workspaces, workflows and people. Start here.");
+    if (wantXlsx) lines.push("• Excel: the data. The same figures by workspace, workflow, person and day, plus every individual run, to filter, sort or total yourself.");
     const body = [
-      `${who} shared a cost report with you.`,
+      `${who} has shared the model (LLM) cost report.`,
       "",
-      `Period: ${input.window.fromDay} to ${input.window.toDay}`,
-      `Workspaces: ${names.join(", ")}`,
-      ...(input.filterWords.length ? [`Filters: ${input.filterWords.join("; ")}`] : []),
-      `Total cost: ${usd(totals.costUsd)} across ${totals.runs} runs`,
+      `Report period: ${periodText(input.window.fromDay, input.window.toDay)}`,
+      `Generated: ${stampText(new Date())}`,
       ...(note ? ["", note] : []),
       "",
-      `The workbook ${filename} is attached. It is a snapshot taken when this message was sent, and it lists model (LLM) cost only.`,
+      "Attached:",
+      ...lines,
     ].join("\n");
 
     const [intent] = await db
@@ -107,7 +122,7 @@ export const reportShareService = {
         periodTo: input.window.toDay,
         filters: input.filters,
         filename,
-        bytes: workbook.length,
+        bytes: total,
         runCount: totals.runs,
         costUsd: totals.costUsd.toFixed(6),
         outcome: "failed",
@@ -120,7 +135,7 @@ export const reportShareService = {
       body,
       contentType: "Text",
       to: rc.to,
-      attachments: [{ name: filename, contentType: XLSX_CONTENT_TYPE, data: workbook }],
+      attachments,
     });
 
     if (!sent.ok) {
@@ -131,6 +146,6 @@ export const reportShareService = {
       return { ok: false, status: sent.status === 502 ? 502 : sent.status === 413 ? 413 : 409, message: sent.message };
     }
     await db.update(reportShares).set({ outcome: "sent", failureReason: null }).where(eq(reportShares.id, intent.id));
-    return { ok: true, filename, recipients: rc.to, bytes: workbook.length };
+    return { ok: true, filename, recipients: rc.to, bytes: total };
   },
 };

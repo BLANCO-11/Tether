@@ -203,6 +203,22 @@ def save_file(path: str, name: str | None = None) -> str:
     ctx = _ctx
     if ctx is None:
         raise FoundryError("foundry is not configured — steps only run inside the Foundry runner")
+    if not os.path.isfile(path):
+        base = os.path.basename(path)
+        msg = (
+            f"no file {path!r} in the run's folder ({os.getcwd()}). Every step runs in that folder: save the file "
+            f"there by name (wb.save(\"report.xlsx\")), not next to the step's code, and hand that name to the next step."
+        )
+        steps_dir = os.path.join(os.getcwd(), "steps")
+        try:
+            subs = sorted(os.listdir(steps_dir))
+        except OSError:
+            subs = []
+        for sub in subs:
+            if base and os.path.isfile(os.path.join(steps_dir, sub, base)):
+                msg += f" It is at steps/{sub}/{base}, where an earlier step saved it."
+                break
+        raise FoundryError(msg)
     name = name or os.path.basename(path)
     size = os.path.getsize(path)
     if size > FILE_MAX_BYTES:
@@ -237,30 +253,96 @@ def _base_name(name: str | None, fallback: str = "report") -> str:
     return (base or fallback)[:80]
 
 
+def _columns(rows: list[dict[str, Any]]) -> list[str]:
+    cols: list[str] = []
+    for r in rows:
+        for k in r:
+            if k not in cols:
+                cols.append(k)
+    return cols
+
+
+def _xlsx_sheets(path: str, sheets: list[tuple[str | None, list[dict[str, Any]], list[str]]]) -> None:
+    """Rows written one at a time and flushed as they go (`constant_memory`), so the workbook never holds them all.
+
+    Each sheet is written completely before the next is added, which constant_memory requires.
+    Measured on 108,190 rows x 33 columns: pandas' `to_excel` (openpyxl) peaked at 1816 MB, past a run's 1024 MB;
+    this peaked at 538 MB, most of it the rows themselves.
+    """
+    import xlsxwriter
+
+    wb = xlsxwriter.Workbook(path, {"constant_memory": True, "strings_to_numbers": False,
+                                    "strings_to_formulas": False, "strings_to_urls": False})
+    for name, rows, cols in sheets:
+        ws = wb.add_worksheet(name)
+        ws.write_row(0, 0, cols)
+        for i, r in enumerate(rows, 1):
+            ws.write_row(i, 0, [_cell(r.get(c)) for c in cols])
+    wb.close()
+
+
+def _xlsx(path: str, rows: list[dict[str, Any]], cols: list[str]) -> None:
+    _xlsx_sheets(path, [(None, rows, cols)])
+
+
+def write_xlsx(path: str, rows: "list[dict[str, Any]] | dict[str, list[dict[str, Any]]]") -> str:
+    """Write `rows` as an Excel file at `path`, one row at a time. Returns the path.
+
+    `rows` is a list of dicts for one sheet, or a dict of sheet name to list of dicts for several, written in order:
+    `write_xlsx(path, {"Data": rows, "Report": summary_rows})`.
+
+    Use this, not pandas' `to_excel`, for a report of any size: `to_excel` holds several copies of the data and runs
+    out of memory on a large one. For several sheets, pass them all in one call and never re-open the written file
+    with `openpyxl.load_workbook` to add one: that loads every cell and runs out of memory.
+    """
+    if isinstance(rows, dict):
+        if not rows:
+            raise FoundryError("write_xlsx needs at least one sheet; the dict of sheets is empty.")
+        seen: set[str] = set()
+        for name, sheet_rows in rows.items():
+            if not isinstance(name, str) or not name.strip() or len(name) > 31 or any(c in name for c in "[]:*?/\\") \
+                    or name.startswith("'") or name.endswith("'") or name.lower() == "history":
+                raise FoundryError(
+                    f"Sheet name {name!r} is not allowed: use 1 to 31 characters, none of [ ] : * ? / \\, "
+                    f"not starting or ending with ', and not \"History\"."
+                )
+            if name.lower() in seen:
+                raise FoundryError(f"Sheet name {name!r} is used twice; names must differ even in upper or lower case.")
+            seen.add(name.lower())
+            if not isinstance(sheet_rows, list):
+                raise FoundryError(f"Sheet {name!r} must be a list of dicts, not {type(sheet_rows).__name__}.")
+            if len(sheet_rows) > XLSX_MAX_ROWS:
+                raise FoundryError(
+                    f"Sheet {name!r} has {len(sheet_rows):,} rows, more than an Excel sheet holds "
+                    f"({XLSX_MAX_ROWS:,}). Write a CSV instead."
+                )
+        _xlsx_sheets(path, [(n, r, _columns(r)) for n, r in rows.items()])
+        return path
+    if not isinstance(rows, list):
+        raise FoundryError(
+            f"write_xlsx takes a list of dicts or a dict of sheet name to list of dicts, not {type(rows).__name__}."
+        )
+    if len(rows) > XLSX_MAX_ROWS:
+        raise FoundryError(
+            f"{len(rows):,} rows is more than an Excel sheet holds ({XLSX_MAX_ROWS:,}). Write a CSV instead."
+        )
+    _xlsx(path, rows, _columns(rows))
+    return path
+
+
 def _rows_file(rows: list[dict[str, Any]], name: str | None, fmt: str | None) -> tuple[str, str]:
     """Build the file a tool would have built from `rows`, in this step. Returns (path, attachment name).
 
     Excel when asked (it is compressed already); CSV otherwise. A file still over the limit, or rows past Excel's
     row limit, becomes a zipped CSV — a CSV of repetitive data shrinks about twentyfold.
     """
-    cols: list[str] = []
-    for r in rows:
-        for k in r:
-            if k not in cols:
-                cols.append(k)
+    cols = _columns(rows)
     base = _base_name(name)
     folder = tempfile.mkdtemp(prefix="foundry-file-")
     want = (fmt or ("xlsx" if (name or "").lower().endswith(".xlsx") else "csv")).lower()
     if want == "xlsx" and len(rows) <= XLSX_MAX_ROWS:
-        import xlsxwriter
-
         path = os.path.join(folder, base + ".xlsx")
-        wb = xlsxwriter.Workbook(path, {"strings_to_numbers": False, "strings_to_formulas": False, "strings_to_urls": False})
-        ws = wb.add_worksheet()
-        ws.write_row(0, 0, cols)
-        for i, r in enumerate(rows, 1):
-            ws.write_row(i, 0, [_cell(r.get(c)) for c in cols])
-        wb.close()
+        _xlsx(path, rows, cols)
         if os.path.getsize(path) <= FILE_MAX_BYTES:
             return path, base + ".xlsx"
     import csv

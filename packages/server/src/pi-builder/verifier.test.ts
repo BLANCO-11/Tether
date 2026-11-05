@@ -291,3 +291,162 @@ describe("a workspace file in uses", () => {
     expect(verifyFileUse([], code, ["Rates.csv"]).out).toContain('the code calls foundry.file("Rates.csv") but uses does not list "file:Rates.csv"');
   });
 });
+
+/**
+ * Data must REACH a step's code (chat 5e491c36, 2026-11-03). The runner hands a step exactly the params and inputs it
+ * binds; a fix turn left a report step with `"inputs": {}`, code reading inputs.get("attendance"), and two reads it
+ * listed and never called — the verifier said OK and the run failed later as "returned empty data".
+ */
+function verifyData(steps: Array<Record<string, unknown>>, code: Record<string, string>, inputs: Record<string, unknown> = {}): { ok: boolean; out: string } {
+  const root = realpathSync(mkdtempSync(join(tmpdir(), "pi-verify-")));
+  mkdirSync(join(root, "verifier"));
+  copyFileSync(resolve(__dirname, "../../pi-builder-template/verifier/verify.mjs"), join(root, "verifier/verify.mjs"));
+  for (const st of steps) {
+    mkdirSync(join(root, `sandbox/steps/${st.id}`), { recursive: true });
+    writeFileSync(join(root, `sandbox/steps/${st.id}/main.py`), code[st.id as string] ?? "def run(params, inputs):\n    return {}\n");
+    st.entry ??= `steps/${st.id}/main.py`;
+    st.description ??= `Does ${st.id}.`;
+  }
+  writeFileSync(join(root, "sandbox/catalogue.json"), JSON.stringify({ entries: [], datasources: [{ name: "HR", dialect: "postgres" }] }));
+  const reads = {
+    attendance: { datasource: "HR", sql: "SELECT employee_no FROM employee_time_information WHERE attendance_date >= $1::date", params: [{ name: "month", type: "string" }] },
+    leaves: { datasource: "HR", sql: "SELECT employee_id FROM employee_times_overview", params: [] },
+  };
+  writeFileSync(join(root, "sandbox/workflow.json"), JSON.stringify({ inputs, reads, steps }));
+  const r = spawnSync(process.execPath, [join(root, "verifier/verify.mjs")], { encoding: "utf8" });
+  return { ok: r.status === 0, out: `${r.stdout}${r.stderr}` };
+}
+
+describe("the verifier: data reaches the code", () => {
+  const month = { month: { type: "string", default: "2026-10", description: "Month, YYYY-MM" } };
+  const report = (over: Record<string, unknown>) => ({ id: "report", uses: ["read:attendance", "read:leaves"], params: { month: "$input.month" }, outputs: ["rows"], ...over });
+  const readsInCode =
+    'import foundry\n\ndef run(params, inputs):\n    a = foundry.read("attendance", month=params["month"])\n    l = foundry.read("leaves")\n    return {"rows": a + l}\n';
+  const readsFromInputs = 'def run(params, inputs):\n    _ = params["month"]\n    return {"rows": (inputs.get("attendance") or []) + (inputs.get("leaves") or [])}\n';
+
+  it("control: a step that calls its reads verifies", () => {
+    const r = verifyData([report({})], { report: readsInCode }, month);
+    expect(r.out).toContain("VERIFY OK");
+  });
+
+  it("control: a step given its rows by earlier read steps verifies, even with a leftover read: in uses", () => {
+    const steps = [
+      { id: "attendance", uses: ["read:attendance"], params: { month: "$input.month" }, outputs: ["rows"] },
+      { id: "leaves", uses: ["read:leaves"], outputs: ["rows"] },
+      report({ inputs: { attendance: "attendance.rows", leaves: "leaves.rows" } }),
+    ];
+    const r = verifyData(steps, {
+      attendance: 'import foundry\n\ndef run(params, inputs):\n    return {"rows": foundry.read("attendance", month=params["month"])}\n',
+      leaves: 'import foundry\n\ndef run(params, inputs):\n    return {"rows": foundry.read("leaves")}\n',
+      report: readsFromInputs,
+    }, month);
+    expect(r.out).toContain("VERIFY OK");
+  });
+
+  it("refuses the chat's state: code reads inputs nothing binds, and the step's reads are never called", () => {
+    const r = verifyData([report({ inputs: {} })], { report: readsFromInputs }, month);
+    expect(r.ok).toBe(false);
+    expect(r.out).toContain('reads inputs["attendance"] but the step binds no input "attendance", so it never has a value');
+    expect(r.out).toContain('reads inputs["leaves"] but the step binds no input "leaves"');
+    expect(r.out).toContain('uses lists "read:attendance" but steps/report/main.py never calls foundry.read("attendance") and the step is bound no inputs');
+  });
+
+  it("refuses an input read with a default that nothing binds — the default is a fixed value in disguise", () => {
+    const code = 'import foundry\n\ndef run(params, inputs):\n    path = inputs.get("report_path", "report.xlsx")\n    return {"rows": foundry.read("leaves") + [path]}\n';
+    const r = verifyData([{ id: "report", uses: ["read:leaves"], outputs: ["rows"] }], { report: code });
+    expect(r.out).toContain('reads inputs["report_path"] but the step binds no input "report_path"');
+  });
+
+  it("refuses a param read that nothing binds", () => {
+    const code = 'import foundry\n\ndef run(params, inputs):\n    return {"rows": foundry.read("attendance", month=params["month"])}\n';
+    const r = verifyData([{ id: "report", uses: ["read:attendance"], outputs: ["rows"] }], { report: code });
+    expect(r.out).toContain('reads params["month"] but the step binds no param "month"');
+  });
+
+  it("does not count a comment as a read (I-62)", () => {
+    const code = '# inputs["attendance"] would be wrong here; read it instead\n' + readsInCode;
+    const r = verifyData([report({})], { report: code }, month);
+    expect(r.out).toContain("VERIFY OK");
+  });
+
+  it("does not call a step starved when it reads by a computed name", () => {
+    const code = 'import foundry\n\ndef run(params, inputs):\n    _ = params["month"]\n    return {"rows": [r for n in ("attendance", "leaves") for r in foundry.read(n)]}\n';
+    const r = verifyData([report({})], { report: code }, month);
+    expect(r.out).not.toContain("so it has no data");
+  });
+
+  it("names the fix when a read's bare name is used as a binding", () => {
+    const r = verifyData([report({ inputs: { attendance: "attendance", leaves: "leaves" } })], { report: readsFromInputs }, month);
+    expect(r.out).toContain(`input attendance is "attendance" — that is a read's name, and a read is not a binding; call foundry.read("attendance")`);
+    expect(r.out).not.toContain('input attendance must be "$input.<name>"');
+  });
+});
+
+describe("the verifier: a read in step form, and a step running another's code (chat 934d4254)", () => {
+  const month = { month: { type: "string", default: "2026-10", description: "Month, YYYY-MM" } };
+  const code = 'def run(params, inputs):\n    _ = params["month"]\n    return {"rows": inputs["attendance"]}\n';
+
+  it('"<read>.rows" as an input names the read and the fix, not a missing step', () => {
+    const r = verifyData(
+      [{ id: "report", uses: ["read:attendance"], params: { month: "$input.month" }, inputs: { attendance: "attendance.rows" }, outputs: ["rows"] }],
+      { report: code },
+      month,
+    );
+    expect(r.out).toContain('attendance is a read, not a step');
+    expect(r.out).toContain('call foundry.read("attendance", ...)');
+    expect(r.out).not.toContain("no EARLIER step is called attendance");
+  });
+
+  it("CONTROL: a missing step that is not a read keeps the plain message", () => {
+    const r = verifyData(
+      [{ id: "report", params: { month: "$input.month" }, inputs: { attendance: "fetch.rows" }, outputs: ["rows"] }],
+      { report: code },
+      month,
+    );
+    expect(r.out).toContain("no EARLIER step is called fetch");
+  });
+
+  it("a step running another step's code file is refused, naming whose file it is", () => {
+    const r = verifyData(
+      [
+        { id: "attendance", entry: "steps/report/main.py", params: { month: "$input.month" }, outputs: ["rows"] },
+        { id: "report", params: { month: "$input.month" }, inputs: { attendance: "attendance.rows" }, outputs: ["rows"] },
+      ],
+      { report: code },
+      month,
+    );
+    expect(r.out).toContain("step attendance: runs steps/report/main.py, which is step report's code");
+    expect(r.out).not.toContain("step report: runs");
+  });
+});
+
+describe("the verifier: a workbook written by foundry.write_xlsx is not re-opened (run 12e1a455)", () => {
+  const wrap = (body: string) => `def run(params, inputs):\n    foundry.write_xlsx("r.xlsx", [])\n${body}    return {"rows": []}\n`;
+
+  it("a full-mode load_workbook after write_xlsx is refused", () => {
+    const r = verify({}, { code: wrap("    wb = openpyxl.load_workbook(\"r.xlsx\")\n") });
+    expect(r.ok).toBe(false);
+    expect(r.out).toContain("re-opens a workbook");
+  });
+  it("read_only = True verifies", () => {
+    expect(verify({}, { code: wrap("    wb = openpyxl.load_workbook(p, read_only = True)\n") }).ok).toBe(true);
+  });
+  it("load_workbook in a step that never calls write_xlsx verifies", () => {
+    const code = 'def run(params, inputs):\n    wb = load_workbook("template.xlsx")\n    return {"rows": []}\n';
+    expect(verify({}, { code }).ok).toBe(true);
+  });
+  it("control: the load_workbook line only in a comment verifies", () => {
+    expect(verify({}, { code: wrap("    # wb = openpyxl.load_workbook(out)\n") }).ok).toBe(true);
+  });
+  it("write_xlsx imported by name (from foundry import write_xlsx) is caught too", () => {
+    const code = 'def run(params, inputs):\n    write_xlsx("r.xlsx", [])\n    wb = load_workbook("r.xlsx")\n    return {"rows": []}\n';
+    const r = verify({}, { code });
+    expect(r.ok).toBe(false);
+    expect(r.out).toContain("re-opens a workbook");
+  });
+  it("a multi-line call is refused", () => {
+    const r = verify({}, { code: wrap("    wb = load_workbook(\n        out,\n    )\n") });
+    expect(r.ok).toBe(false);
+    expect(r.out).toContain("re-opens a workbook");
+  });
+});

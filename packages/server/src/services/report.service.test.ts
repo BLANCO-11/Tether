@@ -1,5 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
 import { read, utils } from "xlsx";
+import { readZip } from "./zip-lite.js";
 import {
   NO_FLOW,
   applyDrill,
@@ -161,23 +162,41 @@ describe("pagination", () => {
 });
 
 describe("the workbook", () => {
-  const buf = buildReportWorkbook({ runs: RUNS, window: WINDOW, workspaces: ["Finance", "HR"], filters: [], generatedBy: "Ada" });
-  const wb = read(buf, { type: "buffer" });
-
-  it("has one sheet each for the summary, workspaces, workflows, people and runs", () => {
-    expect(wb.SheetNames).toEqual(["Summary", "Workspaces", "Workflows", "People", "Runs"]);
+  let buf: Buffer;
+  let wb: ReturnType<typeof read>;
+  beforeAll(async () => {
+    buf = await buildReportWorkbook({ runs: RUNS, window: WINDOW, workspaces: ["Finance", "HR"], filters: [], generatedBy: "Ada" });
+    wb = read(buf, { type: "buffer" });
   });
 
-  it("the Runs sheet carries EVERY run, and costs are numbers a recipient can sum", () => {
-    const rows = utils.sheet_to_json<Record<string, unknown>>(wb.Sheets.Runs);
+  it("is the raw data: no charts, a Summary then one sheet each for workspaces, workflows, people, days and runs", () => {
+    expect(wb.SheetNames).toEqual(["Summary", "Workspaces", "Workflows", "People", "Days", "Runs"]);
+    expect(readZip(buf).has("xl/charts/chart1.xml")).toBe(false);
+    expect(readZip(buf).has("xl/drawings/drawing1.xml")).toBe(false);
+  });
+
+  it("the Summary says what the file covers and lists each workspace on its own row", () => {
+    const flat = utils.sheet_to_json<unknown[]>(wb.Sheets.Summary, { header: 1 }).flat().join("|");
+    expect(flat).toContain("19 Oct 2026 to 25 Oct 2026 (UTC)");
+    expect(flat).toContain("Finance");
+    expect(flat).toContain("HR");
+    expect(flat).toContain("Ada");
+    expect(flat).toContain("None");
+    expect(flat).toContain("KEY FIGURES");
+  });
+
+  it("the Runs sheet carries EVERY run, with real dates and costs a recipient can sum", () => {
+    const rows = utils.sheet_to_json<Record<string, unknown>>(wb.Sheets.Runs, { range: 2 }).filter((r) => r["Date (UTC)"] !== "Total");
     expect(rows.length).toBe(RUNS.length);
     expect(rows.reduce((a, r) => a + Number(r["Cost (USD)"]), 0)).toBeCloseTo(10, 6);
+    expect(rows[0]["Run"]).toBe(RUNS[0].key);
   });
 
-  it("the Summary sheet states the total", () => {
-    const flat = utils.sheet_to_json<unknown[]>(wb.Sheets.Summary, { header: 1 }).flat();
-    expect(flat).toContain("Total cost (USD)");
-    expect(flat).toContain(10);
+  it("each group sheet ends in a total that equals the sum of its rows", () => {
+    const rows = utils.sheet_to_json<Record<string, unknown>>(wb.Sheets.Workspaces, { range: 2 });
+    const total = rows.find((r) => r["Workspace"] === "Total")!;
+    const body = rows.filter((r) => r["Workspace"] !== "Total");
+    expect(Number(total["Cost (USD)"])).toBeCloseTo(body.reduce((a, r) => a + Number(r["Cost (USD)"]), 0), 6);
   });
 
   it("the filename is safe and says what it covers", () => {

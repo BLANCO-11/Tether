@@ -125,7 +125,7 @@ describe("the exemptions, each for its own stated reason", () => {
     }
   });
 
-  it("and the exempt list is EXACTLY twenty-six — a twenty-seventh needs a decision (25 and 26: Forge Agent listing actions and proposing a setting change)", () => {
+  it("and the exempt list is EXACTLY twenty-nine — a thirtieth needs a decision (27–29: the built-in tools' own keys and Forge's web read)", () => {
     // ⚠ This is the shortest and most security-relevant list in the feature: it is the
     // set of routes an unauthenticated caller can reach. Growing it should cost somebody
     // an argument, not a line. (17 and 18: the runner's token-authenticated callbacks, above.
@@ -135,8 +135,13 @@ describe("the exemptions, each for its own stated reason", () => {
     // 25 and 26 (2026-10-28): listing the connected services' actions, and proposing to switch one on or off. Same key,
     // Forge Agent only; the list changes nothing and the proposal applies nothing — the person's click, under their own
     // identity on a guarded route, does, and only where their permissions allow (agent-grants.ts `mayDecide`).
-    expect(EXEMPT.size).toBe(26);
-    for (const path of ["/api/forge/data", "/api/forge/file", "/api/forge/plugin", "/api/forge/propose", "/api/forge/actions", "/api/forge/propose-setting"]) {
+    // 27–29 (beta-2.36.0): `POST /api/llm/complete` and `POST /api/web/fetch`, the built-in tools moved into the
+    // server, each behind its own derived key exactly as `POST /api/mail/send` is; and `POST /api/forge/fetch`, Forge
+    // reading a public address while building, behind its per-conversation key like the other Forge tools.
+    expect(EXEMPT.size).toBe(29);
+    expect(EXEMPT.get("POST /api/llm/complete")?.reason).toBe("requireLlmKey");
+    expect(EXEMPT.get("POST /api/web/fetch")?.reason).toBe("requireWebKey");
+    for (const path of ["/api/forge/data", "/api/forge/file", "/api/forge/plugin", "/api/forge/propose", "/api/forge/actions", "/api/forge/propose-setting", "/api/forge/fetch"]) {
       const req = requirementFor("POST", path);
       expect(req?.kind).toBe("exempt");
       if (req?.kind === "exempt") expect(req.reason).toMatch(/per-conversation tool key/);
@@ -145,23 +150,20 @@ describe("the exemptions, each for its own stated reason", () => {
 });
 
 describe("the deployment tier keeps its own vocabulary", () => {
-  it("D-115: the tool model and the generation model are SEPARATE permissions", () => {
-    // ⚠ `/ai-provider`'s panel sets the model behind `llm_complete`; generation reads its
-    // own row. This has confused a user twice, and one permission over both would merge
-    // them at the authorisation layer — undoing the separation in the one place that
-    // decides who may change what.
-    expect(permOf("PUT", "/api/ops/llm/provider")).toBe("platform.toolmodel.write");
-    expect(permOf("GET", "/api/ops/llm/provider")).toBe("platform.toolmodel.read");
-    expect(permOf("PUT", "/api/generation/llm/provider")).toBe("platform.generation.write");
+  it("the model connection and model pricing keep separate permissions", () => {
+    // 2026-11-04: one model connection for the deployment, at `/api/runtime-model` (`platform.toolmodel.*`).
+    // Prices are a separate decision with their own permission.
+    expect(permOf("PUT", "/api/runtime-model/provider")).toBe("platform.toolmodel.write");
+    expect(permOf("GET", "/api/runtime-model/provider")).toBe("platform.toolmodel.read");
+    expect(permOf("PUT", "/api/generation/pricing")).toBe("platform.generation.write");
   });
 
-  it("the outbox and call log are `platform.ops.read`, not audit", () => {
-    for (const p of ["calls", "chat", "mail", "tickets"]) {
-      expect(permOf("GET", `/api/ops/outbox/${p}`), `/api/ops/outbox/${p}`).toBe(
-        "platform.ops.read",
-      );
-    }
-    expect(permOf("GET", "/api/ops/status")).toBe("platform.ops.read");
+  it("ops-api is gone (beta-2.36.0): nothing is mapped under /api/ops", () => {
+    // The outbox and call log these routes served left with ops-api; a run's calls are read per run
+    // (GET …/flow-executions/:id/calls). A route reappearing here needs its own decision, not this old one.
+    const keys = [...ROUTE_PERMISSIONS.keys(), ...EXEMPT.keys()];
+    expect(keys.length).toBeGreaterThan(100); // CONTROL: the scan sees the map
+    expect(keys.filter((k) => / \/api\/ops\//.test(k))).toEqual([]);
   });
 
   it("signals answers 'is the system working', so it is not `platform.audit.read`", () => {

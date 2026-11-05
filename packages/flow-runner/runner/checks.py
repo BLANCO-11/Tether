@@ -108,6 +108,9 @@ def failure_text(step_id: str, findings: list[dict], reads: list | None = None, 
     An output with NO rows says what the step had: "it had 10 row(s) from read X and kept none" is a different problem
     from "its read returned nothing", and both differ from a field left blank — three things that used to share one
     sentence, so a person answering about blank values was answering a different question (2026-10-12).
+
+    When one source was empty and another was not, the empty source is named instead: a match against an empty list
+    keeps nothing, and that is not the step's conditions at fault (2026-11-03).
     """
     failed = [f for f in findings if f["verdict"] == "failed"]
     if not failed:
@@ -123,10 +126,18 @@ def failure_text(step_id: str, findings: list[dict], reads: list | None = None, 
     text = f"step {step_id} returned empty data: " + "; ".join(parts) + "."
     if whole:
         had = where_rows_went(reads, inputs)
-        total = sum(int(r.get("rows", 0)) for r in (reads or []) if isinstance(r, dict)) + sum(
-            len(v) for v in (inputs or {}).values() if isinstance(v, list)
-        )
-        if had and total > 0:
+        sources = [(f'read {r.get("read")}', int(r.get("rows", 0))) for r in (reads or []) if isinstance(r, dict)]
+        sources += [(f"input {k}", len(v)) for k, v in (inputs or {}).items() if isinstance(v, list)]
+        total = sum(n for _, n in sources)
+        empty = [name for name, n in sources if n == 0]
+        if had and total > 0 and empty:
+            names = ", ".join(f"'{n}'" for n in empty)
+            verb = "was" if len(empty) == 1 else "were"
+            pron = "it" if len(empty) == 1 else "them"
+            which = "that source" if len(empty) == 1 else "those sources"
+            text += (f" The step had {had}. {names} {verb} empty, so nothing could be matched against {pron}: check "
+                     f"why {which} found nothing before changing this step's conditions.")
+        elif had and total > 0:
             text += (f" The step had {had}, and kept none of them: its own conditions (a filter, a match between "
                      "tables) removed every row. On test data that usually means the test rows do not meet those "
                      "conditions or do not connect to each other; on real data, check the conditions.")

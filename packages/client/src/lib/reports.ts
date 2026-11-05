@@ -185,3 +185,20 @@ export function topRows(groups: readonly ReportGroup[], top = 8): RankedRow[] {
   }
   return rows;
 }
+
+/** Where this calendar month is heading (`GET /reports/forecast`). Shown on the screen only; no file carries it. */
+export interface MonthForecast {
+  month: string;
+  daysInMonth: number;
+  today: number;
+  soFar: number;
+  /** False when too few complete days have passed to average; the figures below are then null. */
+  enough: boolean;
+  completeDays: number;
+  basisDays: number;
+  avgDaily: number | null;
+  projected: number | null;
+  low: number | null;
+  high: number | null;
+  series: Array<{ day: number; actual: number | null; projected: number | null }>;
+}

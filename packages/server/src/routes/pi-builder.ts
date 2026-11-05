@@ -371,6 +371,21 @@ piBuilderRouter.post(
   }),
 );
 
+/** "Send now" on a queued message (2026-11-03): give it to Forge during the turn that is running. 409 when no turn is running. */
+piBuilderRouter.post(
+  "/sessions/:sessionId/steer",
+  asyncHandler(async (req, res) => {
+    const { text } = z
+      .object({ text: z.string().max(50_000) })
+      .strict()
+      .refine((b) => b.text.trim().length > 0, "message required")
+      .parse(req.body ?? {});
+    piBuilderService.noteReader(req.params.workspaceId, req.params.sessionId, req.user);
+    const session = await piBuilderService.steer(req.params.workspaceId, req.params.sessionId, text, authorOfMessage(req));
+    res.json({ session });
+  }),
+);
+
 /**
  * Attach a file to this workflow's chat — the raw bytes, its name in `x-file-name` (URI-encoded). Stored as-is for
  * Forge to read while building (pi-builder/attachments.ts); sent with the next message that names it.
@@ -479,6 +494,16 @@ piBuilderRouter.post(
   asyncHandler(async (req, res) => {
     const { thinking } = z.object({ thinking: z.enum(THINKING_LEVELS) }).strict().parse(req.body ?? {});
     const session = await piBuilderService.setThinking(req.params.workspaceId, req.params.sessionId, thinking);
+    res.json({ session });
+  }),
+);
+
+/** The model this chat's Forge runs with, from the models turned on for the builder. Applies from the next message. */
+piBuilderRouter.post(
+  "/sessions/:sessionId/model",
+  asyncHandler(async (req, res) => {
+    const { model } = z.object({ model: z.string().min(1).max(200) }).strict().parse(req.body ?? {});
+    const session = await piBuilderService.setModel(req.params.workspaceId, req.params.sessionId, model);
     res.json({ session });
   }),
 );

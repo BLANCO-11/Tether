@@ -3,13 +3,14 @@
  *
  *   GET    /                  the files, each with the workflows that use it
  *   POST   /                  upload one (raw body, `x-file-name`), 50 MB per file, 1 GB per workspace
- *   GET    /:fileId/content   download it
+ *   GET    /:fileId/content   download it; `?preview=1[&rows=N]` a table/text preview, `?inline=1` show it in the page
  *   DELETE /:fileId           delete it
  */
 import express, { Router } from "express";
 import { asyncHandler } from "../middleware/error.middleware.js";
 import { MAX_WORKSPACE_FILE_BYTES, workspaceFileService } from "../services/workspace-file.service.js";
 import { refreshWorkspaceCatalogue } from "../pi-builder/catalogue-sync.js";
+import { previewOf } from "../pi-builder/file-preview.js";
 
 export const workspaceFilesRouter = Router({ mergeParams: true });
 
@@ -44,9 +45,20 @@ workspaceFilesRouter.get(
   asyncHandler(async (req, res) => {
     const f = await workspaceFileService.read(req.params.workspaceId!, { id: req.params.fileId! });
     if (!f) return res.status(404).json({ error: "not_found", message: "No such file in this workspace." });
+    // `?preview=1` — a sheet or Word document as JSON the page can draw (file-preview.ts); `&rows=N` bounds the rows
+    // (the Resources "view" asks for 50: it is there to show the columns, not the data).
+    if (req.query.preview === "1") {
+      const rows = Number(req.query.rows);
+      res.setHeader("Cache-Control", "no-store");
+      res.json({ preview: Number.isFinite(rows) && rows > 0 ? previewOf(f.name, f.data, rows) : previewOf(f.name, f.data) });
+      return;
+    }
     res.setHeader("content-type", f.contentType);
     res.setHeader("content-length", String(f.data.length));
-    res.setHeader("content-disposition", `attachment; filename*=UTF-8''${encodeURIComponent(f.name)}`);
+    // Only types a browser renders safely are shown inline; anything else downloads, so a file never runs as a page.
+    const inline = req.query.inline === "1" && /^(image\/(png|jpeg|gif|webp)|application\/pdf|text\/plain|text\/csv)/.test(f.contentType);
+    res.setHeader("content-disposition", `${inline ? "inline" : "attachment"}; filename*=UTF-8''${encodeURIComponent(f.name)}`);
+    res.setHeader("X-Content-Type-Options", "nosniff");
     res.end(f.data);
   }),
 );

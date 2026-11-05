@@ -314,6 +314,7 @@ export type FoldResult =
  *     day; refusing the whole message would turn "nothing overdue" into a failed run. It is REPORTED
  *     (`skipped`), not silent — the general rule that an empty file is refused still holds for
  *     `attachments`, where a person built the file on purpose.
+ *   - An EMPTY `attach_rows` list with no name and no format declares no file — treated as not given at all.
  */
 export function foldFlatAttachment(
   attachments: readonly AttachmentInput[] | undefined,
@@ -321,7 +322,8 @@ export function foldFlatAttachment(
 ): FoldResult {
   const list = [...(attachments ?? [])];
   const { attach_rows: given, attach_name: rawName, attach_format: rawFormat, fallbackName } = flat;
-  if (given === undefined && rawName === undefined && rawFormat === undefined) {
+  const noRows = given === undefined || (Array.isArray(given) && given.length === 0);
+  if (noRows && rawName === undefined && rawFormat === undefined) {
     return { ok: true, attachments: list, skipped: [] };
   }
   if (given === undefined) {

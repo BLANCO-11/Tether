@@ -279,7 +279,7 @@ export type PiEvent =
   | { type: "workflow"; workflow: PiWorkflow; files?: Record<string, string> }
   | { type: "questions"; questions: PiQuestionsFile }
   | { type: "verify"; ok: boolean; detail: string; summary?: string }
-  | { type: "test_run"; ok: boolean; detail: string; summary?: string; runId: string | null; waiting?: PiTestWaiting | null }
+  | { type: "test_run"; ok: boolean; detail: string; summary?: string; runId: string | null; waiting?: PiTestWaiting | null; needsRealData: boolean }
   | { type: "snapshot"; id: string; label: string }
   | { type: "saved"; flowId: string; revision: number }
   /** The person's first message saved this conversation as a chat (0095). */
@@ -329,14 +329,16 @@ export type PiSessionPublic = {
   lastVerify: { ok: boolean; detail: string } | null;
   /** Sandbox test-run (verify + runner). Save-as-version requires ok. */
   /** `detail` is written for Forge; `summary` is the sentence a person reads (flow-runner.service `summariseRun`). */
-  lastTestRun: { ok: boolean; detail: string; summary?: string; at: string; runId: string | null; waiting?: PiTestWaiting | null } | null;
+  lastTestRun: { ok: boolean; detail: string; summary?: string; at: string; runId: string | null; waiting?: PiTestWaiting | null; needsRealData: boolean } | null;
   /** The flow execution of the last test run on flow-runner (pi-runtime P2). */
   lastRunId: string | null;
   acceptedSnapshotId: string | null;
   /** Foundry revision number after save-as-version, if any. */
   savedRevision: number | null;
-  /** The model Pi drafts with (the chat head shows it). */
+  /** The model Forge runs with for this chat (the effective one; the chat head shows it). */
   model: string;
+  /** The models this chat may choose from (the builder's enabled models, or its default alone). */
+  models: string[];
   /** How full the conversation is, as last measured; null until Forge has been asked. */
   context: PiContext | null;
   /** Forge is summarising earlier messages right now. */

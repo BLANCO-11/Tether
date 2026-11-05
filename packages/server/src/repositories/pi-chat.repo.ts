@@ -9,6 +9,8 @@ const MAX_MESSAGES = 400;
 export type PiChatSummary = {
   id: string;
   title: string;
+  /** The first line of what the chat asked for, at most 160 characters — a preview for the Chats list. */
+  goal: string;
   flowId: string | null;
   flowName: string | null;
   createdBy: { subject: string | null; name: string | null };
@@ -41,6 +43,7 @@ export const piChatRepo = {
     createdBy: { subject: string | null; name: string | null } | null;
     mode?: "workflow" | "agent";
     thinking?: string;
+    model?: string | null;
     /** Where it lives (sharing-boundaries phase 5): a project, or NULL for My space. */
     projectId?: string | null;
   }): Promise<string> {
@@ -55,6 +58,7 @@ export const piChatRepo = {
         createdByName: input.createdBy?.name ?? null,
         mode: input.mode ?? "workflow",
         ...(input.thinking ? { thinking: input.thinking } : {}),
+        ...(input.model ? { model: input.model } : {}),
         ...(input.projectId ? { projectId: input.projectId } : {}),
       })
       .returning({ id: piChats.id });
@@ -86,6 +90,7 @@ export const piChatRepo = {
       .select({
         id: piChats.id,
         title: piChats.title,
+        goal: sql<string>`left(btrim(split_part(btrim(coalesce(${piChats.goal}, '')), E'\n', 1)), 160)`,
         flowId: piChats.flowId,
         flowName: flows.name,
         subject: piChats.createdBySubject,
@@ -107,6 +112,7 @@ export const piChatRepo = {
     return rows.map((r) => ({
       id: r.id,
       title: r.title,
+      goal: r.goal ?? "",
       flowId: r.flowId,
       flowName: r.flowName ?? null,
       createdBy: { subject: r.subject, name: r.name },
@@ -124,7 +130,7 @@ export const piChatRepo = {
   /** What the conversation now is. Only the fields given are written; `updated_at` always moves. */
   async update(
     chatId: string,
-    patch: { messages?: unknown[]; forgeSession?: string; draftBundle?: unknown | null; flowId?: string | null; goal?: string; mode?: "workflow" | "agent"; thinking?: string; connectionChoices?: Record<string, unknown> },
+    patch: { messages?: unknown[]; forgeSession?: string; draftBundle?: unknown | null; flowId?: string | null; goal?: string; mode?: "workflow" | "agent"; thinking?: string; model?: string | null; connectionChoices?: Record<string, unknown> },
   ): Promise<void> {
     const set: Partial<typeof piChats.$inferInsert> = { updatedAt: new Date() };
     if (patch.messages) set.messages = patch.messages.slice(-MAX_MESSAGES);
@@ -134,6 +140,7 @@ export const piChatRepo = {
     if (patch.goal !== undefined) set.goal = patch.goal;
     if (patch.mode !== undefined) set.mode = patch.mode;
     if (patch.thinking !== undefined) set.thinking = patch.thinking;
+    if (patch.model !== undefined) set.model = patch.model;
     if (patch.connectionChoices !== undefined) set.connectionChoices = patch.connectionChoices;
     await db.update(piChats).set(set).where(eq(piChats.id, chatId));
   },

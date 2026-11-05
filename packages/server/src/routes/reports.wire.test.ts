@@ -1,3 +1,4 @@
+import { readZip } from "../services/zip-lite.js";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { AddressInfo } from "node:net";
 import { SignJWT } from "jose";
@@ -136,6 +137,38 @@ describe.skipIf(!reachable)("the cost report, at the wire", () => {
     expect(r.status).toBe(200);
     expect(r.type).toContain("spreadsheetml");
     expect(r.bytes.subarray(0, 2).toString()).toBe("PK");
+  });
+
+  it("format=pdf downloads the PDF report, over the same rows and the same permission", async () => {
+    const r = await call("/api/reports/export?days=30&format=pdf", ADA);
+    expect(r.status).toBe(200);
+    expect(r.type).toContain("application/pdf");
+    expect(r.bytes.subarray(0, 5).toString()).toBe("%PDF-");
+    // The same guard as the workbook: a Creator is refused, and so is a workspace outside the caller's set.
+    expect((await call("/api/reports/export?days=30&format=pdf", ALICE)).status).toBe(403);
+    expect((await call(`/api/reports/export?days=30&format=pdf&workspaces=${wsB!.id}`, ADA)).status).toBe(403);
+    expect((await call("/api/reports/export?days=30&format=docx", ADA)).status).toBe(400);
+  });
+
+  it("the forecast is always the current month, under the same permission, and ignores the period picker", async () => {
+    const r = await call("/api/reports/forecast?days=7", ADA);
+    expect(r.status).toBe(200);
+    expect(r.json.month).toBe(new Date().toISOString().slice(0, 7));
+    expect(r.json.series).toHaveLength(r.json.daysInMonth);
+    expect((await call("/api/reports/forecast", ALICE)).status).toBe(403);
+    expect((await call(`/api/reports/forecast?workspaces=${wsB!.id}`, ADA)).status).toBe(403);
+  });
+
+  it("format=both downloads one zip holding the workbook and the PDF, under the same permission", async () => {
+    const r = await call("/api/reports/export?days=30&format=both", ADA);
+    expect(r.status).toBe(200);
+    expect(r.type).toContain("application/zip");
+    const parts = readZip(r.bytes);
+    const names = [...parts.keys()];
+    expect(names.some((n) => n.endsWith(".xlsx"))).toBe(true);
+    expect(names.some((n) => n.endsWith(".pdf"))).toBe(true);
+    expect(parts.get(names.find((n) => n.endsWith(".pdf"))!)!.subarray(0, 5).toString()).toBe("%PDF-");
+    expect((await call("/api/reports/export?days=30&format=both", ALICE)).status).toBe(403);
   });
 
   it("an emailed report refuses an address outside the allowed domain, before anything is sent or recorded", async () => {

@@ -157,6 +157,25 @@ describe("a tool batch throws ONLY when every item failed — the retry-safety p
     });
   });
 
+  it("puts the first failing call's reason in the message", async () => {
+    vi.stubGlobal("fetch", respondWith([503, 503]));
+    const err = (await stepExecutionService.tool("ws", batch(2)).then(() => null, (e: unknown) => e)) as {
+      message: string;
+      detail: { results: Array<{ error?: string }> };
+    };
+    const reason = err.detail.results[0]!.error!;
+    expect(reason).toBeTruthy();
+    expect(err.message).toBe(`tool "${TOOL.name}": all 2 call(s) failed — ${reason.slice(0, 500)}`);
+  });
+
+  it("leaves the message unchanged when the failed results carry no error", async () => {
+    // A rejected fetch with an empty message leaves `error` blank on the item.
+    vi.stubGlobal("fetch", vi.fn(async () => { throw new Error(""); }));
+    await expect(stepExecutionService.tool("ws", batch(1))).rejects.toMatchObject({
+      message: `tool "${TOOL.name}": all 1 call(s) failed`,
+    });
+  });
+
   it("throws on a single-item batch that failed — the shape a retry demo uses", async () => {
     // `showcase-retry-recovery` sends one item. One item, all failed, so the step
     // fails and the `retry:` block fires. If a one-item batch were special-cased

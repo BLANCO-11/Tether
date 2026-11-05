@@ -4926,3 +4926,18 @@ connector's actions on **for themselves**, through their own connection, without
   database.** Run DB tests with `DATABASE_URL` pointed at the local Postgres (`localhost:5433`).
 - Owed: `routes/personal-actions.wire.test.ts` exists but has not been run (it writes to its database — run it
   against the local one, never the live one).
+
+## ⚠ One model connection (2026-11-04)
+
+The owner reversed D-35's separation of runtime and generation inference (and its 2026-10-30 amendment).
+
+- **ONE connection**: the `runtime_model_provider` row (gateway URL plus encrypted key), set on AI models → Models
+  through `/api/runtime-model/*`. `LLM_BASE_URL` / `LLM_API_KEY` are the fallback and stay required at boot.
+- **ONE enabled list and ONE default**, used by generation (`resolveGenerationProvider` → `resolveModelConnection`),
+  Forge (per-chat model choice from that list: the composer pill and `/model`) and `llm_complete` (per-step model).
+- The env fallback model is `LLM_MODEL` (`LLM_REASONING_MODEL` and `LLM_FAST_MODEL` are still read). There is no
+  fast/reasoning split any more; Forge Agent chats have a thinking level instead.
+- `generation_llm` is no longer read; migration `0136` merged its list and default into the runtime row.
+  `/api/generation/llm/*` is removed (pricing routes stay).
+- Forge only reaches hosts its egress allows: a saved gateway on another host shows `forgeReachable: false` until
+  `FORGE_EGRESS_ALLOW` includes it.

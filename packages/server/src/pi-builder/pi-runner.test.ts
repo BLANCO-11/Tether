@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { forgeEnv, rebaseForgeSession } from "./pi-runner.js";
+import { config } from "../config/index.js";
+import { rememberModelConnection } from "../services/model-connection.js";
+import { forgeEnv, forgeGateway, rebaseForgeSession } from "./pi-runner.js";
 
 const OLD = "/repo/packages/server/.pi-sandboxes/ws/old-session/sandbox";
 const NEW = "/repo/packages/server/.pi-sandboxes/ws/new-session/sandbox";
@@ -53,5 +55,19 @@ describe("forgeEnv", () => {
 
   it("puts Forge's document tools first on its PATH when the image has them", () => {
     expect(forgeEnv({ ...server, FORGE_PYTHON_BIN: "/opt/forge-py/bin" }).PATH).toBe("/opt/forge-py/bin:/usr/bin");
+  });
+});
+
+describe("forgeGateway (2026-11-04) — the one model connection's gateway", () => {
+  it("is the environment's when nothing has been resolved", () => {
+    expect(forgeGateway()).toEqual({
+      LITELLM_BASE_URL: config.inference.baseUrl.replace(/\/v1\/?$/, ""),
+      LITELLM_API_KEY: config.inference.apiKey,
+    });
+  });
+
+  it("is the last resolved connection once one is remembered", () => {
+    rememberModelConnection({ baseUrl: "https://gw2.example/v1", apiKey: "k2" });
+    expect(forgeGateway()).toEqual({ LITELLM_BASE_URL: "https://gw2.example", LITELLM_API_KEY: "k2" });
   });
 });
