@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 //
-// AI models: personal BYOK — provider cards, providerId on save, one Models view + Costs tab.
+// AI connection: personal BYOK — provider picker, Connection + Costs tabs.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 
@@ -76,13 +76,14 @@ beforeEach(async () => {
 });
 afterEach(cleanup);
 
-describe("AI models (personal BYOK)", () => {
-  it("opens Your AI connection with provider cards", async () => {
+describe("AI connection (personal BYOK)", () => {
+  it("opens Your AI connection with provider picker", async () => {
     render(<Page />);
     expect(await screen.findByText("Your AI connection")).toBeTruthy();
-    expect(screen.getByRole("radio", { name: "OpenAI" })).toBeTruthy();
-    expect(screen.getByRole("radio", { name: "Claude and more (OpenRouter)" })).toBeTruthy();
-    expect(screen.getByRole("tab", { name: "Models" }).getAttribute("aria-selected")).toBe("true");
+    expect(screen.getByRole("tab", { name: "Connection" }).getAttribute("aria-selected")).toBe("true");
+    expect(screen.getByText(/Connected · ab12cd34/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /OpenAI/ }));
+    expect(screen.getByRole("option", { name: /Claude and more/ })).toBeTruthy();
     expect(screen.getByText("Stored key ab12cd34. Leave blank to keep it.")).toBeTruthy();
   });
 
@@ -97,7 +98,8 @@ describe("AI models (personal BYOK)", () => {
   it("picking OpenRouter fills its gateway URL", async () => {
     render(<Page />);
     await screen.findByRole("button", { name: "Save" });
-    fireEvent.click(screen.getByRole("radio", { name: "Claude and more (OpenRouter)" }));
+    fireEvent.click(screen.getByRole("button", { name: /OpenAI/ }));
+    fireEvent.click(screen.getByRole("option", { name: /Claude and more/ }));
     expect((screen.getByDisplayValue("https://openrouter.ai/api/v1") as HTMLInputElement).value).toBe(
       "https://openrouter.ai/api/v1",
     );
@@ -140,6 +142,53 @@ describe("AI models (personal BYOK)", () => {
     tab = "pricing";
     render(<Page />);
     expect(await screen.findByText("pricing:gpt-a,gpt-b")).toBeTruthy();
-    expect(screen.queryByText("Provider")).toBeNull();
+    expect(screen.queryByText("Choose a provider")).toBeNull();
+  });
+
+  it("with no personal key, shows the build default instead of Not connected", async () => {
+    api.getLlmProvider.mockResolvedValue({
+      configured: false,
+      baseUrl: "",
+      keyFingerprint: "",
+      defaultModel: "",
+      allowedModels: [],
+      providerId: "openai",
+      source: "env",
+      updatedAt: null,
+      forgeReachable: true,
+      forgeWarning: null,
+      presets,
+      deploymentDefault: {
+        baseUrl: "https://api.openai.com/v1",
+        defaultModel: "gpt-build",
+        allowedModels: ["gpt-build", "gpt-other"],
+        keyFingerprint: "deadbeef",
+      },
+    });
+    render(<Page />);
+    expect(await screen.findByText(/Build default · gpt-build/)).toBeTruthy();
+    expect(screen.queryByText("Not connected")).toBeNull();
+    expect(screen.getByText("Using the build default")).toBeTruthy();
+    expect(screen.getByLabelText("Build default models")).toBeTruthy();
+    expect(screen.getByText("Default · build")).toBeTruthy();
+  });
+
+  it("Not connected only when there is no personal key and no build default", async () => {
+    api.getLlmProvider.mockResolvedValue({
+      configured: false,
+      baseUrl: "",
+      keyFingerprint: "",
+      defaultModel: "",
+      allowedModels: [],
+      providerId: "openai",
+      source: "env",
+      updatedAt: null,
+      forgeReachable: true,
+      forgeWarning: null,
+      presets,
+      deploymentDefault: null,
+    });
+    render(<Page />);
+    expect(await screen.findByText("Not connected")).toBeTruthy();
   });
 });

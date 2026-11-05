@@ -157,13 +157,25 @@ export const projectService = {
   async contextOf(
     workspaceId: string,
     projectId: string | null | undefined,
-  ): Promise<{ name: string; instructions: string; files: string[]; memories: Array<{ kind: string; body: string }> } | null> {
+  ): Promise<{
+    name: string;
+    instructions: string;
+    files: string[];
+    memories: Array<{ kind: string; body: string }>;
+    memoryEnabled: boolean;
+  } | null> {
     if (!projectId) return null;
-    const [p] = await db.select({ name: projects.name, instructions: projects.instructions }).from(projects).where(and(eq(projects.id, projectId), eq(projects.workspaceId, workspaceId)));
+    const [p] = await db
+      .select({ name: projects.name, instructions: projects.instructions, memoryEnabled: projects.memoryEnabled })
+      .from(projects)
+      .where(and(eq(projects.id, projectId), eq(projects.workspaceId, workspaceId)));
     if (!p) return null;
     const files = (await db.select({ name: projectFiles.name }).from(projectFiles).where(eq(projectFiles.projectId, projectId)).orderBy(asc(projectFiles.name))).map((r) => r.name);
-    const memories = await projectMemoryService.activeForInject(workspaceId, projectId).catch(() => [] as Array<{ kind: string; body: string }>);
-    return { ...p, files, memories };
+    const memories =
+      p.memoryEnabled === false
+        ? []
+        : await projectMemoryService.activeForInject(workspaceId, projectId).catch(() => [] as Array<{ kind: string; body: string }>);
+    return { ...p, memoryEnabled: p.memoryEnabled !== false, files, memories };
   },
 
   manages(v: Viewer, p: Pick<Project, "ownerSubject">): boolean {
@@ -185,7 +197,13 @@ export const projectService = {
     return p!;
   },
 
-  async update(workspaceId: string, projectId: string, v: Viewer, actor: string, input: { name?: string; description?: string | null; instructions?: string }): Promise<Project> {
+  async update(
+    workspaceId: string,
+    projectId: string,
+    v: Viewer,
+    actor: string,
+    input: { name?: string; description?: string | null; instructions?: string; memoryEnabled?: boolean },
+  ): Promise<Project> {
     const p = await this._managed(workspaceId, projectId, v);
     const set: Partial<Project> = { updatedAt: new Date() };
     if (input.name !== undefined) {
@@ -195,8 +213,13 @@ export const projectService = {
     }
     if (input.description !== undefined) set.description = input.description;
     if (input.instructions !== undefined) set.instructions = input.instructions;
+    if (input.memoryEnabled !== undefined) set.memoryEnabled = input.memoryEnabled;
     const [out] = await db.update(projects).set(set).where(eq(projects.id, p.id)).returning();
-    await audit(workspaceId, actor, p.id, `Changed the project “${out!.name}”${input.instructions !== undefined ? " (its shared instructions)" : ""}`);
+    const bits = [
+      input.instructions !== undefined ? "its shared instructions" : null,
+      input.memoryEnabled !== undefined ? (input.memoryEnabled ? "memory on" : "memory off") : null,
+    ].filter(Boolean);
+    await audit(workspaceId, actor, p.id, `Changed the project “${out!.name}”${bits.length ? ` (${bits.join(", ")})` : ""}`);
     return out!;
   },
 

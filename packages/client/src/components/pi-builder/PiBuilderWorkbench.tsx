@@ -9,7 +9,7 @@
 import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactNode } from "react";
 import Link from "next/link";
 import { useResolvedWorkspace } from "@/lib/workspace";
-import { getFlowExecution } from "@/lib/api";
+import { getFlowExecution, getProject } from "@/lib/api";
 import type { FlowExecutionDetail } from "@/lib/types";
 import { LiveRunPanel } from "@/components/flow/LiveRunPanel";
 import { PromptJumpRail } from "./PromptJumpRail";
@@ -67,7 +67,7 @@ import {
   WorkbenchBody,
   WorkbenchRail,
 } from "@/components/layout/Workbench";
-import { Check, ChevronDown, ChevronLeft, ChevronRight, Folder, Paperclip, Send, Workflow } from "@/components/ui/icons";
+import { Check, ChevronDown, ChevronLeft, ChevronRight, PanelRight, Paperclip, Send, Workflow } from "@/components/ui/icons";
 import { AttachmentTray, DropOverlay, FileCards, SentAttachments, useChatAttachments } from "./ChatAttachments";
 import { ReferenceChips, ReferencePicker, useWorkflowReferences } from "./WorkflowReferences";
 import { mentionAt, setPiModel, withoutMention } from "@/lib/pi-builder";
@@ -87,6 +87,7 @@ import { piInputDecls } from "./PiDagCanvas";
 import { PiFlowCanvas } from "./PiFlowCanvas";
 import { ContextMeter } from "./ContextMeter";
 import { CHAT_FILE, PiSidePane, type ChatFile, type PaneView } from "./PiSidePane";
+import { ChatToolsPane, TOOLS_DEFAULT_W, type ToolsTab } from "./ChatToolsPane";
 import { TestWorkbenchPanel } from "@/components/flow/TestWorkbenchPanel";
 import { storeRailCollapsed } from "@/lib/rail-preference";
 
@@ -173,12 +174,22 @@ function Workbench_({
   const [chatId, setChatId] = useState<string | null>(null);
   const [context, setContext] = useState<PiContext | null>(null);
   const [compacting, setCompacting] = useState(false);
-  /** Project this chat lives in — Remember / compact promo only when set (Phase 4 memory). */
+  /** Project this chat lives in — Remember / compact promo only when set and memory is on. */
   const [projectId, setProjectId] = useState<string | null>(startInProject ?? null);
-  /** After Compact: up to 3 candidate lines to accept into project memory. */
+  const [memoryEnabled, setMemoryEnabled] = useState(true);
+  /** After Compact: heuristic ≤3 candidates (no LLM) — accept into project memory. */
   const [memoryPromo, setMemoryPromo] = useState<string[] | null>(null);
   const [memoryPromoBusy, setMemoryPromoBusy] = useState(false);
   const toast = useToast();
+  useEffect(() => {
+    if (!projectId) {
+      setMemoryEnabled(true);
+      return;
+    }
+    void getProject(projectId)
+      .then((p) => setMemoryEnabled(p.memoryEnabled !== false))
+      .catch(() => setMemoryEnabled(true));
+  }, [projectId]);
   /** Workflow Builder or Forge Agent, and whether this workspace offers Forge Agent (ModeSwitch). */
   const [mode, setMode] = useState<ChatMode>("workflow");
   const [thinking, setThinking] = useState<ThinkingLevelValue>("balanced");
@@ -209,14 +220,30 @@ function Workbench_({
   // The canvas can be hidden like the chat, leaving the conversation the whole width. Never both: hiding one while the
   // other is hidden brings the other back.
   const [canvasOpen, setCanvasOpen] = useState(true);
-  // Forge Agent works in the chat, so the canvas folds to its rail there; Workflow Builder opens it again. Only when the
-  // mode changes, so a person who opens the canvas in Forge Agent keeps it open.
+  /** Agent tools drawer (Files | Canvas) — chat stays full width; no always-on rail. */
+  const [toolsOpen, setToolsOpen] = useState(false);
+  const [toolsTab, setToolsTab] = useState<ToolsTab>("files");
+  const [toolsWidth, setToolsWidth] = useState(TOOLS_DEFAULT_W);
+  const [toolsExpanded, setToolsExpanded] = useState(false);
+  /** Agent → Files. Builder keeps its own canvas column, so tools open on Files unless that column is folded. */
+  const nativeToolsTab = (m: ChatMode, canvasIsOpen: boolean): ToolsTab =>
+    m === "agent" || canvasIsOpen ? "files" : "canvas";
+  // Forge Agent works in the chat, so the canvas column is gone there; Workflow Builder opens it again.
+  // Only when the mode changes, so a person who opens tools in Forge Agent keeps them open across turns.
   useEffect(() => {
     if (mode === "agent") {
       setPane(null);
       setChatOpen(true);
       setCanvasOpen(false);
-    } else setCanvasOpen(true);
+      setToolsOpen(false);
+      setToolsExpanded(false);
+      setToolsTab("files");
+    } else {
+      setCanvasOpen(true);
+      setToolsOpen(false);
+      setToolsExpanded(false);
+      setToolsTab("files");
+    }
   }, [mode]);
   // The chat column's width, dragged by its right edge (ChatResizer); null is the default 400px.
   const [chatWidth, setChatWidth] = useChatWidth();
@@ -970,22 +997,6 @@ function Workbench_({
                 flowId={flowId}
                 workflowName={workflow.name ?? ""}
               />
-              <button
-                type="button"
-                onClick={() => {
-                  // With the canvas folded (Forge Agent's default) the files open on their own as the explorer, in the
-                  // canvas's column; they never unfold the canvas. With it open they slide over it, as before.
-                  setPane((p) => (p?.kind === "files" ? null : { kind: "files" }));
-                }}
-                aria-pressed={pane?.kind === "files"}
-                title="What Forge has written — the workflow and each step's code"
-                className={`flex h-8 items-center gap-1.5 rounded-md px-2.5 text-sm font-medium transition-colors ${
-                  pane?.kind === "files" ? "bg-accent-bg text-accent" : "text-muted hover:bg-surface-2 hover:text-text"
-                }`}
-              >
-                <Folder s={14} />
-                Files
-              </button>
               {/* Testing is the workflow's; Forge Agent does not build one, so the button is Workflow Builder's only. */}
               {mode !== "agent" ? (
                 <button
@@ -1047,9 +1058,35 @@ function Workbench_({
               ) : null}
             </div>
           ),
+          endActions: (
+            <button
+              type="button"
+              onClick={() => {
+                setToolsOpen((v) => {
+                  if (v) {
+                    setPane((p) => (p?.kind === "files" ? null : p));
+                    setToolsExpanded(false);
+                    return false;
+                  }
+                  const tab = nativeToolsTab(mode, canvasOpen);
+                  setToolsTab(tab);
+                  if (tab === "files") setPane({ kind: "files" });
+                  return true;
+                });
+              }}
+              aria-pressed={toolsOpen}
+              aria-label="Tools"
+              title="Files and canvas"
+              className={`flex h-8 w-8 items-center justify-center rounded-md transition-colors ${
+                toolsOpen ? "bg-accent-bg text-accent" : "text-muted hover:bg-surface-2 hover:text-text"
+              }`}
+            >
+              <PanelRight s={16} />
+            </button>
+          ),
         }
       : null,
-    [session != null, openFlowId, workflow.name, workflow.steps.length, workflow.schedule?.cron, flowId, storedTitle, firstLine(messages), stateOpen, status, savedRevision, isDirty, testResult, busy, hasSteps, saving, pane?.kind, canvasOpen, mode],
+    [session != null, openFlowId, workflow.name, workflow.steps.length, workflow.schedule?.cron, flowId, storedTitle, firstLine(messages), stateOpen, status, savedRevision, isDirty, testResult, busy, hasSteps, saving, pane?.kind, canvasOpen, toolsOpen, mode],
   );
 
   // Every file in the chat, once each (a later message with the same name is the same stored file): the pane's
@@ -1075,10 +1112,13 @@ function Workbench_({
     [session, workspaceId],
   );
   const openFilesPane = useCallback(() => {
-    setCanvasOpen(true);
+    setToolsTab("files");
+    setToolsOpen(true);
     setPane({ kind: "files" });
   }, []);
   const openChatFile = useCallback((name: string) => {
+    setToolsTab("files");
+    setToolsOpen(true);
     setPane({ kind: "files", path: CHAT_FILE + name });
   }, []);
   const fileHref = useMemo(() => (chatId ? (name: string) => piChatFileUrl(workspaceId, chatId, name) : null), [chatId, workspaceId]);
@@ -1097,20 +1137,38 @@ function Workbench_({
         : null,
     [sessionIdForDecide, workspaceId],
   );
-  // The files with the canvas folded: the explorer takes the canvas's column on its own (Forge Agent works without a
-  // canvas, so it never unfolds one to show a file).
-  const explorerDocked = !canvasOpen && pane?.kind === "files";
-  // The explorer given the whole width folds the chat; closing it must never leave both folded.
+  // Agent: chat is the only column. Builder: canvas column still exists; never leave both panes folded.
+  const agentFull = mode === "agent";
+  /** Canvas lives in the workbench column in Builder — only put it in tools when that column is gone. */
+  const canvasInTools = agentFull || !canvasOpen;
   useEffect(() => {
-    if (!canvasOpen && !chatOpen && pane?.kind !== "files") setChatOpen(true);
-  }, [canvasOpen, chatOpen, pane?.kind]);
-  const sidePane = (docked: boolean) => (
+    if (!agentFull && !canvasOpen && !chatOpen) setChatOpen(true);
+  }, [agentFull, canvasOpen, chatOpen]);
+  useEffect(() => {
+    if (!canvasInTools && toolsTab === "canvas") setToolsTab("files");
+  }, [canvasInTools, toolsTab]);
+  const closeTools = useCallback(() => {
+    setToolsOpen(false);
+    setToolsExpanded(false);
+    setPane((p) => (p?.kind === "files" ? null : p));
+  }, []);
+  const sidePane = (docked: boolean, embedded = false) => (
     <PiSidePane
       view={pane}
-      onView={setPane}
+      onView={(v) => {
+        setPane(v);
+        if (embedded && v == null) closeTools();
+      }}
       docked={docked}
-      expanded={docked && !chatOpen}
-      onExpand={docked ? () => setChatOpen((v) => !v) : undefined}
+      embedded={embedded}
+      expanded={embedded ? toolsExpanded : docked && !chatOpen}
+      onExpand={
+        embedded
+          ? () => setToolsExpanded((v) => !v)
+          : docked
+            ? () => setChatOpen((v) => !v)
+            : undefined
+      }
       workflow={workflow}
       files={stepFiles}
       baseFiles={turnBase}
@@ -1140,7 +1198,7 @@ function Workbench_({
     <OpenChatFile.Provider value={openChatFile}>
     <ProjectMemory.Provider
       value={
-        projectId
+        projectId && memoryEnabled
           ? {
               projectId,
               chatId,
@@ -1163,17 +1221,17 @@ function Workbench_({
       }
     >
     <DecideProposal.Provider value={decideProposal}>
-    <div className="flex h-full min-h-0 flex-col">
+    <div className="relative flex h-full min-h-0 flex-col">
       {/* Same 48px draft strip the manual builder uses, with Foundry actions */}
 
 
       <Workbench
         variant="chat"
-        className={`forge-wb min-h-0 flex-1 h-full ${selectedStep ? "with-inspector" : ""} ${chatOpen ? "" : "chat-closed"} ${canvasOpen ? "" : explorerDocked ? "explorer-open" : "canvas-closed"}`.trim()}
+        className={`forge-wb min-h-0 flex-1 h-full ${selectedStep ? "with-inspector" : ""} ${chatOpen ? "" : "chat-closed"} ${agentFull ? "agent-full" : canvasOpen ? "" : "canvas-closed"}`.trim()}
         style={chatWidth != null ? ({ "--chat-w": `${chatWidth}px` } as CSSProperties) : undefined}
       >
         <WorkbenchPane label="Chat">
-          {chatOpen && (canvasOpen || explorerDocked) ? <ChatResizer width={chatWidth} onChange={setChatWidth} /> : null}
+          {chatOpen && !agentFull && canvasOpen ? <ChatResizer width={chatWidth} onChange={setChatWidth} /> : null}
           {chatOpen ? (
             <>
               <WorkbenchBody flush>
@@ -1569,10 +1627,11 @@ function Workbench_({
                             compacting={compacting}
                             canCompact={status !== "running" && !busy && messages.some((m) => m.role === "user")}
                             onCompact={async () => {
-                              const candidates = projectId ? pickMemoryCandidatesLocal(messages, 3) : [];
+                              // Heuristic only — no LLM spend for memory promote.
+                              const candidates = projectId && memoryEnabled ? pickMemoryCandidatesLocal(messages, 3) : [];
                               const fresh = await compactPiSession(workspaceId, session.id);
                               setContext(fresh.context ?? null);
-                              if (projectId && candidates.length) setMemoryPromo(candidates);
+                              if (projectId && memoryEnabled && candidates.length) setMemoryPromo(candidates);
                             }}
                           />
                           {busy ? (
@@ -1606,10 +1665,9 @@ function Workbench_({
           )}
         </WorkbenchPane>
 
+        {!agentFull ? (
         <WorkbenchPane label="The flow you are building">
-          {!canvasOpen && explorerDocked ? (
-            <div className="relative flex min-h-0 flex-1 flex-col">{sidePane(true)}</div>
-          ) : !canvasOpen ? (
+          {!canvasOpen ? (
             <WorkbenchRail
               label="Canvas"
               side="right"
@@ -1646,14 +1704,14 @@ function Workbench_({
                   onClose={() => setTestPanelOpen(false)}
                 />
               ) : null}
-              {sidePane(false)}
+              {!toolsOpen ? sidePane(false) : null}
               <button
                 type="button"
                 onClick={hideCanvas}
                 aria-label="Hide canvas"
                 title="Hide canvas"
                 className="absolute right-2 top-2 z-10 flex h-7 w-7 items-center justify-center rounded-md border border-line bg-surface text-dim shadow-sm hover:text-text"
-                hidden={pane != null}
+                hidden={pane != null || toolsOpen}
               >
                 <ChevronRight s={13} />
               </button>
@@ -1662,10 +1720,37 @@ function Workbench_({
           </>
           )}
         </WorkbenchPane>
+        ) : null}
       </Workbench>
+      <ChatToolsPane
+        open={toolsOpen}
+        tab={toolsTab}
+        onTab={(t) => {
+          setToolsTab(t);
+          if (t === "files") setPane((p) => (p?.kind === "files" ? p : { kind: "files" }));
+          else setPane((p) => (p?.kind === "files" ? null : p));
+        }}
+        onClose={closeTools}
+        width={toolsWidth}
+        onWidth={setToolsWidth}
+        expanded={toolsExpanded}
+        onToggleExpand={() => setToolsExpanded((v) => !v)}
+        showCanvas={canvasInTools}
+        files={<div className="relative flex h-full min-h-0 flex-col">{sidePane(true, true)}</div>}
+        canvas={
+          <div className="relative flex h-full min-h-0 flex-col">
+            <PiFlowCanvas
+              workflow={workflow}
+              flowId={flowId}
+              selectedId={selectedStep}
+              onSelect={(id, tab) => setPane(id ? { kind: "step", id, tab: tab ?? (pane?.kind === "step" ? pane.tab : "overview") } : null)}
+            />
+          </div>
+        }
+      />
     </div>
     </DecideProposal.Provider>
-    {memoryPromo && projectId ? (
+    {memoryPromo && projectId && memoryEnabled ? (
       <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/30 p-4 sm:items-center" role="dialog" aria-label="Remember for this project">
         <div className="w-full max-w-md rounded-xl border border-line bg-surface p-4 shadow-raised">
           <h2 className="text-body font-semibold text-text">Remember for this project?</h2>

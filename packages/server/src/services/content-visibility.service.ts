@@ -19,7 +19,7 @@
  *
  * Content a person may not see answers NOT FOUND, never forbidden: a 403 confirms the thing exists.
  */
-import { and, eq, or, sql, type AnyColumn, type SQL } from "drizzle-orm";
+import { inArray, and, eq, or, sql, type AnyColumn, type SQL } from "drizzle-orm";
 import { db } from "../db/index.js";
 import { emailSends, flowExecutions, flows, piChats, projectMembers, projects, usageEvents, flowStepApprovals } from "../db/schema.js";
 import { effectivePermissionsService, type Identity, type PlatformRoleCache } from "./effective-permissions.service.js";
@@ -211,7 +211,11 @@ export const contentVisibility = {
     const liveOfShared = sql`(${flowExecutions.kestraNamespace} not like '%.draft' and ${flowExecutions.flowId} in (select ${flows.id} from ${flows} where ${shared}))`;
     const liveOfPublished = v.reviewer ? sql`(${liveOfShared} or ${flowExecutions.flowId} in (select ${flows.id} from ${flows} where ${reviewableSql}))` : liveOfShared;
     if (!v.subject) return liveOfPublished;
-    return sql`(${flowExecutions.requestedBySubject} = ${v.subject} or ${flowExecutions.flowId} in (select ${flows.id} from ${flows} where ${flows.ownerSubject} = ${v.subject}) or ${liveOfPublished})`;
+    const mineOrPublished = sql`(${flowExecutions.requestedBySubject} = ${v.subject} or ${flowExecutions.flowId} in (select ${flows.id} from ${flows} where ${flows.ownerSubject} = ${v.subject}) or ${liveOfPublished})`;
+    // Phase 5: per-person run shares must appear in history/summary, not only on deep-link.
+    const sharedIds = v.sharedRuns && v.sharedRuns.size > 0 ? [...v.sharedRuns] : [];
+    if (!sharedIds.length) return mineOrPublished;
+    return sql`(${mineOrPublished} or ${inArray(flowExecutions.id, sharedIds)})`;
   },
 
   /**

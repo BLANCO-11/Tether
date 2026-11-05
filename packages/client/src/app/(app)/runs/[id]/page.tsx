@@ -22,6 +22,7 @@ import { RunOutput } from "@/components/flow/RunOutput";
 import { StepEvidence } from "@/components/flow/StepEvidence";
 import { ToolActivity } from "@/components/flow/ToolActivity";
 import { Button } from "@/components/ui/Button";
+import { ShareRunDialog } from "@/components/share/ShareRunDialog";
 
 /**
  * ⚠ SIX `PACK_*` CONSTANTS WERE DELETED FROM HERE, AND WHAT THEY DID IS WORTH
@@ -134,6 +135,7 @@ export default function RunPage() {
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<number | null>(null);
   const [stopping, setStopping] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
 
   useEffect(() => {
     const stream = openFlowStream(id, {
@@ -227,13 +229,16 @@ export default function RunPage() {
     const selectedStep = shown != null ? run.steps[shown - 1] ?? null : null;
     const eyebrow = (run.flowName ?? "Run").toUpperCase();
     const title = run.id;
-    const actions = [
+    const actions: HeaderAction[] = [
       { label: "Technical detail", href: `/runs/${run.id}?technical=1`, variant: "ghost" },
-    ] as const;
+      ...(run.canShare ? [{ label: "Share", onClick: () => setShareOpen(true), variant: "ghost" as const }] : []),
+    ];
     return (
       <Page measure="page">
         <PageHeader eyebrow={eyebrow} title={title} badge={<StatusPill status="danger">Failed</StatusPill>} purpose={cause} actions={actions as unknown as [HeaderAction]} />
+        <ShareRunDialog runId={run.id} open={shareOpen} onClose={() => setShareOpen(false)} />
         <Zone name="notices">
+          {run.sharedWithMe ? <Notice tone="info" title="Shared with you">Someone shared this run with you. You can read it; only they can share it further.</Notice> : null}
           <Notice tone="danger" title={noticeTitle}>{cause}</Notice>
           {error && <Notice tone="warn" title="Live updates hit a problem">{error}</Notice>}
           {run.engineUnavailable && <Notice tone="warn" title="The engine could not be reached">{run.engineUnavailable}</Notice>}
@@ -442,8 +447,16 @@ export default function RunPage() {
           </span>
         }
         purpose="Every step reports what came in, what it did and what came out."
+        actions={
+          [
+            ...(run.canShare ? [{ label: "Share", onClick: () => setShareOpen(true), variant: "ghost" as const }] : []),
+            ...(s21Action ? [s21Action] : []),
+          ].slice(0, 2) as [HeaderAction] | undefined
+        }
       />
+      <ShareRunDialog runId={run.id} open={shareOpen} onClose={() => setShareOpen(false)} />
       <Zone name="notices" gap="tight">
+        {run.sharedWithMe ? <Notice tone="info" title="Shared with you">Someone shared this run with you. You can read it; only they can share it further.</Notice> : null}
         {isRealData && <Notice tone="danger" title="This run read production data">A draft run read the tenant\u2019s real database. Anything this flow sends downstream to a model or an external endpoint carried those rows.</Notice>}
         {run.autoTest && <Notice tone="info" title="Automatic test">The builder ran this on its own after a build turn, on test data with the workflow's default inputs.</Notice>}
         {isTestRun && !live && <Notice tone="info" title="This was a test run on a draft.">This was a test run on a draft.</Notice>}

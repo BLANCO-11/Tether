@@ -1247,6 +1247,10 @@ export type FlowExecutionDetail = FlowExecutionSummary & {
    * failure: an empty answer can be right. Absent from an older server.
    */
   noRows?: Array<{ stepId: string; note: string }>;
+  /** Phase 5: shared with you read-only. */
+  sharedWithMe?: boolean;
+  /** Phase 5: you may share this run with People. */
+  canShare?: boolean;
 };
 
 // ── Expectations — GAPS §2.3 ─────────────────────────────────────────────────

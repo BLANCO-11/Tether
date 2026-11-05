@@ -1009,6 +1009,13 @@
       "when": 1797500000000,
       "tag": "0143_edge_host_info",
       "breakpoints": true
+    },
+    {
+      "idx": 144,
+      "version": "7",
+      "when": 1797600000000,
+      "tag": "0144_project_memory_enabled",
+      "breakpoints": true
     }
   ]
 }

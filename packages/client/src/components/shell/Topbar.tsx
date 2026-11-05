@@ -395,6 +395,7 @@ export function Topbar({ onOpenNav }: { onOpenNav?: () => void }) {
 
           <NotificationBell />
           <ThemeToggle />
+          {pageHeader?.endActions ? <div className="ml-0.5 flex items-center gap-1">{pageHeader.endActions}</div> : null}
         </div>
       </header>
       <CommandPalette open={paletteOpen} onOpen={() => setPaletteOpen(true)} onClose={() => setPaletteOpen(false)} />

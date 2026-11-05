@@ -152,12 +152,14 @@ flowExecutionsRouter.get(
      * "the result is just missing sometimes" becomes the reported symptom.
      */
     let declared: { stepId?: unknown; description?: unknown } | null = null;
+    let requester: string | null = null;
     try {
       // ⚠ The revision is read off the EXECUTION ROW, not from `view`.
       // `ExecutionView` deliberately does not carry it: the engine revision was
       // taken off every screen on 2026-09-07 (a version is an approval), and
       // putting it back on the public view is an invitation to render it again.
       const row = await flowExecutionRepo.get(id);
+      requester = row?.requestedBySubject ?? null;
       if (row?.flowId && row.flowRevision != null) {
         const rev = await flowRepo.getRevision(row.flowId, row.flowRevision);
         const model = (rev?.modelJson ?? {}) as { output?: { stepId?: unknown } };
@@ -172,7 +174,61 @@ flowExecutionsRouter.get(
     const result = flowResultOf(declared, view.steps);
 
     // I-301 (C): a step that ran and produced no rows is said so, beside the steps — never as a failure.
-    res.json({ ...view, expectations: expectations.verdicts, result, noRows: emptyRowSteps(view.steps) });
+    const viewer = await contentVisibility.viewer(req.user, workspaceId);
+    const sharedWithMe = !!(viewer.sharedRuns?.has(id) && requester !== viewer.subject);
+    const canShare = !!(viewer.all || (viewer.subject != null && requester === viewer.subject));
+    res.json({
+      ...view,
+      expectations: expectations.verdicts,
+      result,
+      noRows: emptyRowSteps(view.steps),
+      sharedWithMe,
+      canShare,
+    });
+  }),
+);
+
+/** Per-person read shares on a run (Phase 5) — People-listed members only; no public links. */
+flowExecutionsRouter.get(
+  "/:id/shares",
+  requireIdentity,
+  asyncHandler(async (req, res) => {
+    const { itemShareService } = await import("../services/item-share.service.js");
+    const id = z.string().uuid().parse(req.params.id);
+    const viewer = await contentVisibility.viewer(req.user, req.params.workspaceId!);
+    res.json({ shares: await itemShareService.list(req.params.workspaceId!, "run", id, viewer) });
+  }),
+);
+
+flowExecutionsRouter.post(
+  "/:id/shares",
+  requireIdentity,
+  asyncHandler(async (req, res) => {
+    const { itemShareService } = await import("../services/item-share.service.js");
+    const id = z.string().uuid().parse(req.params.id);
+    const { subject } = z.object({ subject: z.string().min(1).max(320) }).strict().parse(req.body ?? {});
+    const viewer = await contentVisibility.viewer(req.user, req.params.workspaceId!);
+    const share = await itemShareService.grant(
+      req.params.workspaceId!,
+      "run",
+      id,
+      viewer,
+      req.user!.email ?? req.user!.subject,
+      subject,
+    );
+    res.status(201).json({ share });
+  }),
+);
+
+flowExecutionsRouter.delete(
+  "/:id/shares/:subject",
+  requireIdentity,
+  asyncHandler(async (req, res) => {
+    const { itemShareService } = await import("../services/item-share.service.js");
+    const id = z.string().uuid().parse(req.params.id);
+    const viewer = await contentVisibility.viewer(req.user, req.params.workspaceId!);
+    await itemShareService.revoke(req.params.workspaceId!, "run", id, viewer, req.params.subject!);
+    res.status(204).end();
   }),
 );
 

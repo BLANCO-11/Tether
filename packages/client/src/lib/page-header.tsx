@@ -6,10 +6,13 @@
  * own breadcrumb, exactly as before.
  *
  * ⚠ Set from an effect and cleared on unmount, so leaving the page can never leave its actions in the bar.
+ *
+ * `endActions` sit AFTER the shared chrome (search, notifications, theme) — e.g. the Forge tools toggle —
+ * so they read as the last control on the bar, not mixed into the page's draft actions.
  */
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 
-export type PageHeader = { title: ReactNode; actions?: ReactNode };
+export type PageHeader = { title: ReactNode; actions?: ReactNode; endActions?: ReactNode };
 
 const Ctx = createContext<{ header: PageHeader | null; set: (h: PageHeader | null) => void }>({ header: null, set: () => {} });
 

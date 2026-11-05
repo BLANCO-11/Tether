@@ -154,6 +154,7 @@ const ROUTES: Array<{ path: string; load: () => Promise<PageModule>; props?: Rec
   // Sharing boundaries phase 5: projects.
   { path: "/projects", load: () => import("./(app)/projects/page") },
   { path: "/projects/[id]", load: () => import("./(app)/projects/[id]/page"), props: { params: { id: "p-1" } } },
+  { path: "/memory", load: () => import("./(app)/memory/page") },
   { path: "/history", load: () => import("./(app)/history/page") },
   { path: "/approvals", load: () => import("./(app)/approvals/page") },
   {

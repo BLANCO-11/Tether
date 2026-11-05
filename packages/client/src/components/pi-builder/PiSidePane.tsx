@@ -47,6 +47,7 @@ export function PiSidePane({
   docked = false,
   expanded = false,
   onExpand,
+  embedded = false,
 }: {
   /** Fills its column as the explorer (the canvas folded) instead of floating over the canvas. */
   docked?: boolean;
@@ -54,6 +55,8 @@ export function PiSidePane({
   expanded?: boolean;
   /** Give the files the whole width, or give the chat back. Absent where that is not offered. */
   onExpand?: () => void;
+  /** Inside ChatToolsPane: one chrome bar only — no second close, and empty overview is a single column. */
+  embedded?: boolean;
   view: PaneView;
   onView: (v: PaneView) => void;
   workflow: PiWorkflow;
@@ -89,7 +92,7 @@ export function PiSidePane({
 
   return (
     <aside
-      className={`pis-pane${open ? " open" : ""}${shown?.kind === "files" ? " wide" : ""}${docked ? " docked" : ""}`}
+      className={`pis-pane${open ? " open" : ""}${shown?.kind === "files" ? " wide" : ""}${docked || embedded ? " docked" : ""}${embedded ? " embedded" : ""}`}
       aria-hidden={!open}
       aria-label={shown?.kind === "files" ? "Files" : "Step details"}
       // A closed pane must not take focus or clicks (React 18 passes `inert` through only as a string).
@@ -98,7 +101,22 @@ export function PiSidePane({
       {shown?.kind === "step" ? (
         <StepView view={shown} onView={onView} workflow={workflow} files={files} lastRun={lastRun} />
       ) : shown?.kind === "files" ? (
-        <FilesView path={shown.path} onPath={(p) => onView({ kind: "files", path: p })} onClose={() => onView(null)} expanded={expanded} onExpand={onExpand} workflow={workflow} files={files} baseFiles={baseFiles} live={live} chatFiles={chatFiles} chatFileHref={chatFileHref} onRemoveChatFile={onRemoveChatFile} storage={storage} />
+        <FilesView
+          path={shown.path}
+          onPath={(p) => onView(p ? { kind: "files", path: p } : { kind: "files" })}
+          onClose={() => onView(null)}
+          expanded={expanded}
+          onExpand={onExpand}
+          embedded={embedded}
+          workflow={workflow}
+          files={files}
+          baseFiles={baseFiles}
+          live={live}
+          chatFiles={chatFiles}
+          chatFileHref={chatFileHref}
+          onRemoveChatFile={onRemoveChatFile}
+          storage={storage}
+        />
       ) : null}
     </aside>
   );
@@ -268,6 +286,7 @@ function FilesView({
   onClose,
   expanded,
   onExpand,
+  embedded = false,
   workflow,
   files,
   baseFiles,
@@ -282,6 +301,7 @@ function FilesView({
   onClose: () => void;
   expanded: boolean;
   onExpand?: () => void;
+  embedded?: boolean;
   workflow: PiWorkflow;
   files: Record<string, string>;
   baseFiles: Record<string, string> | null;
@@ -324,16 +344,16 @@ function FilesView({
   // the first chat file is opened instead of an empty workflow.json.
   const hasWorkflow = (workflow.steps?.length ?? 0) > 0 || Object.keys(files).length > 0;
   const chatName = path?.startsWith(CHAT_FILE) ? path.slice(CHAT_FILE.length) : null;
-  const previewing =
-    chatName != null && chatFiles.some((f) => f.name === chatName)
-      ? chatName
-      : !hasWorkflow && !path && chatFiles.length
-        ? (chatFiles.find((f) => f.from === "forge") ?? chatFiles[0]!).name
-        : null;
+  // Only open a chat file when the person picked one — Drive-style overview when none selected (no auto-open, no dropdown).
+  const previewing = chatName != null && chatFiles.some((f) => f.name === chatName) ? chatName : null;
   const [treeOpen, setTreeOpen] = useState(true);
   const [view, setView] = useState<FileView>("page");
   const [full, setFull] = useState(false);
   useEffect(() => setView("page"), [previewing]);
+  // Embedded tools: empty overview is one column — twin empty "Files" + "All files" panes are noise.
+  useEffect(() => {
+    if (embedded && !hasWorkflow && !previewing) setTreeOpen(false);
+  }, [embedded, hasWorkflow, previewing]);
   const previewFile = previewing ? chatFiles.find((f) => f.name === previewing) : undefined;
   const viewLabel = previewing ? renderedViewLabel(previewing) : null;
   const current = path && path in all ? path : (ordered.find((p) => state(p)) ?? ordered[0]!);
@@ -343,6 +363,7 @@ function FilesView({
   const fresh = useMemo(() => (baseFiles ? newLines(baseFiles[current], body) : new Set<number>()), [baseFiles, current, body]);
   const nChanged = paths.filter((p) => state(p)).length;
   const tree = treeOf(paths);
+  const showOverview = !hasWorkflow && !previewing;
 
   const file = (p: string, depth: number) => {
     const st = state(p);
@@ -467,9 +488,39 @@ function FilesView({
     </button>
   ) : null;
   const viewSwitch = viewLabel ? <ViewToggle label={viewLabel} view={view} onView={setView} /> : null;
+  const overview = (
+    <div className="pis-overview">
+      {!chatFiles.length ? (
+        <p className="px-6 py-10 text-center text-[12.5px] text-dim">Nothing here yet. Files you attach and files Forge makes appear here.</p>
+      ) : (
+        <ul className="pis-grid" aria-label="All files in this chat">
+          {([...chatFiles].sort((a, b) => (a.from === b.from ? a.name.localeCompare(b.name) : a.from === "forge" ? -1 : 1))).map((f) => (
+            <li key={f.name}>
+              <button type="button" className="pis-card" onClick={() => onPath(CHAT_FILE + f.name)} title={f.name}>
+                <span className="pis-card-glyph" aria-hidden>
+                  <FileGlyph path={f.name} />
+                </span>
+                <span className="pis-card-name truncate">{f.name}</span>
+                <span className="pis-card-meta">
+                  {sizeOf(f.size)} · {f.from === "forge" ? "Forge" : "yours"}
+                </span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      {storage ? (
+        <p className={`pis-overview-foot ${storageLevel(storage) === "ok" ? "text-dim" : storageLevel(storage) === "full" ? "text-danger" : "text-warn"}`}>
+          {mbOf(storage.bytes)} of {mbOf(storage.limit)} used by this chat
+        </p>
+      ) : null}
+    </div>
+  );
   const content = (where: "pane" | "full") =>
     previewing ? (
       <ChatFilePreview key={`${where}:${previewing}`} name={previewing} href={chatFileHref?.(previewing) ?? null} view={view} />
+    ) : showOverview ? (
+      overview
     ) : !hasWorkflow ? (
       <div className="flex flex-1 items-center justify-center text-[12.5px] text-dim">Choose a file to see it here.</div>
     ) : (
@@ -496,57 +547,11 @@ function FilesView({
     </button>
   );
 
-  // No workflow (Forge Agent's usual chat): no list column at all. The chat and the file sit side by side, and the
-  // file's name is the way to the others (a short list is not worth a column; the chat's file cards open them too).
-  if (!hasWorkflow) {
-    return (
-      <div className="pis-files tree-shut">
-        <div className="pis-code-wrap">
-          <div className="pis-bar">
-            {chatFiles.length ? (
-              <FilePicker
-                files={chatFiles}
-                current={previewing}
-                onPick={(n) => onPath(CHAT_FILE + n)}
-                storage={storage}
-                hrefOf={chatFileHref}
-                onRemove={onRemoveChatFile ? remove : undefined}
-                removing={removing}
-                error={removeError}
-              />
-            ) : (
-              <span className="px-1 text-[13px] font-semibold text-text">Files</span>
-            )}
-            <span className="ml-auto flex shrink-0 items-center gap-0.5">
-              {viewSwitch}
-              {download}
-              {previewing ? fullButton : null}
-              <span className="pis-sep" aria-hidden />
-              {closeButton}
-            </span>
-          </div>
-          {previewing ? (
-            content("pane")
-          ) : (
-            <div className="flex flex-1 items-center justify-center px-6 text-center text-[12.5px] text-dim">
-              Nothing here yet. Files you attach and files Forge makes appear here.
-            </div>
-          )}
-        </div>
-        {full && previewing ? (
-          <FullScreen name={previewing} onExit={() => setFull(false)} actions={<>{viewSwitch}{download}</>}>
-            {content("full")}
-          </FullScreen>
-        ) : null}
-      </div>
-    );
-  }
-
+  // Chat-only and workflow both use the tree + preview (or Drive-style overview). No name dropdown.
   return (
     <div className={`pis-files${treeOpen ? "" : " tree-shut"}`}>
       {treeOpen ? (
         <nav className="pis-tree" aria-label="Files">
-          {/* ONE bar across the pane: this half heads the list, the other half is the open file's toolbar. */}
           <div className="pis-bar">
             {treeToggle}
             <span className="text-[13px] font-semibold text-text">Files</span>
@@ -587,50 +592,64 @@ function FilesView({
       <div className="pis-code-wrap">
         <div className="pis-bar">
           {treeOpen ? null : treeToggle}
-          {canShow ? (
+          {previewing ? (
+            <>
+              <button
+                type="button"
+                className="pis-x"
+                aria-label="All files"
+                title="All files"
+                onClick={() => onPath("")}
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </button>
+              <span className="pis-name" title={shownName}>
+                <FileGlyph path={shownName} />
+                <span className="truncate text-text">{previewing}</span>
+                {previewFile ? <span className="pis-meta">{sizeOf(previewFile.size)} · {previewFile.from === "forge" ? "by Forge" : "yours"}</span> : null}
+              </span>
+            </>
+          ) : canShow ? (
             <span className="pis-name" title={shownName}>
               <FileGlyph path={shownName} />
-              {previewing ? null : folder ? <span className="text-dim">{folder}</span> : null}
-              <span className="truncate text-text">{previewing ?? fileName}</span>
-              {previewFile ? <span className="pis-meta">{sizeOf(previewFile.size)} · {previewFile.from === "forge" ? "by Forge" : "yours"}</span> : null}
+              {folder ? <span className="text-dim">{folder}</span> : null}
+              <span className="truncate text-text">{fileName}</span>
             </span>
           ) : (
-            <span className="text-[12.5px] text-dim">Files</span>
+            <span className="text-[13px] font-semibold text-text">{showOverview ? "All files" : "Files"}</span>
           )}
           <span className="ml-auto flex shrink-0 items-center gap-0.5">
             {viewSwitch}
-            {!previewing && fresh.size ? (
+            {!previewing && hasWorkflow && fresh.size ? (
               <label className="mx-2 flex shrink-0 items-center gap-1.5 text-[11px] text-muted">
                 <input type="checkbox" checked={onlyChanges} onChange={(e) => setOnlyChanges(e.target.checked)} />
                 Only new lines
               </label>
             ) : null}
             {download}
-            {canShow ? (
-              <button type="button" onClick={() => setFull(true)} className="pis-x" aria-label="Full screen preview" title="Full screen preview">
-                <Expand className="h-4 w-4" />
-              </button>
-            ) : null}
+            {previewing || (canShow && !showOverview) ? fullButton : null}
             {onExpand ? (
               <button
                 type="button"
                 onClick={onExpand}
                 className="pis-x"
-                aria-label={expanded ? "Show the chat again" : "Give the files the whole width"}
-                title={expanded ? "Show the chat again" : "Give the files the whole width"}
+                aria-label={expanded ? "Shrink tools" : "Give tools the whole width"}
+                title={expanded ? "Shrink" : "Full width"}
               >
                 {expanded ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
               </button>
             ) : null}
-            <span className="pis-sep" aria-hidden />
-            <button type="button" onClick={onClose} className="pis-x" aria-label="Close" title="Close (Esc)">
-              <Close className="h-4 w-4" />
-            </button>
+            {embedded ? null : (
+              <>
+                <span className="pis-sep" aria-hidden />
+                {closeButton}
+              </>
+            )}
           </span>
         </div>
         {content("pane")}
       </div>
-      {full && canShow ? (
+      {full && (previewing || canShow) ? (
         <FullScreen name={shownName} onExit={() => setFull(false)} actions={<>{viewSwitch}{download}</>}>
           {content("full")}
         </FullScreen>

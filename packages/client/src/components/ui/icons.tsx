@@ -74,6 +74,13 @@ export const Fork = (p: P) => <S {...p}><path d="M6 3v6a3 3 0 0 0 3 3h9" /><path
 export const Merge = (p: P) => <S {...p}><path d="M6 3v6a3 3 0 0 0 3 3h9" /><path d="M6 21v-6a3 3 0 0 1 3-3" /><path d="M15 9l3 3-3 3" /></S>;
 export const Bot = (p: P) => <S {...p}><rect x="5" y="9" width="14" height="10" rx="2" /><path d="M12 9V6m-3.5 7h.01M15.5 13h.01M9.5 16h5" /><circle cx="12" cy="5" r="1" /></S>;
 export const Menu = (p: P) => <S {...p}><path d="M3 6h18M3 12h18M3 18h18" /></S>;
+/** Right tools / side pane — chat Files & Canvas drawer. */
+export const PanelRight = (p: P) => (
+  <S {...p}>
+    <rect x="3" y="3" width="18" height="18" rx="2" />
+    <path d="M15 3v18" />
+  </S>
+);
 
 // Data sources / tables
 export const Database = (p: P) => <S {...p}><ellipse cx="12" cy="5" rx="8" ry="3" /><path d="M4 5v6c0 1.7 3.6 3 8 3s8-1.3 8-3V5" /><path d="M4 11v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6" /></S>;

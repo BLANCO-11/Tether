@@ -380,6 +380,17 @@ export async function getFlowExecution(id: string): Promise<FlowExecutionDetail>
   return flowExecutionDetailFromFA(await foundryApi.getFlowExecution(ws, id));
 }
 
+/** Per-person read shares on a run (Phase 5). */
+export async function listRunShares(runId: string) {
+  return foundryApi.listRunShares(await resolveWorkspaceId(), runId);
+}
+export async function grantRunShare(runId: string, subject: string) {
+  return foundryApi.grantRunShare(await resolveWorkspaceId(), runId, subject);
+}
+export async function revokeRunShare(runId: string, subject: string) {
+  return foundryApi.revokeRunShare(await resolveWorkspaceId(), runId, subject);
+}
+
 /** Mint a single-use ticket for the step-progress socket (see `lib/flow-stream.ts`). */
 export async function watchFlowExecution(id: string): Promise<{ ticket: string; expiresAt: string }> {
   const ws = await resolveWorkspaceId();
@@ -1166,7 +1177,10 @@ export async function getProject(projectId: string) {
 export async function createProject(body: { name: string; description?: string | null; instructions?: string }) {
   return (await foundryApi.createProject(await resolveWorkspaceId(), body)).project;
 }
-export async function updateProject(projectId: string, body: { name?: string; description?: string | null; instructions?: string }) {
+export async function updateProject(
+  projectId: string,
+  body: { name?: string; description?: string | null; instructions?: string; memoryEnabled?: boolean },
+) {
   return (await foundryApi.updateProject(await resolveWorkspaceId(), projectId, body)).project;
 }
 export async function deleteProject(projectId: string) {

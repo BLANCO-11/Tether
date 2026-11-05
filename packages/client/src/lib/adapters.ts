@@ -855,6 +855,8 @@ export function flowExecutionDetailFromFA(e: FAFlowExecutionDetail): FlowExecuti
       detail: v.detail,
       observed: v.observed,
     })),
+    ...(e.sharedWithMe ? { sharedWithMe: true } : {}),
+    ...(e.canShare ? { canShare: true } : {}),
   };
 }
 

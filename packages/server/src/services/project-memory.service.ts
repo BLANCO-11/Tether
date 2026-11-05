@@ -123,7 +123,10 @@ export const projectMemoryService = {
       sourceMessageId?: string | null;
     },
   ): Promise<ProjectMemory> {
-    await projectFor(workspaceId, projectId, v);
+    const p = await projectFor(workspaceId, projectId, v);
+    if (p.memoryEnabled === false) {
+      throw httpErr("Memory is turned off for this project. Turn it on in Memory or on the project page.", 409);
+    }
     if (!MEMORY_KINDS.includes(input.kind)) throw httpErr("Unknown memory kind.", 400);
     const source = input.source ?? "manual";
     if (!MEMORY_SOURCES.includes(source)) throw httpErr("Unknown memory source.", 400);

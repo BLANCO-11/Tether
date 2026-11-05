@@ -1650,6 +1650,8 @@ export const projects = pgTable(
     name: text("name").notNull(),
     description: text("description"),
     instructions: text("instructions").notNull().default(""),
+    /** When false, chats skip memory inject and Remember / Compact promote stay off (cheap; no LLM). */
+    memoryEnabled: boolean("memory_enabled").notNull().default(true),
     ownerSubject: text("owner_subject").notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),

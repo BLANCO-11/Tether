@@ -23,6 +23,7 @@ import {
   RuntimeModelError,
   clearRuntimeProvider,
   complete,
+  deploymentDefaultView,
   listModels,
   loadRuntimeProvider,
   probeOf,
@@ -87,8 +88,11 @@ runtimeModelRouter.get(
       subject,
       mode: PERSONAL_PRODUCT ? "interactive" : "harness",
     });
+    const view = viewOf(p);
+    // Personal with no saved key: surface the build `LLM_*` default for the UI (never the key).
     res.json({
-      ...viewOf(p),
+      ...view,
+      ...(PERSONAL_PRODUCT && !view.configured ? { deploymentDefault: deploymentDefaultView() } : {}),
       ...(PERSONAL_PRODUCT ? { presets: LLM_PROVIDER_PRESETS } : {}),
     });
   }),
@@ -146,8 +150,10 @@ runtimeModelRouter.delete(
   "/provider",
   asyncHandler(async (req, res) => {
     const cleared = await clearRuntimeProvider(subjectOf(req));
+    const view = viewOf(cleared);
     res.json({
-      ...viewOf(cleared),
+      ...view,
+      ...(PERSONAL_PRODUCT && !view.configured ? { deploymentDefault: deploymentDefaultView() } : {}),
       ...(PERSONAL_PRODUCT ? { presets: LLM_PROVIDER_PRESETS } : {}),
     });
   }),

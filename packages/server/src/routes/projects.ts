@@ -52,7 +52,12 @@ projectsRouter.patch(
   requireIdentity,
   asyncHandler(async (req, res) => {
     const body = z
-      .object({ name: z.string().min(1).max(120).optional(), description: z.string().max(2000).nullish(), instructions: z.string().max(20_000).optional() })
+      .object({
+        name: z.string().min(1).max(120).optional(),
+        description: z.string().max(2000).nullish(),
+        instructions: z.string().max(20_000).optional(),
+        memoryEnabled: z.boolean().optional(),
+      })
       .strict()
       .parse(req.body ?? {});
     res.json({ project: await projectService.update(req.params.workspaceId!, req.params.projectId!, await viewerOf(req), who(req).actor, body) });

@@ -8,7 +8,13 @@ vi.mock("../db/index.js", () => ({ db: { select: () => ({ from: () => ({ where: 
 vi.mock("../utils/encryptor.js", () => ({ decrypt: (s: string) => `dec:${s}`, encrypt: (s: string) => s }));
 
 import { config } from "../config/index.js";
-import { invalidateModelConnection, resolveModelConnection, viewOf, type RuntimeProvider } from "./runtime-model.service.js";
+import {
+  deploymentDefaultView,
+  invalidateModelConnection,
+  resolveModelConnection,
+  viewOf,
+  type RuntimeProvider,
+} from "./runtime-model.service.js";
 import { resolveGenerationProvider } from "./generation-provider.service.js";
 import { lastModelConnection } from "./model-connection.js";
 
@@ -106,5 +112,21 @@ describe("viewOf", () => {
     const other = viewOf(provider("https://elsewhere.example/v1"));
     expect(other.forgeReachable).toBe(false);
     expect(typeof other.forgeWarning).toBe("string");
+  });
+});
+
+describe("deploymentDefaultView", () => {
+  it("(h) exposes the env model for the AI page without the key", () => {
+    const d = deploymentDefaultView();
+    if (!config.inference.baseUrl || !config.inference.apiKey) {
+      expect(d).toBeNull();
+      return;
+    }
+    expect(d).toMatchObject({
+      baseUrl: config.inference.baseUrl.replace(/\/+$/, ""),
+      defaultModel: expect.any(String),
+    });
+    expect(d!.keyFingerprint).toMatch(/^[0-9a-f]{8}$/);
+    expect(d).not.toHaveProperty("apiKey");
   });
 });

@@ -1649,6 +1649,8 @@ body.wb .page-enter {
 .pis-seg button:hover { color: var(--text); }
 .pis-seg button.on { background: var(--surface); color: var(--text); box-shadow: 0 1px 2px var(--shadow); }
 .pis-pane.docked, .pis-pane.docked.wide { inset: 0; width: auto; border-width: 0 0 0 1px; border-radius: 0; box-shadow: none; transform: none; }
+.pis-pane.embedded { position: absolute; inset: 0; width: auto !important; border: 0; border-radius: 0; box-shadow: none; }
+.pis-pane.embedded .pis-files.tree-shut { grid-template-columns: minmax(0, 1fr); }
 .pis-head { display: flex; align-items: flex-start; gap: 10px; padding: 12px 10px 10px 14px; border-bottom: 1px solid var(--line); }
 .pis-ico { flex: none; display: grid; place-items: center; width: 26px; height: 26px; border-radius: 8px; background: var(--sunken); color: var(--muted); }
 .pis-k-step { color: var(--k-code); }
@@ -1678,6 +1680,20 @@ body.wb .page-enter {
 .pis-files { display: grid; grid-template-columns: clamp(220px, 34%, 300px) minmax(0, 1fr); min-height: 0; flex: 1; }
 .pis-tree { overflow-y: auto; padding: 6px 0 12px; border-right: 1px solid var(--line); background: color-mix(in srgb, var(--sunken) 45%, var(--surface)); }
 .pis-tree-label { padding: 8px 14px 6px; font-size: 10.5px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--dim); }
+/* Drive-style overview when no file is open (chat-only explorer). */
+.pis-overview { display: flex; flex-direction: column; min-height: 0; flex: 1; overflow: auto; padding: 14px 16px 18px; }
+.pis-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(132px, 1fr)); gap: 10px; margin: 0; padding: 0; list-style: none; }
+.pis-card {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 6px; width: 100%; min-height: 108px;
+  padding: 12px 12px 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface);
+  text-align: left; transition: border-color 0.12s, background 0.12s;
+}
+.pis-card:hover { border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); background: var(--surface-2); }
+.pis-card-glyph { display: grid; place-items: center; width: 36px; height: 36px; border-radius: 8px; border: 1px solid var(--line); background: color-mix(in srgb, var(--sunken) 50%, var(--surface)); }
+.pis-card-glyph .pis-glyph { min-width: 22px; height: 18px; font-size: 10px; }
+.pis-card-name { width: 100%; font-size: 12.5px; font-weight: 550; color: var(--text); }
+.pis-card-meta { font-size: 11px; color: var(--dim); }
+.pis-overview-foot { margin: 14px 2px 0; font-size: 11.5px; }
 .pis-row {
   display: flex; align-items: center; gap: 8px; width: 100%; height: 28px; padding-right: 10px;
   font-size: 12.5px; color: var(--muted); text-align: left; border-left: 2px solid transparent;
@@ -1964,6 +1980,10 @@ body.chat-resizing { user-select: none; cursor: col-resize; }
   .workbench.wb-chat.forge-wb.forge-wb.canvas-closed { grid-template-columns: calc(100% - 36px) 36px; }
   .workbench.wb-chat.forge-wb.forge-wb.explorer-open { grid-template-columns: var(--chat-w, 400px) calc(100% - var(--chat-w, 400px)); }
   .workbench.wb-chat.forge-wb.forge-wb.explorer-open.chat-closed { grid-template-columns: 36px calc(100% - 36px); }
+  /* Forge Agent: chat only — tools (Files | Canvas) overlay; no 36px rail. */
+  .workbench.wb-chat.forge-wb.forge-wb.agent-full { grid-template-columns: minmax(0, 1fr); }
+  .workbench.wb-chat.forge-wb.forge-wb.agent-full.chat-closed { grid-template-columns: 36px; }
+  .workbench.wb-chat.forge-wb.forge-wb.agent-full .pi-wide { padding-left: max(24px, calc((100% - 860px) / 2)); padding-right: max(24px, calc((100% - 860px) / 2)); }
   .workbench.wb-chat.forge-wb .pi-wide { transition: padding 200ms var(--ease); }
 }
 body.chat-resizing .pi-wide { transition: none; }

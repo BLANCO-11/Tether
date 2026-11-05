@@ -25,7 +25,7 @@ import { PERSONAL_PRODUCT } from "@/lib/personal";
 import { useAsync } from "@/lib/hooks";
 import { usePermissions } from "@/lib/permissions";
 import { useActivityEpoch } from "@/lib/activity";
-import { Chat, Folder, Workflow, Wrench, Activity, CheckCheck, Close, Shield, Database, Key, Bolt, ChevronLeft, Home, Plus, Cube, Mail, LogOut, Apps, User } from "@/components/ui/icons";
+import { Chat, Folder, Workflow, Wrench, Activity, CheckCheck, Close, Shield, Database, Key, Bolt, ChevronLeft, Home, Plus, Cube, Mail, LogOut, Apps, User, Sparkle } from "@/components/ui/icons";
 import { AlphaChip } from "@/components/shell/AlphaChip";
 
 // ── Pack nav: 04 § nav rail — the full product, not just the 5-row prototype ──
@@ -85,6 +85,16 @@ export const groups: NavGroup[] = [
         Icon: Folder,
         ownedPaths: ["/projects"],
       },
+      ...(PERSONAL_PRODUCT
+        ? [
+            {
+              href: "/memory",
+              label: "Memory",
+              Icon: Sparkle,
+              ownedPaths: ["/memory"],
+            },
+          ]
+        : []),
       {
         href: "/approvals",
         // Personal: one morning inbox for gates + agent questions (Phase 1.3) — unify, don't add.

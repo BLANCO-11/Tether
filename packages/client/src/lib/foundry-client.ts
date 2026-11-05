@@ -1370,6 +1370,16 @@ export interface FALlmProvider {
   forgeWarning?: string | null;
   /** Personal product: provider cards for the connect form. */
   presets?: FALlmProviderPreset[];
+  /**
+   * When you have not saved your own key: the deployment `LLM_*` build default (display only; no key).
+   * "Not connected" is only when this is also absent.
+   */
+  deploymentDefault?: {
+    baseUrl: string;
+    defaultModel: string;
+    allowedModels: string[];
+    keyFingerprint: string;
+  } | null;
 }
 export interface FALlmTest {
   ok: boolean;
@@ -1685,6 +1695,10 @@ export interface FAFlowExecutionDetail extends FAFlowExecutionSummary {
     detail: string;
     observed: unknown;
   }>;
+  /** Phase 5: this run was shared with the viewer (read-only). */
+  sharedWithMe?: boolean;
+  /** Phase 5: viewer may grant/revoke People read shares. */
+  canShare?: boolean;
 }
 
 // ---- Phase 6: replay, portability, templates, promotion --------------------
@@ -2591,6 +2605,17 @@ export const foundryApi = {
     ).then((r) => r.executions),
   getFlowExecution: (wsId: string, execId: string) =>
     req<FAFlowExecutionDetail>(`/workspaces/${wsId}/flow-executions/${execId}`),
+  listRunShares: (wsId: string, execId: string) =>
+    req<{ shares: Array<{ id: string; subject: string; grantedBy: string; createdAt: string }> }>(
+      `/workspaces/${wsId}/flow-executions/${execId}/shares`,
+    ).then((r) => r.shares),
+  grantRunShare: (wsId: string, execId: string, subject: string) =>
+    req<{ share: { id: string; subject: string } }>(`/workspaces/${wsId}/flow-executions/${execId}/shares`, {
+      method: "POST",
+      body: JSON.stringify({ subject }),
+    }).then((r) => r.share),
+  revokeRunShare: (wsId: string, execId: string, subject: string) =>
+    req<void>(`/workspaces/${wsId}/flow-executions/${execId}/shares/${encodeURIComponent(subject)}`, { method: "DELETE" }),
   /**
    * Mint a single-use ticket for the step-progress socket (phase-2.md 2.8).
    *
@@ -3061,8 +3086,11 @@ export const foundryApi = {
   getProject: (wsId: string, projectId: string) => req<{ project: ProjectDetail }>(`/workspaces/${wsId}/projects/${projectId}`),
   createProject: (wsId: string, body: { name: string; description?: string | null; instructions?: string }) =>
     req<{ project: ProjectSummary }>(`/workspaces/${wsId}/projects`, { method: "POST", body: JSON.stringify(body) }),
-  updateProject: (wsId: string, projectId: string, body: { name?: string; description?: string | null; instructions?: string }) =>
-    req<{ project: ProjectSummary }>(`/workspaces/${wsId}/projects/${projectId}`, { method: "PATCH", body: JSON.stringify(body) }),
+  updateProject: (
+    wsId: string,
+    projectId: string,
+    body: { name?: string; description?: string | null; instructions?: string; memoryEnabled?: boolean },
+  ) => req<{ project: ProjectSummary }>(`/workspaces/${wsId}/projects/${projectId}`, { method: "PATCH", body: JSON.stringify(body) }),
   deleteProject: (wsId: string, projectId: string) => req<{ returned: number }>(`/workspaces/${wsId}/projects/${projectId}`, { method: "DELETE" }),
   addProjectMember: (wsId: string, projectId: string, subject: string) =>
     req<{ project: ProjectDetail }>(`/workspaces/${wsId}/projects/${projectId}/members`, { method: "POST", body: JSON.stringify({ subject }) }),
@@ -3785,6 +3813,8 @@ export type ProjectSummary = {
   name: string;
   description: string | null;
   instructions: string;
+  /** When false, chats skip inject and Remember stays off. Default true. */
+  memoryEnabled?: boolean;
   ownerSubject: string;
   members?: number;
   /** This person is in it. */

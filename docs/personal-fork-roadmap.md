@@ -223,25 +223,28 @@ Copy into issues or a sprint board as needed:
 - [x] **1.4** Honest empty/error states for inbox  
 - [x] **2.1** Live run watch panel (status / step / stop / artifact)  
 - [x] **2.2** Progress via existing ticket + poll only  
-- [ ] **2.3** Optional done notification  
+- [ ] **2.3** Optional done notification — skipped until needed  
 - [ ] **3.1** GitHub (existing plugin) works on personal stack — friction only *(blocked: needs human OAuth)*  
 - [ ] **3.2** One real recipe: schedule/chat → GitHub → Needs you  
 - [ ] **3.3** New connector only if a recipe is blocked (not GitHub)  
 - [x] **4.1** Project memory schema + API  
 - [x] **4.2** Remember + compact promotion  
 - [x] **4.3** Capped inject into project chats  
-- [x] **4.4** Project memory panel UI  
-- [x] **5.1** Share chat with allowed user (read) — run share table ready, UI later  
+- [x] **4.4** Project memory panel UI + `/memory` manage/visualize page  
+- [x] **4.5** Per-project memory on/off + cheap Compact heuristic promote (no LLM decider); Phase 7 RAG still deferred  
+- [x] **5.1** Share chat **and run** with allowed user (read) — routes + UI on `/runs/[id]`  
 - [x] **5.2** Redaction on share  
 - [x] **5.3** Block public links (no link path added)  
 - [x] **6.1** Edge pairing OTP + device credential (`/devices`, `scripts/edge-agent.mjs`)  
 - [x] **6.2** Edge capabilities + approval (`run_command` / `read_path` / `write_path`)  
-- [x] **6.3** Edge approvals surface on Needs you + Devices enqueue (chat/schedule enqueue still open)  
+- [x] **6.3** Edge from **chat** + Needs you connects + Devices enqueue — **schedule→edge deferred** (needs a runtime edge step; Forge enqueue requires a live chat turn)  
 
 - [ ] **7.x** RAG only after 4.x succeeds  
+
+**Still blocked / deferred (cannot close in code alone):** Phase 3 OAuth; schedule→edge; builder `awaiting_answers` in Needs you (no cross-chat list); 2.3 notify; 7.x RAG.  
 
 ---
 
 ## Suggested next implement
 
-Start **Phase 1.1–1.3** (schedule CTA + Needs you). Highest habit value, lowest new security surface, reuses schedule/approval machinery already in the tree.
+**Code-closable personal thin work is done** (through Phase 6 chat→edge + run share + `/memory`). Next needs a human: **Phase 3** GitHub OAuth on this stack, then one real recipe (3.2). Schedule→edge and RAG (7.x) stay deferred.

@@ -34,6 +34,16 @@ export type RuntimeProviderView = Omit<RuntimeProvider, "apiKey"> & {
   keyFingerprint: string;
   forgeReachable: boolean;
   forgeWarning: string | null;
+  /**
+   * Personal BYOK with no saved row: the deployment `LLM_*` build default, for display only.
+   * Never includes the key. Absent when the person already has their own connection, or when env has none.
+   */
+  deploymentDefault?: {
+    baseUrl: string;
+    defaultModel: string;
+    allowedModels: string[];
+    keyFingerprint: string;
+  } | null;
 };
 
 export function keyFingerprint(key: string): string {
@@ -160,6 +170,21 @@ export function viewOf(p: RuntimeProvider): RuntimeProviderView {
     configured: Boolean(p.baseUrl && apiKey),
     keyFingerprint: keyFingerprint(apiKey),
     ...forgeReachability(p.baseUrl || config.inference.baseUrl, config.inference.baseUrl, config.forge.egressAllow),
+  };
+}
+
+/**
+ * Read-only snapshot of the deployment `LLM_*` connection (no key). Used on the AI page when personal
+ * BYOK has no row so "Not connected" is not shown while the build still has a model.
+ */
+export function deploymentDefaultView(): RuntimeProviderView["deploymentDefault"] {
+  const env = fromEnv();
+  if (!env.baseUrl || !env.apiKey) return null;
+  return {
+    baseUrl: env.baseUrl,
+    defaultModel: env.defaultModel,
+    allowedModels: env.allowedModels,
+    keyFingerprint: keyFingerprint(env.apiKey),
   };
 }
 

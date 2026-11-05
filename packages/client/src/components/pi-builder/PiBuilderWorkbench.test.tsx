@@ -57,7 +57,7 @@ const { PageHeaderProvider, usePageHeaderSlot } = await import("@/lib/page-heade
 /** The shell's half: the builder's title and actions render in the ONE top bar, which this stands in for. */
 function HeaderOut() {
   const h = usePageHeaderSlot();
-  return <header data-testid="topbar">{h?.title}{h?.actions}</header>;
+  return <header data-testid="topbar">{h?.title}{h?.actions}{h?.endActions}</header>;
 }
 const inShell = (ui: React.ReactNode) => (
   <PageHeaderProvider>
@@ -224,34 +224,36 @@ describe("the composer hints that a saved workflow can be referenced (2026-10-25
   });
 });
 
-describe("Forge Agent's header and files (2026-10-28)", () => {
+describe("Forge Agent's header and tools drawer", () => {
   it("has no Test button — there is no workflow to test — and Workflow Builder still has one", async () => {
     sessionMode = "agent";
     render(inShell(<PiBuilderWorkbench />));
-    await screen.findByRole("button", { name: /Files/ });
+    await screen.findByRole("button", { name: "Tools" });
     expect(screen.queryByTestId("builder-test")).toBeNull();
     expect(screen.queryByRole("button", { name: /^(Save|Saved|Saving…)$/ })).toBeNull();
   });
 
-  it("opens the files as the explorer in the canvas's column, without unfolding the canvas", async () => {
+  it("gives chat the full width (no canvas rail) and opens Files in the tools drawer", async () => {
     sessionMode = "agent";
     const { container } = render(inShell(<PiBuilderWorkbench />));
-    fireEvent.click(await screen.findByRole("button", { name: /Files/ }));
+    await waitFor(() => expect(container.querySelector(".forge-wb")!.className).toContain("agent-full"));
+    expect(screen.queryByLabelText("Expand Canvas")).toBeNull();
+    fireEvent.click(await screen.findByRole("button", { name: "Tools" }));
+    const tools = await screen.findByLabelText("Chat tools");
+    expect(within(tools).getByRole("tab", { name: "Files" }).getAttribute("aria-selected")).toBe("true");
     const pane = await screen.findByTestId("side-pane");
     expect(pane.getAttribute("data-docked")).toBe("true");
-    const wb = container.querySelector(".forge-wb")!;
-    expect(wb.className).toContain("explorer-open");
-    expect(wb.className).not.toContain("canvas-closed");
-    // Closing it folds back to the canvas rail, still without a canvas.
-    fireEvent.click(screen.getByRole("button", { name: /Files/ }));
-    await waitFor(() => expect(screen.queryByTestId("side-pane")).toBeNull());
-    expect(wb.className).toContain("canvas-closed");
+    fireEvent.click(screen.getByRole("button", { name: "Tools" }));
+    await waitFor(() => expect(screen.queryByLabelText("Chat tools")).toBeNull());
+    expect(container.querySelector(".forge-wb")!.className).toContain("agent-full");
   });
 
-  it("CONTROL: in Workflow Builder the files slide over the open canvas, as before", async () => {
+  it("CONTROL: in Workflow Builder Tools opens Files (canvas stays in its column — no twin)", async () => {
     render(inShell(<PiBuilderWorkbench />));
-    fireEvent.click(await screen.findByRole("button", { name: /Files/ }));
-    expect((await screen.findByTestId("side-pane")).getAttribute("data-docked")).toBe("false");
+    fireEvent.click(await screen.findByRole("button", { name: "Tools" }));
+    const tools = await screen.findByLabelText("Chat tools");
+    expect(within(tools).getByRole("tab", { name: "Files" }).getAttribute("aria-selected")).toBe("true");
+    expect(within(tools).queryByRole("tab", { name: "Canvas" })).toBeNull();
     expect(screen.getByTestId("builder-test")).toBeTruthy();
     expect(screen.getByRole("button", { name: /^(Save|Saved)$/ })).toBeTruthy();
   });

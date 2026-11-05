@@ -142,6 +142,7 @@ export function ProposalCard({ p, onDecide }: { p: PiProposal; onDecide: Decide 
 function EdgeCard({ p, e, onDecide }: { p: PiProposal; e: PiEdgeJob; onDecide: Decide | null }) {
   const [busy, setBusy] = useState<"once" | "command" | "path_read" | "deny" | "decline" | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [open, setOpen] = useState(false);
   const state = STATE[p.status];
   const params = (p.params && !Array.isArray(p.params) ? p.params : {}) as Record<string, unknown>;
   const command = typeof params.command === "string" ? params.command : null;
@@ -157,6 +158,8 @@ function EdgeCard({ p, e, onDecide }: { p: PiProposal; e: PiEdgeJob; onDecide: D
   })();
   const showFolder = (e.kind === "run_command" && !!folderHint) || e.kind === "read_path";
   const showCommandAlways = e.kind === "run_command" && !!command;
+  const mono = command ?? path ?? null;
+  const resultPreview = p.result ? p.result.replace(/\s+/g, " ").trim().slice(0, 120) : null;
   const decide = async (d: "run" | "decline", always?: EdgeAlways | null) => {
     if (!onDecide) return;
     setBusy(always ?? (d === "run" ? "once" : "decline"));
@@ -180,63 +183,101 @@ function EdgeCard({ p, e, onDecide }: { p: PiProposal; e: PiEdgeJob; onDecide: D
         </span>
       </div>
       <p className="text-body font-medium text-text">{p.summary}</p>
-      <dl className="pc-values sans" aria-label="What will run">
-        <Fact k="On">{e.deviceName}</Fact>
-        {command != null ? (
-          <Fact k="Command">
-            <code className="font-mono text-[13px]">{command}</code>
-          </Fact>
-        ) : null}
-        {path != null ? (
-          <Fact k="Path">
-            <code className="font-mono text-[13px]">{path}</code>
-          </Fact>
-        ) : null}
-        {contents != null ? (
-          <Fact k="Contents">
-            <Value v={contents} />
-          </Fact>
-        ) : null}
-      </dl>
-      {p.status === "pending" && (
-        <div className="flex flex-col gap-2 pt-0.5">
-          <div className="flex flex-wrap items-center gap-2">
-            <Button size="sm" disabled={!!busy || !onDecide} onClick={() => void decide("run")}>
-              {busy === "once" ? "Approving…" : "Approve once"}
-            </Button>
-            {showCommandAlways ? (
-              <Button size="sm" variant="ghost" disabled={!!busy || !onDecide} onClick={() => void decide("run", "command")}>
-                {busy === "command" ? "Saving…" : "Always allow this command"}
-              </Button>
-            ) : null}
-            {showFolder ? (
-              <Button size="sm" variant="ghost" disabled={!!busy || !onDecide} onClick={() => void decide("run", "path_read")}>
-                {busy === "path_read" ? "Saving…" : "Always allow this folder"}
-              </Button>
-            ) : null}
-            <Button size="sm" variant="ghost" disabled={!!busy || !onDecide} onClick={() => void decide("decline")}>
-              {busy === "decline" ? "Cancelling…" : "Cancel"}
-            </Button>
-            {showCommandAlways ? (
-              <Button size="sm" variant="ghost" disabled={!!busy || !onDecide} onClick={() => void decide("decline", "deny")}>
-                {busy === "deny" ? "Saving…" : "Deny always"}
-              </Button>
-            ) : null}
-          </div>
-          <span className="text-caption text-dim">Runs on your computer only after you Approve. Always-allow remembers for next time in this workspace.</span>
+      {mono ? (
+        <p className="truncate font-mono text-[12.5px] text-muted" title={mono}>
+          {mono}
+        </p>
+      ) : null}
+      {p.status === "pending" ? (
+        <div className="flex flex-wrap items-center gap-2 pt-0.5">
+          <Button size="sm" disabled={!!busy || !onDecide} onClick={() => void decide("run")}>
+            {busy === "once" ? "Approving…" : "Approve"}
+          </Button>
+          <Button size="sm" variant="ghost" disabled={!!busy || !onDecide} onClick={() => void decide("decline")}>
+            {busy === "decline" ? "Cancelling…" : "Cancel"}
+          </Button>
+          <button
+            type="button"
+            className="text-caption font-medium text-muted hover:text-text"
+            aria-expanded={open}
+            onClick={() => setOpen((v) => !v)}
+          >
+            {open ? "Less" : "Details"}
+          </button>
+        </div>
+      ) : (
+        <div className="flex flex-wrap items-center gap-2 pt-0.5">
+          {(p.status === "done" || p.status === "failed") && resultPreview ? (
+            <p className={`min-w-0 flex-1 truncate text-caption ${p.status === "done" ? "text-ok" : "text-danger"}`} title={p.result ?? undefined}>
+              {resultPreview}
+              {(p.result?.length ?? 0) > 120 ? "…" : ""}
+            </p>
+          ) : null}
+          <button
+            type="button"
+            className="ml-auto text-caption font-medium text-muted hover:text-text"
+            aria-expanded={open}
+            onClick={() => setOpen((v) => !v)}
+          >
+            {open ? "Less" : "Details"}
+          </button>
         </div>
       )}
-      {(p.status === "done" || p.status === "failed") && p.result ? (
-        <div className={`pc-outcome ${p.status === "done" ? "ok" : "danger"}`}>
-          <span className="min-w-0 whitespace-pre-wrap break-words">{p.result}</span>
+      {open ? (
+        <div className="mt-2 flex flex-col gap-2 border-t border-line pt-2">
+          <dl className="pc-values sans" aria-label="What will run">
+            <Fact k="On">{e.deviceName}</Fact>
+            {command != null ? (
+              <Fact k="Command">
+                <code className="font-mono text-[13px]">{command}</code>
+              </Fact>
+            ) : null}
+            {path != null ? (
+              <Fact k="Path">
+                <code className="font-mono text-[13px]">{path}</code>
+              </Fact>
+            ) : null}
+            {contents != null ? (
+              <Fact k="Contents">
+                <Value v={contents} />
+              </Fact>
+            ) : null}
+          </dl>
+          {p.status === "pending" ? (
+            <div className="flex flex-col gap-2">
+              <div className="flex flex-wrap items-center gap-2">
+                {showCommandAlways ? (
+                  <Button size="sm" variant="ghost" disabled={!!busy || !onDecide} onClick={() => void decide("run", "command")}>
+                    {busy === "command" ? "Saving…" : "Always allow this command"}
+                  </Button>
+                ) : null}
+                {showFolder ? (
+                  <Button size="sm" variant="ghost" disabled={!!busy || !onDecide} onClick={() => void decide("run", "path_read")}>
+                    {busy === "path_read" ? "Saving…" : "Always allow this folder"}
+                  </Button>
+                ) : null}
+                {showCommandAlways ? (
+                  <Button size="sm" variant="ghost" disabled={!!busy || !onDecide} onClick={() => void decide("decline", "deny")}>
+                    {busy === "deny" ? "Saving…" : "Deny always"}
+                  </Button>
+                ) : null}
+              </div>
+              <span className="text-caption text-dim">Runs on your computer only after you Approve. Always-allow remembers for next time in this workspace.</span>
+            </div>
+          ) : null}
+          {(p.status === "done" || p.status === "failed") && p.result ? (
+            <div className={`pc-outcome ${p.status === "done" ? "ok" : "danger"}`}>
+              <span className="min-w-0 whitespace-pre-wrap break-words">{p.result}</span>
+            </div>
+          ) : null}
+          {p.decidedBy && p.status !== "pending" ? (
+            <p className="text-caption text-dim">
+              {p.status === "declined" ? "Cancelled" : "Approved"} by {p.decidedBy}
+              {p.decidedAt ? ` · ${new Date(p.decidedAt).toLocaleString()}` : ""}
+            </p>
+          ) : null}
         </div>
       ) : null}
-      {p.decidedBy && p.status !== "pending" && (
-        <p className="text-caption text-dim">
-          {p.status === "declined" ? "Cancelled" : "Approved"} by {p.decidedBy}
-          {p.decidedAt ? ` · ${new Date(p.decidedAt).toLocaleString()}` : ""}
-        </p>
-      )}
       {error && <p className="text-xs text-danger">{error}</p>}
     </section>
   );

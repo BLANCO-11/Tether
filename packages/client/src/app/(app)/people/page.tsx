@@ -5,12 +5,13 @@
  *
  * Replaces the enterprise Admin → People tree with a single thin surface:
  * who can use this Foundry, and pending email invites into your space.
+ * Admins can change a person's role or remove their access (grantMember / revokeMember).
  */
 import { FormEvent, useMemo, useState } from "react";
 import { Page, Zone } from "@/components/layout/Page";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { useAsync } from "@/lib/hooks";
-import { foundryApi, type FAPeopleView, type FAWorkspaceRole } from "@/lib/foundry-client";
+import { foundryApi, type FAPeopleView, type FAPerson, type FAWorkspaceRole } from "@/lib/foundry-client";
 import { expiresLabel } from "@/lib/people";
 import { useWorkspace } from "@/lib/workspace";
 
@@ -23,6 +24,7 @@ const ROLES: FAWorkspaceRole[] = ["viewer", "author", "approver", "admin"];
 export default function PeoplePage() {
   const { workspaceId } = useWorkspace();
   const people = useAsync(() => foundryApi.getPeople(), []);
+  const me = useAsync(() => foundryApi.me(), []);
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<FAWorkspaceRole>("author");
   const [busy, setBusy] = useState(false);
@@ -30,10 +32,12 @@ export default function PeoplePage() {
   const [err, setErr] = useState<string | null>(null);
 
   const view = people.data as FAPeopleView | null;
+  const mySubject = me.data?.subject ?? null;
   const inviteTargets = useMemo(
     () => (view?.workspaces ?? []).filter((w) => w.canAddPeople),
     [view],
   );
+  const manageById = useMemo(() => new Map(inviteTargets.map((w) => [w.id, w])), [inviteTargets]);
   const defaultWorkspaceId =
     inviteTargets.find((w) => w.id === workspaceId)?.id ?? inviteTargets[0]?.id ?? null;
 
@@ -80,6 +84,39 @@ export default function PeoplePage() {
       await refresh();
     } catch (ex) {
       setErr(ex instanceof Error ? ex.message : "Could not withdraw invitation.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function onChangeRole(p: FAPerson, workspaceId: string, next: FAWorkspaceRole) {
+    setErr(null);
+    setBusy(true);
+    try {
+      await foundryApi.grantMember(workspaceId, { subject: p.subject, email: p.email, role: next });
+      setNotice(`Updated ${p.name || p.email || p.subject} to ${next}.`);
+      await refresh();
+    } catch (ex) {
+      setErr(ex instanceof Error ? ex.message : "Could not change role.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function onRemove(p: FAPerson, workspaceId: string, workspaceName: string) {
+    if (mySubject && p.subject === mySubject) {
+      setErr("You cannot remove your own access from here.");
+      return;
+    }
+    if (!window.confirm(`Remove ${p.name || p.email || p.subject} from ${workspaceName}?`)) return;
+    setErr(null);
+    setBusy(true);
+    try {
+      await foundryApi.revokeMember(workspaceId, p.subject);
+      setNotice(`Removed ${p.name || p.email || p.subject} from ${workspaceName}.`);
+      await refresh();
+    } catch (ex) {
+      setErr(ex instanceof Error ? ex.message : "Could not remove access.");
     } finally {
       setBusy(false);
     }
@@ -198,15 +235,62 @@ export default function PeoplePage() {
           ) : (
             <ul className="divide-y divide-line rounded-md border border-line">
               {view!.people.map((p) => (
-                <li key={p.subject} className="px-3 py-2.5">
-                  <div className="text-sm text-text">{p.name || p.email || p.subject}</div>
-                  <div className="text-xs text-muted">
-                    {p.email}
-                    {p.workspaces.length
-                      ? ` · ${p.workspaces.map((w) => `${w.name}${w.role ? ` (${w.role})` : ""}`).join(", ")}`
-                      : " · no workspace yet"}
-                    {p.signIn === "local" ? " · local sign-in" : ""}
+                <li key={p.subject} className="space-y-2 px-3 py-2.5">
+                  <div>
+                    <div className="text-sm text-text">{p.name || p.email || p.subject}</div>
+                    <div className="text-xs text-muted">
+                      {p.email}
+                      {p.signIn === "local" ? " · local sign-in" : ""}
+                      {p.subject === mySubject ? " · you" : ""}
+                    </div>
                   </div>
+                  {p.workspaces.length === 0 ? (
+                    <p className="text-xs text-muted">No workspace yet</p>
+                  ) : (
+                    <ul className="space-y-2">
+                      {p.workspaces.map((w) => {
+                        const canManage = manageById.has(w.id) && !!w.role;
+                        const role = (w.role ?? "viewer") as FAWorkspaceRole;
+                        return (
+                          <li key={w.id} className="flex flex-wrap items-center gap-2 text-xs">
+                            <span className="min-w-[8rem] text-muted">{w.name}</span>
+                            {canManage ? (
+                              <>
+                                <label className="sr-only" htmlFor={`role-${p.subject}-${w.id}`}>
+                                  Role in {w.name}
+                                </label>
+                                <select
+                                  id={`role-${p.subject}-${w.id}`}
+                                  aria-label={`Role for ${p.name || p.email} in ${w.name}`}
+                                  value={role}
+                                  disabled={busy}
+                                  className="h-8 rounded-md border border-line bg-bg px-2 text-xs text-text"
+                                  onChange={(e) => void onChangeRole(p, w.id, e.target.value as FAWorkspaceRole)}
+                                >
+                                  {ROLES.map((r) => (
+                                    <option key={r} value={r}>
+                                      {r}
+                                    </option>
+                                  ))}
+                                </select>
+                                <button
+                                  type="button"
+                                  className="text-xs text-muted underline hover:text-warn disabled:opacity-50"
+                                  disabled={busy || p.subject === mySubject}
+                                  title={p.subject === mySubject ? "You cannot remove yourself" : `Remove from ${w.name}`}
+                                  onClick={() => void onRemove(p, w.id, w.name)}
+                                >
+                                  Remove
+                                </button>
+                              </>
+                            ) : (
+                              <span className="text-muted">{w.role ?? "member"}</span>
+                            )}
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  )}
                 </li>
               ))}
             </ul>
