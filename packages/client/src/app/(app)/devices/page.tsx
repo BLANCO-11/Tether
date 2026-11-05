@@ -1,7 +1,7 @@
 // src/app/(app)/devices/page.tsx — edge agent setup (curl → Approve → credential).
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useAsync } from "@/lib/hooks";
 import { useToast } from "@/lib/toast";
 import {
@@ -9,13 +9,15 @@ import {
   approveEdgeJob,
   beginEdgePairing,
   denyEdgeConnect,
+  edgeConnectionLabel,
+  edgeConnectionOf,
   enqueueEdgeJob,
   listEdgeDevices,
   listEdgePending,
   mintEdgeSetupLink,
   revokeEdgeDevice,
+  type EdgeConnection,
   type EdgeDevice,
-  type EdgeJob,
 } from "@/lib/edge";
 import { Page, Zone } from "@/components/layout/Page";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -33,6 +35,41 @@ function said(e: unknown): string {
   } catch {
     return body;
   }
+}
+
+function ConnectionBadge({ connection }: { connection: EdgeConnection }) {
+  const tone =
+    connection === "online"
+      ? "bg-ok-bg text-ok"
+      : connection === "offline"
+        ? "bg-surface-2 text-muted"
+        : connection === "pairing"
+          ? "bg-warn-bg text-warn"
+          : "bg-surface-2 text-muted";
+  return (
+    <span className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-caption font-medium ${tone}`}>
+      <span
+        className={`size-1.5 rounded-full ${
+          connection === "online" ? "bg-ok animate-pulse" : connection === "pairing" ? "bg-warn" : "bg-dim"
+        }`}
+        aria-hidden
+      />
+      {edgeConnectionLabel(connection)}
+    </span>
+  );
+}
+
+function connectionHint(connection: EdgeConnection, lastSeenAt: string | null): string {
+  if (connection === "online") {
+    return lastSeenAt ? `Agent polling · last seen ${new Date(lastSeenAt).toLocaleTimeString()}` : "Agent polling";
+  }
+  if (connection === "offline") {
+    return lastSeenAt
+      ? `Agent not running · last seen ${new Date(lastSeenAt).toLocaleString()}`
+      : "Agent not running — start it with the setup curl or `edge-agent.mjs run`";
+  }
+  if (connection === "pairing") return "Enter the pairing code on the host";
+  return edgeConnectionLabel(connection);
 }
 
 export default function DevicesPage() {
@@ -90,22 +127,15 @@ export default function DevicesPage() {
     setBusy(true);
     try {
       const job = await enqueueEdgeJob(cmdDevice, "run_command", { command: command.trim() });
-      toast.success(job.status === "awaiting_approval" ? "Waiting for your approval below." : "Queued.");
+      // Queuing here is the approval — chat is where gated Forge jobs ask; this page does not.
+      if (job.status === "awaiting_approval") await approveEdgeJob(job.id);
+      toast.success("Queued — the agent will pick it up.");
+      setCmdDevice(null);
       pending.reload();
     } catch (e) {
       toast.error(said(e));
     } finally {
       setBusy(false);
-    }
-  };
-
-  const approveJob = async (job: EdgeJob) => {
-    try {
-      await approveEdgeJob(job.id);
-      toast.success("Approved — the agent will pick it up.");
-      pending.reload();
-    } catch (e) {
-      toast.error(said(e));
     }
   };
 
@@ -132,8 +162,17 @@ export default function DevicesPage() {
   };
 
   const connects = pending.data?.connects ?? [];
-  const jobs = pending.data?.jobs ?? [];
   const activeDevices = (devices.data ?? []).filter((d) => d.status === "active" || d.status === "pairing");
+
+  // Refresh so Connected / Offline tracks the agent's claim poll (~2s).
+  useEffect(() => {
+    const id = window.setInterval(() => {
+      devices.reload();
+      pending.reload();
+    }, 5_000);
+    return () => window.clearInterval(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- reload identity is stable enough; avoid thrashing on every render
+  }, []);
 
   return (
     <Page>
@@ -150,7 +189,7 @@ export default function DevicesPage() {
             </div>
             <div className="space-y-3 px-4 py-3">
               <p className="text-caption text-muted">
-                Paste the curl into Cursor, Claude, or a terminal. The agent gets instructions and registers — you Approve before any credential is issued.
+                Paste the curl into Cursor, Claude, or a terminal. It registers this computer, waits for you to Approve once, then starts the agent on its own — no further hand-holding.
               </p>
               <Input aria-label="Device name" value={name} onChange={(e) => setName(e.target.value)} maxLength={120} placeholder="MacBook" />
               <div className="flex flex-wrap gap-2">
@@ -172,7 +211,7 @@ export default function DevicesPage() {
                     </Button>
                   </div>
                   <p className="mt-2 text-caption text-muted">
-                    After the agent registers, Approve the connect request below (or in Needs you). Expires{" "}
+                    When the agent asks, Approve below (or in Needs you). It then finishes and starts polling. Expires{" "}
                     {new Date(setup.expiresAt).toLocaleTimeString()}.
                   </p>
                 </Notice>
@@ -248,27 +287,33 @@ export default function DevicesPage() {
                 <p className="text-caption text-muted">None yet.</p>
               ) : (
                 <ul className="flex flex-col gap-2">
-                  {activeDevices.map((d) => (
-                    <li key={d.id} className="flex items-center justify-between gap-3 rounded-md border border-line px-3 py-2">
-                      <div className="min-w-0">
-                        <p className="text-body font-medium">{d.name}</p>
-                        <p className="text-caption text-muted">
-                          {d.status}
-                          {d.lastSeenAt ? ` · seen ${new Date(d.lastSeenAt).toLocaleString()}` : ""}
-                        </p>
-                      </div>
-                      <div className="flex shrink-0 gap-2">
-                        {d.status === "active" ? (
-                          <Button size="sm" variant="ghost" onClick={() => setCmdDevice(d.id)}>
-                            Run…
+                  {activeDevices.map((d) => {
+                    const connection = edgeConnectionOf(d);
+                    return (
+                      <li key={d.id} className="flex items-center justify-between gap-3 rounded-md border border-line px-3 py-2">
+                        <div className="min-w-0">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <p className="text-body font-medium">{d.name}</p>
+                            <ConnectionBadge connection={connection} />
+                          </div>
+                          <p className="text-caption text-muted">
+                            {connectionHint(connection, d.lastSeenAt)}
+                            {d.agentLabel ? ` · ${d.agentLabel}` : ""}
+                          </p>
+                        </div>
+                        <div className="flex shrink-0 gap-2">
+                          {d.status === "active" ? (
+                            <Button size="sm" variant="ghost" onClick={() => setCmdDevice(d.id)} disabled={connection === "offline"}>
+                              Run…
+                            </Button>
+                          ) : null}
+                          <Button size="sm" variant="ghost" onClick={() => setRevoking(d)}>
+                            Revoke
                           </Button>
-                        ) : null}
-                        <Button size="sm" variant="ghost" onClick={() => setRevoking(d)}>
-                          Revoke
-                        </Button>
-                      </div>
-                    </li>
-                  ))}
+                        </div>
+                      </li>
+                    );
+                  })}
                 </ul>
               )}
             </div>
@@ -283,7 +328,7 @@ export default function DevicesPage() {
                 <Input aria-label="Shell command" className="font-mono" value={command} onChange={(e) => setCommand(e.target.value)} />
                 <div className="flex gap-2">
                   <Button size="sm" disabled={busy || !command.trim()} onClick={() => void enqueue()}>
-                    Queue (needs approval)
+                    Run
                   </Button>
                   <Button size="sm" variant="ghost" onClick={() => setCmdDevice(null)}>
                     Cancel
@@ -293,30 +338,6 @@ export default function DevicesPage() {
             </section>
           ) : null}
 
-          <section className="pane" aria-label="Pending edge job approvals">
-            <div className="border-b border-line px-4 py-3">
-              <h2 className="text-body font-semibold">Needs approval</h2>
-            </div>
-            <div className="px-4 py-3">
-              {jobs.length === 0 ? (
-                <p className="text-caption text-muted">No edge jobs waiting.</p>
-              ) : (
-                <ul className="flex flex-col gap-2">
-                  {jobs.map((j) => (
-                    <li key={j.id} className="flex items-start justify-between gap-3 rounded-md border border-line px-3 py-2">
-                      <div className="min-w-0">
-                        <p className="text-caption font-medium uppercase text-muted">{j.kind}</p>
-                        <p className="font-mono text-[13px] text-text">{JSON.stringify(j.payload)}</p>
-                      </div>
-                      <Button size="sm" onClick={() => void approveJob(j)}>
-                        Approve
-                      </Button>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          </section>
         </div>
       </Zone>
 

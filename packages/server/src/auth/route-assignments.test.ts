@@ -125,7 +125,7 @@ describe("the exemptions, each for its own stated reason", () => {
     }
   });
 
-  it("and the exempt list is EXACTLY twenty-nine — a thirtieth needs a decision (27–29: the built-in tools' own keys and Forge's web read)", () => {
+  it("and the exempt list is EXACTLY thirty-nine — a fortieth needs a decision (edge setup + Forge edge tools)", () => {
     // ⚠ This is the shortest and most security-relevant list in the feature: it is the
     // set of routes an unauthenticated caller can reach. Growing it should cost somebody
     // an argument, not a line. (17 and 18: the runner's token-authenticated callbacks, above.
@@ -138,23 +138,36 @@ describe("the exemptions, each for its own stated reason", () => {
     // 27–29 (beta-2.36.0): `POST /api/llm/complete` and `POST /api/web/fetch`, the built-in tools moved into the
     // server, each behind its own derived key exactly as `POST /api/mail/send` is; and `POST /api/forge/fetch`, Forge
     // reading a public address while building, behind its per-conversation key like the other Forge tools.
-    expect(EXEMPT.size).toBe(29);
+    // 30–36: public edge setup / pair / claim / complete / agent.mjs (personal thin; setup token or device Bearer).
+    // 37–39: Forge edge devices / enqueue / job (personal thin; per-conversation tool key).
+    expect(EXEMPT.size).toBe(39);
     expect(EXEMPT.get("POST /api/llm/complete")?.reason).toBe("requireLlmKey");
     expect(EXEMPT.get("POST /api/web/fetch")?.reason).toBe("requireWebKey");
-    for (const path of ["/api/forge/data", "/api/forge/file", "/api/forge/plugin", "/api/forge/propose", "/api/forge/actions", "/api/forge/propose-setting", "/api/forge/fetch"]) {
+    for (const path of [
+      "/api/forge/data",
+      "/api/forge/file",
+      "/api/forge/plugin",
+      "/api/forge/propose",
+      "/api/forge/actions",
+      "/api/forge/propose-setting",
+      "/api/forge/fetch",
+      "/api/forge/edge/devices",
+      "/api/forge/edge/enqueue",
+      "/api/forge/edge/job",
+    ]) {
       const req = requirementFor("POST", path);
       expect(req?.kind).toBe("exempt");
-      if (req?.kind === "exempt") expect(req.reason).toMatch(/per-conversation tool key/);
+      if (req?.kind === "exempt") expect(req.reason).toMatch(/per-conversation tool key|edge/);
     }
   });
 });
 
 describe("the deployment tier keeps its own vocabulary", () => {
-  it("the model connection and model pricing keep separate permissions", () => {
-    // 2026-11-04: one model connection for the deployment, at `/api/runtime-model` (`platform.toolmodel.*`).
-    // Prices are a separate decision with their own permission.
-    expect(permOf("PUT", "/api/runtime-model/provider")).toBe("platform.toolmodel.write");
-    expect(permOf("GET", "/api/runtime-model/provider")).toBe("platform.toolmodel.read");
+  it("the model connection is identity-scoped (personal BYOK); pricing stays platform", () => {
+    // Personal thin: /api/runtime-model/* is each subject's own connection (identity), not platform.toolmodel.*.
+    // Prices remain a separate platform decision.
+    expect(requirementFor("PUT", "/api/runtime-model/provider")?.kind).toBe("identity");
+    expect(requirementFor("GET", "/api/runtime-model/provider")?.kind).toBe("identity");
     expect(permOf("PUT", "/api/generation/pricing")).toBe("platform.generation.write");
   });
 

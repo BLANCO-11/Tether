@@ -1,37 +1,34 @@
 /**
- * THE model connection (2026-11-04): the gateway, key, enabled-model list and default model that workflows'
- * `llm_complete`, the builder's generation and Forge all use. Until today D-35 kept this apart from the builder's
- * model (`generation_llm`); the owner reversed that, and migration 0136 merged the two rows into this one.
+ * Model connection: deployment singleton (enterprise / harness env fallback) or per-user row (personal thin).
  *
- *  - **The settings are a ROW** (`runtime_model_provider`, set on the AI models page); the `LLM_*` environment values
- *    are the fallback until one is saved (`source: "env"`).
- *  - **The key is write-only.** Encrypted under `CREDENTIAL_ENC_KEY` like every stored credential; no route returns it.
- *    A fingerprint (eight hex characters of a salted digest) tells two keys apart and reconstructs neither.
- *  - **The base URL is operator-set, never caller-set.** A step passes `instruction` and `input`; nothing it sends can
- *    point this at another host.
- *  - **The enabled list is a spend control**: a step naming a model not on it is refused by name, never substituted.
- *  - **A model list is not proof a key works** (a gateway lists models for a key with no quota). Only a completion is.
+ * Personal (`PERSONAL_PRODUCT`): each subject owns one OpenAI-compatible connection in `user_llm_providers`.
+ * Interactive routes never fall back to the shared env key (that would silently bill the deployment).
+ * Harnesses / callers without a subject still use `LLM_*` via `fromEnv()`.
  */
 import { createHash } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { config } from "../config/index.js";
 import { db } from "../db/index.js";
-import { runtimeModelProvider } from "../db/schema.js";
+import { runtimeModelProvider, userLlmProviders } from "../db/schema.js";
+import { PERSONAL_PRODUCT } from "../personal.js";
 import { decrypt, encrypt } from "../utils/encryptor.js";
 import { forgeReachability, rememberModelConnection } from "./model-connection.js";
+import { presetById, resolvePresetBaseUrl, type LlmProviderPresetId } from "./llm-provider-presets.js";
 
 export interface RuntimeProvider {
   baseUrl: string;
   apiKey: string;
   defaultModel: string;
   allowedModels: string[];
-  /** Where the live values came from — `env` until someone saves the settings. */
+  /** Preset id when personal BYOK; omitted for env/singleton. */
+  providerId?: LlmProviderPresetId | string;
+  /** Where the live values came from — `env` until someone saves; `configured` when a row exists. */
   source: "env" | "configured";
   updatedAt: string | null;
   updatedBy: string | null;
 }
 
-/** What an operator may see. Deliberately has no `apiKey`. */
+/** What a person may see. Deliberately has no `apiKey`. */
 export type RuntimeProviderView = Omit<RuntimeProvider, "apiKey"> & {
   configured: boolean;
   keyFingerprint: string;
@@ -57,8 +54,21 @@ function fromEnv(): RuntimeProvider {
   };
 }
 
-/** The live settings: the saved row if there is one, else the environment. */
-export async function loadRuntimeProvider(): Promise<RuntimeProvider> {
+/** Empty personal connection (UI empty state — never exposes the env key). */
+function unconfiguredPersonal(): RuntimeProvider {
+  return {
+    baseUrl: "",
+    apiKey: "",
+    defaultModel: "",
+    allowedModels: [],
+    providerId: "openai",
+    source: "env",
+    updatedAt: null,
+    updatedBy: null,
+  };
+}
+
+async function loadSingleton(): Promise<RuntimeProvider> {
   const [row] = await db.select().from(runtimeModelProvider).where(eq(runtimeModelProvider.id, 1)).limit(1);
   if (!row) return fromEnv();
   return {
@@ -72,29 +82,74 @@ export async function loadRuntimeProvider(): Promise<RuntimeProvider> {
   };
 }
 
+async function loadUserRow(subject: string): Promise<RuntimeProvider | null> {
+  const [row] = await db.select().from(userLlmProviders).where(eq(userLlmProviders.subject, subject)).limit(1);
+  if (!row) return null;
+  return {
+    baseUrl: row.baseUrl.replace(/\/+$/, ""),
+    apiKey: row.apiKeyEnc ? decrypt(row.apiKeyEnc) : "",
+    defaultModel: row.defaultModel,
+    allowedModels: Array.isArray(row.allowedModels) ? row.allowedModels : [],
+    providerId: row.providerId,
+    source: "configured",
+    updatedAt: row.updatedAt.toISOString(),
+    updatedBy: row.updatedBy ?? null,
+  };
+}
+
+export type LoadOpts = {
+  /** Signed-in subject (personal BYOK). */
+  subject?: string | null;
+  /**
+   * `interactive` — UI / Forge: never fall back to env for a person without a row.
+   * `harness` — allow env when no subject / no row (tests, Kestra without acting subject).
+   */
+  mode?: "interactive" | "harness";
+};
+
+/** The live settings for a caller. */
+export async function loadRuntimeProvider(opts: LoadOpts = {}): Promise<RuntimeProvider> {
+  const mode = opts.mode ?? "harness";
+  if (!PERSONAL_PRODUCT) return loadSingleton();
+
+  const subject = opts.subject?.trim() || null;
+  if (subject) {
+    const row = await loadUserRow(subject);
+    if (row) return row;
+    if (mode === "interactive") return unconfiguredPersonal();
+    return fromEnv();
+  }
+  if (mode === "interactive") return unconfiguredPersonal();
+  return fromEnv();
+}
+
 export type ModelConnection = RuntimeProvider;
 
-/**
- * A short TTL, not a process-lifetime cache, so Save is visibly effective without a restart (2026-11-04).
- * Save and clear invalidate it at once.
- */
 const TTL_MS = 10_000;
-let cached: { at: number; value: ModelConnection } | null = null;
+const cache = new Map<string, { at: number; value: ModelConnection }>();
 
-export function invalidateModelConnection(): void {
-  cached = null;
+export function invalidateModelConnection(subject?: string | null): void {
+  if (subject) cache.delete(`u:${subject}`);
+  else cache.clear();
 }
 
 /**
- * The connection every consumer uses. A failure to read the row THROWS: falling back to the environment would send
- * work to a different gateway from the one the screen shows, silently, for as long as the database is unhappy. A
- * missing ROW is the normal env case and `loadRuntimeProvider` already handles it.
+ * Connection every consumer uses. Pass `subject` for personal chats / steps.
+ * Missing interactive row → unconfigured (empty key); harness without subject → env.
  */
-export async function resolveModelConnection(): Promise<ModelConnection> {
-  if (cached && Date.now() - cached.at < TTL_MS) return cached.value;
-  const value = await loadRuntimeProvider();
+export async function resolveModelConnection(subject?: string | null): Promise<ModelConnection> {
+  const key = PERSONAL_PRODUCT && subject ? `u:${subject}` : "singleton";
+  const hit = cache.get(key);
+  if (hit && Date.now() - hit.at < TTL_MS) {
+    rememberModelConnection({ baseUrl: hit.value.baseUrl, apiKey: hit.value.apiKey });
+    return hit.value;
+  }
+  const value = await loadRuntimeProvider({
+    subject,
+    mode: PERSONAL_PRODUCT && subject ? "interactive" : "harness",
+  });
   rememberModelConnection({ baseUrl: value.baseUrl, apiKey: value.apiKey });
-  cached = { at: Date.now(), value };
+  cache.set(key, { at: Date.now(), value });
   return value;
 }
 
@@ -104,7 +159,7 @@ export function viewOf(p: RuntimeProvider): RuntimeProviderView {
     ...rest,
     configured: Boolean(p.baseUrl && apiKey),
     keyFingerprint: keyFingerprint(apiKey),
-    ...forgeReachability(p.baseUrl, config.inference.baseUrl, config.forge.egressAllow),
+    ...forgeReachability(p.baseUrl || config.inference.baseUrl, config.inference.baseUrl, config.forge.egressAllow),
   };
 }
 
@@ -114,14 +169,31 @@ export class RuntimeModelError extends Error {
   }
 }
 
+export type SaveProviderInput = {
+  baseUrl: string;
+  apiKey?: string;
+  defaultModel: string;
+  allowedModels: string[];
+  providerId?: string;
+};
+
 /**
- * Save the settings. `apiKey` omitted keeps the stored one; the empty string is refused. The default model must be on
- * the enabled list.
+ * Save. Personal → upsert by subject. Enterprise → singleton id=1.
+ * `apiKey` omitted keeps the stored one; empty string refused.
  */
-export async function saveRuntimeProvider(update: { baseUrl: string; apiKey?: string; defaultModel: string; allowedModels: string[] }, by: string | null): Promise<RuntimeProvider> {
-  const baseUrl = update.baseUrl.trim();
+export async function saveRuntimeProvider(
+  update: SaveProviderInput,
+  by: string | null,
+  subject?: string | null,
+): Promise<RuntimeProvider> {
+  const providerId = (update.providerId?.trim() || "custom") as string;
+  const baseUrl = resolvePresetBaseUrl(providerId, update.baseUrl);
   if (!/^https?:\/\/.+/.test(baseUrl)) {
-    throw new RuntimeModelError(400, "bad_request", "The gateway address must be an http(s) URL ending at the OpenAI-compatible root, e.g. https://gateway.example/v1");
+    throw new RuntimeModelError(
+      400,
+      "bad_request",
+      "The gateway address must be an http(s) URL ending at the OpenAI-compatible root, e.g. https://api.openai.com/v1",
+    );
   }
   if (update.apiKey !== undefined && !update.apiKey.trim()) {
     throw new RuntimeModelError(400, "bad_request", "The key must not be empty. Leave it out to keep the stored one.");
@@ -131,10 +203,33 @@ export async function saveRuntimeProvider(update: { baseUrl: string; apiKey?: st
   if (defaultModel && !allowedModels.includes(defaultModel)) {
     throw new RuntimeModelError(400, "bad_request", `The default model "${defaultModel}" must also be enabled.`, { allowedModels });
   }
-  const current = await loadRuntimeProvider();
+
+  if (PERSONAL_PRODUCT) {
+    if (!subject?.trim()) throw new RuntimeModelError(401, "unauthorized", "Sign in to save your AI connection.");
+    const current = await loadUserRow(subject);
+    const key = update.apiKey?.trim() ?? current?.apiKey ?? "";
+    if (!key) throw new RuntimeModelError(400, "bad_request", "Paste an API key to connect this provider.");
+    const values = {
+      providerId: presetById(providerId).id,
+      baseUrl,
+      apiKeyEnc: encrypt(key),
+      defaultModel,
+      allowedModels,
+      updatedAt: new Date(),
+      updatedBy: by,
+    };
+    await db
+      .insert(userLlmProviders)
+      .values({ subject, ...values })
+      .onConflictDoUpdate({ target: userLlmProviders.subject, set: values });
+    invalidateModelConnection(subject);
+    return (await loadUserRow(subject))!;
+  }
+
+  const current = await loadSingleton();
   const key = update.apiKey?.trim() ?? current.apiKey;
   const values = {
-    baseUrl: baseUrl.replace(/\/+$/, ""),
+    baseUrl,
     apiKeyEnc: key ? encrypt(key) : null,
     defaultModel,
     allowedModels,
@@ -143,19 +238,31 @@ export async function saveRuntimeProvider(update: { baseUrl: string; apiKey?: st
   };
   await db.insert(runtimeModelProvider).values({ id: 1, ...values }).onConflictDoUpdate({ target: runtimeModelProvider.id, set: values });
   invalidateModelConnection();
-  return loadRuntimeProvider();
+  return loadSingleton();
 }
 
-/** Forget the saved settings and fall back to the environment. */
-export async function clearRuntimeProvider(): Promise<RuntimeProvider> {
+/** Forget saved settings. Personal → delete user row; enterprise → delete singleton. */
+export async function clearRuntimeProvider(subject?: string | null): Promise<RuntimeProvider> {
+  if (PERSONAL_PRODUCT) {
+    if (!subject?.trim()) throw new RuntimeModelError(401, "unauthorized", "Sign in to clear your AI connection.");
+    await db.delete(userLlmProviders).where(eq(userLlmProviders.subject, subject));
+    invalidateModelConnection(subject);
+    return unconfiguredPersonal();
+  }
   await db.delete(runtimeModelProvider).where(eq(runtimeModelProvider.id, 1));
   invalidateModelConnection();
-  return loadRuntimeProvider();
+  return fromEnv();
 }
 
 async function providerFetch(p: RuntimeProvider, path: string, init: RequestInit, timeoutMs: number): Promise<Response> {
-  if (!p.baseUrl) {
-    throw new RuntimeModelError(503, "provider_not_configured", "No runtime model is configured. Set a gateway and key on the AI models page (or LLM_BASE_URL / LLM_API_KEY).");
+  if (!p.baseUrl || !p.apiKey) {
+    throw new RuntimeModelError(
+      503,
+      "provider_not_configured",
+      PERSONAL_PRODUCT
+        ? "Connect your AI provider on the AI models page (paste your API key)."
+        : "No runtime model is configured. Set a gateway and key on the AI models page (or LLM_BASE_URL / LLM_API_KEY).",
+    );
   }
   try {
     return await fetch(`${p.baseUrl}${path}`, {
@@ -170,7 +277,6 @@ async function providerFetch(p: RuntimeProvider, path: string, init: RequestInit
   }
 }
 
-/** The models the gateway advertises. ⚠ Not evidence that completions work — see `testCompletion`. */
 export async function listModels(p: RuntimeProvider): Promise<string[]> {
   const res = await providerFetch(p, "/models", { method: "GET" }, 20_000);
   if (!res.ok) {
@@ -194,15 +300,9 @@ export interface CompletionResult {
   latencyMs: number;
 }
 
-/**
- * The temperature every `llm_complete` call asks for: 1 since 2026-09-17, nobody may set it. Some models refuse any
- * other value, so a 400 that NAMES `temperature` is retried once without it; nothing downstream may depend on this
- * output being stable either way (D-34).
- */
 const RUNTIME_TEMPERATURE = 1;
 const rejectsTemperature = (status: number, body: string) => status === 400 && /temperature/i.test(body);
 
-/** One completion. No streaming, no tools, no JSON mode. */
 export async function complete(p: RuntimeProvider, opts: { model: string; system: string; user: string; maxTokens: number }): Promise<CompletionResult> {
   const startedAt = Date.now();
   const send = (withTemperature: boolean) =>
@@ -254,17 +354,24 @@ export async function complete(p: RuntimeProvider, opts: { model: string; system
   };
 }
 
-/** A real, tiny completion — the only thing that proves a key works. */
 export function testCompletion(p: RuntimeProvider, model?: string): Promise<CompletionResult> {
   return complete(p, { model: model || p.defaultModel, system: "Reply with exactly the word OK.", user: "OK?", maxTokens: 8 });
 }
 
-/** The settings with an unsaved gateway or key swapped in, for "Fetch models" and "Test" before saving. */
-export async function probeOf(b: { baseUrl?: string; apiKey?: string }): Promise<RuntimeProvider> {
-  const stored = await loadRuntimeProvider();
+/** Unsaved gateway/key for Fetch models / Test before save. */
+export async function probeOf(
+  b: { baseUrl?: string; apiKey?: string; providerId?: string },
+  subject?: string | null,
+): Promise<RuntimeProvider> {
+  const stored = await loadRuntimeProvider({ subject, mode: PERSONAL_PRODUCT ? "interactive" : "harness" });
+  const providerId = b.providerId ?? stored.providerId ?? "custom";
+  const baseUrl = b.baseUrl?.trim()
+    ? resolvePresetBaseUrl(providerId, b.baseUrl)
+    : stored.baseUrl;
   return {
     ...stored,
-    baseUrl: b.baseUrl?.trim() ? b.baseUrl.trim().replace(/\/+$/, "") : stored.baseUrl,
+    providerId,
+    baseUrl,
     apiKey: b.apiKey?.trim() ? b.apiKey.trim() : stored.apiKey,
   };
 }

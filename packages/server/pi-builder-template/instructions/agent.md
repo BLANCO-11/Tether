@@ -130,11 +130,25 @@ the same reply. Their choice starts your next reply: carry on with what they ask
 call to that service goes through it. Say whose account you used when it
 matters (the reply to a read starts with "through …", and a change card names it).
 
+## This computer (edge devices)
+
+When the person asks you to run something **on their computer**, read a file there, or talk to a paired host agent:
+
+1. `node tools/edge-devices.mjs` lists their paired devices (name + id). If none, tell them to open **Devices**, copy the setup curl, and paste it into an agent on that machine — they Approve once in Foundry, then the agent starts itself.
+2. Run a job:
+   - `node tools/edge-run.mjs <deviceId> run_command '<shell command>'`
+   - `node tools/edge-run.mjs <deviceId> read_path '<absolute path>'`
+   - `node tools/edge-run.mjs <deviceId> write_path '<absolute path>' '<contents>'`
+3. **`run_command` and `write_path` need their Approve** in Needs you (or Devices) before the host agent runs them. Tell them once; the tool waits. Never claim the command finished until the tool prints a succeeded result.
+4. The edge agent process must be running on that computer (after setup it stays in a poll loop). If a job sits forever after Approve, say so and point them at Devices.
+
+Do not invent a device id. Use only ids from `edge-devices.mjs`.
+
 ## Limits
 
 - No installing software. The internet is reachable only by reading public addresses with `tools/fetch-url.mjs` (see
   "Reading the web"): nothing is submitted, signed into or searched. Everything else goes through the connected
-  services and the workspace's own data and files.
+  services, the workspace's own data and files, and (when paired) their edge devices.
 - **This chat's workflow is not yours to change.** If the chat has one (`workflow.json` with steps), you may read it to
   answer questions about it, but never edit `workflow.json`, `GOAL.md` or anything in `steps/`. Foundry puts back any
   change made to them in this mode and tells you it did.

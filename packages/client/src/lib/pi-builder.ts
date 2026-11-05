@@ -194,12 +194,22 @@ export type PiProposal = {
   /**
    * `setting`: switching a service's action on or off; the person picks where by the button they press.
    * `account`: which connection this chat uses for a service; the person picks one of `choice.options`.
+   * `edge`: a job on a paired computer that needs Approve before it runs.
    */
-  kind?: "action" | "setting" | "account";
+  kind?: "action" | "setting" | "account" | "edge";
   setting?: PiSettingChange;
   /** `chat` is only on cards decided before actions were kept per person (0117). */
   scope?: GrantScope | "chat" | null;
   choice?: PiAccountQuestion;
+  edge?: PiEdgeJob;
+};
+
+/** An edge job waiting in chat — Approve runs it on the named device; Cancel revokes it. */
+export type PiEdgeJob = {
+  jobId: string;
+  deviceId: string;
+  deviceName: string;
+  kind: "run_command" | "read_path" | "write_path";
 };
 
 /** Where a switched-on action applies: the person (every Forge Agent chat of theirs here), or the workspace. */

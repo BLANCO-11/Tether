@@ -6,7 +6,7 @@
 // own request to the server, which re-checks the rules and runs exactly the values shown here, once. The values are
 // shown in full, as they will be sent — what the person reads is what runs.
 import { useState } from "react";
-import type { GrantScope, PiAccount, PiAccountQuestion, PiProposal, PiSettingChange } from "@/lib/pi-builder";
+import type { GrantScope, PiAccount, PiAccountQuestion, PiEdgeJob, PiProposal, PiSettingChange } from "@/lib/pi-builder";
 import { Button } from "@/components/ui/Button";
 import { StatusPill } from "@/components/ui/Badge";
 
@@ -122,7 +122,88 @@ export function accountName(a: PiAccount): string {
 export function ProposalCard({ p, onDecide }: { p: PiProposal; onDecide: Decide | null }) {
   if (p.kind === "setting" && p.setting) return <SettingCard p={p} s={p.setting} onDecide={onDecide} />;
   if (p.kind === "account" && p.choice) return <AccountCard p={p} q={p.choice} onDecide={onDecide} />;
+  if (p.kind === "edge" && p.edge) return <EdgeCard p={p} e={p.edge} onDecide={onDecide} />;
   return <ActionCard p={p} onDecide={onDecide} />;
+}
+
+/**
+ * Forge asked to run something on a paired computer. Approve lets the edge agent claim it;
+ * Cancel revokes the job. Harmless commands never reach this card.
+ */
+function EdgeCard({ p, e, onDecide }: { p: PiProposal; e: PiEdgeJob; onDecide: Decide | null }) {
+  const [busy, setBusy] = useState<"run" | "decline" | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const state = STATE[p.status];
+  const decide = async (d: "run" | "decline") => {
+    if (!onDecide) return;
+    setBusy(d);
+    setError(null);
+    try {
+      await onDecide(p.id, d);
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setBusy(null);
+    }
+  };
+  const params = (p.params && !Array.isArray(p.params) ? p.params : {}) as Record<string, unknown>;
+  const command = typeof params.command === "string" ? params.command : null;
+  const path = typeof params.path === "string" ? params.path : null;
+  const contents = typeof params.contents === "string" ? params.contents : null;
+  return (
+    <section aria-label={`Edge job: ${p.summary}`} className="pc-card">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="pc-eyebrow">
+          {e.deviceName} · {p.action}
+        </span>
+        <span className="ml-auto">
+          <StatusPill status={state.tone}>{state.label}</StatusPill>
+        </span>
+      </div>
+      <p className="text-body font-medium text-text">{p.summary}</p>
+      <dl className="pc-values sans" aria-label="What will run">
+        <Fact k="On">{e.deviceName}</Fact>
+        {command != null ? (
+          <Fact k="Command">
+            <code className="font-mono text-[13px]">{command}</code>
+          </Fact>
+        ) : null}
+        {path != null ? (
+          <Fact k="Path">
+            <code className="font-mono text-[13px]">{path}</code>
+          </Fact>
+        ) : null}
+        {contents != null ? (
+          <Fact k="Contents">
+            <Value v={contents} />
+          </Fact>
+        ) : null}
+      </dl>
+      {p.status === "pending" && (
+        <div className="flex flex-wrap items-center gap-2 pt-0.5">
+          <Button size="sm" disabled={!!busy || !onDecide} onClick={() => void decide("run")}>
+            {busy === "run" ? "Approving…" : "Approve"}
+          </Button>
+          <Button size="sm" variant="ghost" disabled={!!busy || !onDecide} onClick={() => void decide("decline")}>
+            {busy === "decline" ? "Cancelling…" : "Cancel"}
+          </Button>
+          <span className="text-caption text-dim">Runs on your computer only after you Approve. Nothing starts until then.</span>
+        </div>
+      )}
+      {(p.status === "done" || p.status === "failed") && p.result ? (
+        <div className={`pc-outcome ${p.status === "done" ? "ok" : "danger"}`}>
+          <span className="min-w-0 break-words">{p.result}</span>
+        </div>
+      ) : null}
+      {p.decidedBy && p.status !== "pending" && (
+        <p className="text-caption text-dim">
+          {p.status === "declined" ? "Cancelled" : "Approved"} by {p.decidedBy}
+          {p.decidedAt ? ` · ${new Date(p.decidedAt).toLocaleString()}` : ""}
+        </p>
+      )}
+      {error && <p className="text-xs text-danger">{error}</p>}
+    </section>
+  );
 }
 
 /**

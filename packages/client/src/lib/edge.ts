@@ -4,18 +4,48 @@ import { signInIfEnded } from "@/lib/session-expiry";
 
 const PROXY = "/api/foundry";
 
+/** Derived from status + lastSeenAt (agent claim poll ~2s). */
+export type EdgeConnection = "online" | "offline" | "pairing" | "awaiting_connect" | "revoked";
+
 export type EdgeDevice = {
   id: string;
   workspaceId: string;
   name: string;
   ownerSubject: string;
   status: "pairing" | "awaiting_connect" | "active" | "revoked";
+  /** Live connection: online while the agent is polling. */
+  connection?: EdgeConnection;
   pairingExpiresAt: string | null;
   lastSeenAt: string | null;
   createdAt: string;
   revokedAt: string | null;
   agentLabel?: string | null;
 };
+
+/** Fallback when an older server omits `connection`. */
+export function edgeConnectionOf(d: EdgeDevice, now = Date.now()): EdgeConnection {
+  if (d.connection) return d.connection;
+  if (d.status === "pairing") return "pairing";
+  if (d.status === "awaiting_connect") return "awaiting_connect";
+  if (d.status === "revoked") return "revoked";
+  if (d.lastSeenAt && now - new Date(d.lastSeenAt).getTime() < 15_000) return "online";
+  return "offline";
+}
+
+export function edgeConnectionLabel(c: EdgeConnection): string {
+  switch (c) {
+    case "online":
+      return "Connected";
+    case "offline":
+      return "Offline";
+    case "pairing":
+      return "Waiting for code";
+    case "awaiting_connect":
+      return "Waiting for approval";
+    case "revoked":
+      return "Revoked";
+  }
+}
 
 export type EdgeJob = {
   id: string;
@@ -108,6 +138,12 @@ export async function enqueueEdgeJob(
 
 export async function approveEdgeJob(jobId: string): Promise<EdgeJob> {
   const res = await fetch(`${await base()}/jobs/${jobId}/approve`, { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
+  if (!res.ok) throw new Error(await said(res));
+  return ((await res.json()) as { job: EdgeJob }).job;
+}
+
+export async function rejectEdgeJob(jobId: string): Promise<EdgeJob> {
+  const res = await fetch(`${await base()}/jobs/${jobId}/reject`, { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
   if (!res.ok) throw new Error(await said(res));
   return ((await res.json()) as { job: EdgeJob }).job;
 }

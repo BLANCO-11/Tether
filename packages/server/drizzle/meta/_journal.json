@@ -988,6 +988,13 @@
       "when": 1797200000000,
       "tag": "0140_edge_setup_approve",
       "breakpoints": true
+    },
+    {
+      "idx": 141,
+      "version": "7",
+      "when": 1797300000000,
+      "tag": "0141_user_llm_providers",
+      "breakpoints": true
     }
   ]
 }

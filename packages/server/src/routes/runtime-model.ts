@@ -1,12 +1,10 @@
 /**
  * The runtime model, served by Foundry itself (2026-10-30; was ops-api behind `/api/ops/llm/*`).
  *
- *  - `runtimeModelRouter` at `/api/runtime-model` — the one model connection (AI models → Models), used by workflows, the
- *    builder and Forge: read, save, clear, list the
- *    gateway's models, run a test completion. Behind the parent API key; each route's platform permission comes from
- *    the generated route map (`platform.toolmodel.read` / `.write`).
+ *  - `runtimeModelRouter` at `/api/runtime-model` — the model connection (AI models → Models). Under
+ *    `PERSONAL_PRODUCT` each signed-in subject owns their own row; otherwise the deployment singleton.
  *  - `llmCompleteRouter` at `/api/llm` — the endpoint behind the `llm_complete` tool, with its own derived key like
- *    `/api/mail` and `/api/web`.
+ *    `/api/mail` and `/api/web`. Personal: resolves the run's acting subject via `x-foundry-run`.
  */
 import { Router, type NextFunction, type Request, type Response } from "express";
 import { timingSafeEqual } from "node:crypto";
@@ -15,9 +13,11 @@ import { and, eq, gt, sql } from "drizzle-orm";
 import { classifyHost, STRICT } from "@foundry/shared";
 import { asyncHandler } from "../middleware/error.middleware.js";
 import { authFailureRule, authFailureThrottleInstance } from "../middleware/auth.middleware.js";
+import { requireIdentity } from "../middleware/identity.middleware.js";
 import { config } from "../config/index.js";
 import { db } from "../db/index.js";
-import { usageEvents } from "../db/schema.js";
+import { flowExecutions, flows, usageEvents } from "../db/schema.js";
+import { PERSONAL_PRODUCT } from "../personal.js";
 import {
   MODEL_LIST_CAVEAT,
   RuntimeModelError,
@@ -30,38 +30,91 @@ import {
   testCompletion,
   viewOf,
 } from "../services/runtime-model.service.js";
+import { LLM_PROVIDER_PRESETS, resolvePresetBaseUrl } from "../services/llm-provider-presets.js";
 import { LLM_KEY_HEADER, llmServiceKey } from "../services/llm-service-key.js";
 import { LLM_TOOL_NAME } from "../services/platform-tool-names.js";
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const answer = (res: Response, e: unknown) => {
   if (e instanceof RuntimeModelError) return res.status(e.status).json({ error: e.code, message: e.message, ...(e.details ? { details: e.details } : {}) });
   throw e;
 };
 
-// ── the settings (AI models → Runtime) ───────────────────────────────────────
+function subjectOf(req: Request): string | null {
+  return req.user?.subject?.trim() || null;
+}
+
+/** Whose AI key a workflow `llm_complete` call should bill. */
+async function subjectForLlmRun(runId: string): Promise<string | null> {
+  if (!PERSONAL_PRODUCT) return null;
+  if (!UUID.test(runId)) return null;
+  const [ex] = await db
+    .select({
+      actsAs: flowExecutions.actsAsSubject,
+      requestedBy: flowExecutions.requestedBySubject,
+      flowId: flowExecutions.flowId,
+      workspaceId: flowExecutions.workspaceId,
+    })
+    .from(flowExecutions)
+    .where(eq(flowExecutions.id, runId))
+    .limit(1);
+  if (!ex) return null;
+  if (ex.actsAs?.trim()) return ex.actsAs.trim();
+  if (ex.flowId) {
+    const [flow] = await db
+      .select({ owner: flows.ownerSubject })
+      .from(flows)
+      .where(and(eq(flows.id, ex.flowId), eq(flows.workspaceId, ex.workspaceId)))
+      .limit(1);
+    if (flow?.owner?.trim()) return flow.owner.trim();
+  }
+  return ex.requestedBy?.trim() || null;
+}
+
+// ── the settings (AI models → Models) ───────────────────────────────────────
 
 export const runtimeModelRouter = Router();
 
+// Personal BYOK: identity-only in the route map (mountPermissionGuards skips identity), so require it here.
+runtimeModelRouter.use(requireIdentity);
+
 runtimeModelRouter.get(
   "/provider",
-  asyncHandler(async (_req, res) => {
-    res.json(viewOf(await loadRuntimeProvider()));
+  asyncHandler(async (req, res) => {
+    const subject = subjectOf(req);
+    const p = await loadRuntimeProvider({
+      subject,
+      mode: PERSONAL_PRODUCT ? "interactive" : "harness",
+    });
+    res.json({
+      ...viewOf(p),
+      ...(PERSONAL_PRODUCT ? { presets: LLM_PROVIDER_PRESETS } : {}),
+    });
   }),
 );
 
 /**
  * The gateway address is checked before it is stored (STRICT): an operator-supplied outbound address the server will
- * call with a billable key. The same check `/api/ops/llm/provider` made.
+ * call with a billable key. Preset hosts are filled server-side from providerId.
  */
 runtimeModelRouter.put(
   "/provider",
   asyncHandler(async (req, res) => {
     const b = z
-      .object({ baseUrl: z.string().min(1), apiKey: z.string().optional(), defaultModel: z.string().optional().default(""), allowedModels: z.array(z.string()).optional().default([]) })
+      .object({
+        baseUrl: z.string().optional().default(""),
+        apiKey: z.string().optional(),
+        defaultModel: z.string().optional().default(""),
+        allowedModels: z.array(z.string()).optional().default([]),
+        providerId: z.string().optional(),
+      })
       .parse(req.body ?? {});
+    const providerId = b.providerId?.trim() || "custom";
+    const baseUrl = resolvePresetBaseUrl(providerId, b.baseUrl);
     let host: string;
     try {
-      host = new URL(b.baseUrl).hostname;
+      host = new URL(baseUrl).hostname;
     } catch {
       return res.status(400).json({ error: "validation_error", message: "The gateway address is not a valid URL." });
     }
@@ -69,10 +122,20 @@ runtimeModelRouter.put(
     if (!decision.allowed) return res.status(400).json({ error: "egress_rejected", reason: decision.reason, message: `The gateway address is ${decision.reason}, not a public address.` });
     try {
       const saved = await saveRuntimeProvider(
-        { baseUrl: b.baseUrl, apiKey: b.apiKey?.trim() ? b.apiKey : undefined, defaultModel: b.defaultModel, allowedModels: b.allowedModels },
+        {
+          baseUrl,
+          apiKey: b.apiKey?.trim() ? b.apiKey : undefined,
+          defaultModel: b.defaultModel,
+          allowedModels: b.allowedModels,
+          providerId,
+        },
         req.user?.email ?? req.user?.subject ?? null,
+        subjectOf(req),
       );
-      res.json(viewOf(saved));
+      res.json({
+        ...viewOf(saved),
+        ...(PERSONAL_PRODUCT ? { presets: LLM_PROVIDER_PRESETS } : {}),
+      });
     } catch (e) {
       answer(res, e);
     }
@@ -81,8 +144,12 @@ runtimeModelRouter.put(
 
 runtimeModelRouter.delete(
   "/provider",
-  asyncHandler(async (_req, res) => {
-    res.json(viewOf(await clearRuntimeProvider()));
+  asyncHandler(async (req, res) => {
+    const cleared = await clearRuntimeProvider(subjectOf(req));
+    res.json({
+      ...viewOf(cleared),
+      ...(PERSONAL_PRODUCT ? { presets: LLM_PROVIDER_PRESETS } : {}),
+    });
   }),
 );
 
@@ -90,9 +157,11 @@ runtimeModelRouter.delete(
 runtimeModelRouter.post(
   "/models",
   asyncHandler(async (req, res) => {
-    const b = z.object({ baseUrl: z.string().optional(), apiKey: z.string().optional() }).parse(req.body ?? {});
+    const b = z
+      .object({ baseUrl: z.string().optional(), apiKey: z.string().optional(), providerId: z.string().optional() })
+      .parse(req.body ?? {});
     try {
-      res.json({ models: await listModels(await probeOf(b)), caveat: MODEL_LIST_CAVEAT });
+      res.json({ models: await listModels(await probeOf(b, subjectOf(req))), caveat: MODEL_LIST_CAVEAT });
     } catch (e) {
       answer(res, e);
     }
@@ -102,9 +171,16 @@ runtimeModelRouter.post(
 runtimeModelRouter.post(
   "/test",
   asyncHandler(async (req, res) => {
-    const b = z.object({ baseUrl: z.string().optional(), apiKey: z.string().optional(), model: z.string().optional() }).parse(req.body ?? {});
+    const b = z
+      .object({
+        baseUrl: z.string().optional(),
+        apiKey: z.string().optional(),
+        model: z.string().optional(),
+        providerId: z.string().optional(),
+      })
+      .parse(req.body ?? {});
     try {
-      const r = await testCompletion(await probeOf(b), b.model?.trim() || undefined);
+      const r = await testCompletion(await probeOf(b, subjectOf(req)), b.model?.trim() || undefined);
       res.json({ ok: true, model: r.model, text: r.text, latencyMs: r.latencyMs, promptTokens: r.promptTokens, completionTokens: r.completionTokens });
     } catch (e) {
       if (e instanceof RuntimeModelError) return res.status(e.status).json({ ok: false, error: { code: e.code, message: e.message } });
@@ -192,8 +268,20 @@ llmCompleteRouter.post(
         message: `input is ${input.length} characters; the limit is ${lim.maxInputChars}. Summarise or filter in an earlier step: this one transforms text, it does not read in bulk.`,
       });
     }
-    const provider = await loadRuntimeProvider();
-    if (!provider.baseUrl || !provider.apiKey) return res.status(503).json({ error: "provider_not_configured", message: "No runtime model is configured. Set a gateway and key on the AI models page." });
+    const runId = req.header("x-foundry-run") ?? "";
+    const subject = await subjectForLlmRun(runId);
+    const provider = await loadRuntimeProvider({
+      subject,
+      mode: PERSONAL_PRODUCT ? "interactive" : "harness",
+    });
+    if (!provider.baseUrl || !provider.apiKey) {
+      return res.status(503).json({
+        error: "provider_not_configured",
+        message: PERSONAL_PRODUCT
+          ? "Connect your AI provider on the AI models page (paste your API key)."
+          : "No runtime model is configured. Set a gateway and key on the AI models page.",
+      });
+    }
     const model = b.model?.trim() || provider.defaultModel;
     if (!model) return res.status(503).json({ error: "provider_not_configured", message: "The runtime model has no default model set." });
     if (!provider.allowedModels.includes(model)) {

@@ -138,6 +138,8 @@ COPY --from=build /repo/packages/server/dist packages/server/dist
 COPY --from=build /repo/packages/server/drizzle packages/server/drizzle
 # Pi builder — blank sandbox template (not compiled; lives beside dist).
 COPY --from=build /repo/packages/server/pi-builder-template packages/server/pi-builder-template
+# Edge agent bootstrap served at GET /api/edge/agent.mjs (personal thin hands-free setup).
+COPY --from=build /repo/packages/server/assets packages/server/assets
 RUN mkdir -p packages/server/.pi-sandboxes
 
 # ── NO docker CLI, and no docker.sock (D-28) ─────────────────────────────────

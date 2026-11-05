@@ -48,7 +48,6 @@ import { RiskWord } from "@/components/approval/RiskWord";
 import { PERSONAL_PRODUCT } from "@/lib/personal";
 import {
   approveEdgeConnect,
-  approveEdgeJob,
   denyEdgeConnect,
   listEdgePending,
   type EdgeDevice,
@@ -90,9 +89,8 @@ function ApprovalsPageContent() {
   const activeTab = useMemo(() => getActiveApprovalTab(searchParams.get("tab")), [searchParams]);
 
   const list = approvals ?? [];
-  const edgeList = edgePending.data?.jobs ?? [];
   const edgeConnects = edgePending.data?.connects ?? [];
-  const pendingCount = list.length + edgeList.length + edgeConnects.length;
+  const pendingCount = list.length + edgeConnects.length;
 
   const onTabChange = (key: string) => {
     const params = new URLSearchParams(searchParams.toString());
@@ -178,7 +176,7 @@ function ApprovalsPageContent() {
 
       {!error && (
         <Zone name="content">
-          {PERSONAL_PRODUCT && activeTab === "pending-me" && (edgeConnects.length > 0 || edgeList.length > 0) ? (
+          {PERSONAL_PRODUCT && activeTab === "pending-me" && edgeConnects.length > 0 ? (
             <div className="mb-4 space-y-2 rounded-lg border border-line bg-surface p-4">
               <div className="flex items-center justify-between gap-2">
                 <h2 className="text-body font-semibold">This computer</h2>
@@ -225,34 +223,13 @@ function ApprovalsPageContent() {
                     </div>
                   </li>
                 ))}
-                {edgeList.map((j) => (
-                  <li key={j.id} className="flex items-start justify-between gap-3 rounded-md border border-line px-3 py-2">
-                    <div className="min-w-0">
-                      <p className="text-caption font-medium uppercase text-muted">{j.kind.replace("_", " ")}</p>
-                      <p className="truncate font-mono text-[13px] text-text">{JSON.stringify(j.payload)}</p>
-                    </div>
-                    <Button
-                      size="sm"
-                      onClick={() =>
-                        void approveEdgeJob(j.id)
-                          .then(() => {
-                            toast.success("Approved — the agent will pick it up.");
-                            edgePending.reload();
-                          })
-                          .catch((e) => toast.error(e instanceof Error ? e.message : String(e)))
-                      }
-                    >
-                      Approve
-                    </Button>
-                  </li>
-                ))}
               </ul>
             </div>
           ) : null}
           {loading ? (
             <Skeleton rows={3} />
           ) : visible.length === 0 &&
-            !(PERSONAL_PRODUCT && activeTab === "pending-me" && (edgeList.length > 0 || edgeConnects.length > 0)) ? (
+            !(PERSONAL_PRODUCT && activeTab === "pending-me" && edgeConnects.length > 0) ? (
             activeTab === "pending-me" ? (
               <EmptyState
                 icon={<Check s={16} />}

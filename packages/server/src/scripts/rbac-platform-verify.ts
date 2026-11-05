@@ -145,7 +145,8 @@ async function main() {
     ["GET", "/api/ops/status", "auditor", true],
     ["GET", "/api/signals", "auditor", true],
     ["GET", "/api/ops/llm/provider", "auditor", false],
-    ["PUT", "/api/runtime-model/provider", "auditor", false],
+    // Personal BYOK: runtime-model is identity-scoped (any signed-in person may save their own key).
+    ["PUT", "/api/runtime-model/provider", "auditor", true],
   ];
   const platformResults: string[] = [];
   for (const [method, path, who, shouldPass] of platformProbes) {

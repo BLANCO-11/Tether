@@ -154,6 +154,16 @@ edgeRouter.post(
   }),
 );
 
+edgeRouter.post(
+  "/jobs/:jobId/reject",
+  requireIdentity,
+  asyncHandler(async (req, res) => {
+    const v = await contentVisibility.viewer(req.user, req.params.workspaceId!);
+    const job = await edgeDeviceService.rejectJob(req.params.workspaceId!, req.params.jobId!, req.user!.subject, v.all);
+    res.json({ job });
+  }),
+);
+
 edgeRouter.get(
   "/pending",
   requireIdentity,
@@ -166,13 +176,30 @@ edgeRouter.get(
   }),
 );
 
-/** Agent/human: fetch setup instructions (token in query). */
+/** Agent bootstrap script — shipped in packages/server/assets (keep in sync with scripts/edge-agent.mjs). */
+edgePublicRouter.get(
+  "/agent.mjs",
+  asyncHandler(async (_req, res) => {
+    const { readFile } = await import("node:fs/promises");
+    const { join } = await import("node:path");
+    const { SERVER_ROOT } = await import("../pi-builder/paths.js");
+    const body = await readFile(join(SERVER_ROOT, "assets/edge-agent.mjs"), "utf8");
+    res.type("application/javascript; charset=utf-8").send(body);
+  }),
+);
+
+/** Agent/human: fetch setup instructions (token in query). fmt=sh → one-shot bash bootstrap. */
 edgePublicRouter.get(
   "/setup",
   asyncHandler(async (req, res) => {
     const t = z.string().min(8).parse(req.query.t);
     const link = await edgeDeviceService.resolveSetupToken(t);
     const base = apiBase();
+    const fmt = String(req.query.fmt || "").toLowerCase();
+    if (fmt === "sh" || fmt === "bash") {
+      res.type("text/x-shellscript; charset=utf-8").send(edgeDeviceService.setupBootstrapShell(base, t, link.label));
+      return;
+    }
     const text = edgeDeviceService.setupInstructions(base, t, link.label);
     const wantsJson = String(req.headers.accept || "").includes("application/json");
     if (wantsJson) {
@@ -180,6 +207,7 @@ edgePublicRouter.get(
         label: link.label,
         expiresAt: link.expiresAt.toISOString(),
         instructions: text,
+        curl: `curl -fsSL '${base}/api/edge/setup?t=${encodeURIComponent(t)}&fmt=sh' | bash`,
         registerUrl: `${base}/api/edge/setup/register`,
         waitUrl: `${base}/api/edge/setup/wait`,
         t,

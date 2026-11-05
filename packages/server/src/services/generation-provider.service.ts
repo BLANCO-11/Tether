@@ -2,9 +2,9 @@ import { config } from "../config/index.js";
 import { invalidateModelConnection, resolveModelConnection } from "./runtime-model.service.js";
 
 /**
- * WHICH MODEL DESIGNS AUTOMATIONS (2026-11-04): the builder's model now comes from the one model connection
- * (`runtime-model.service.ts`): its gateway, key, enabled list and default. `generation_llm` is no longer read;
- * migration 0136 merged it into `runtime_model_provider`. This file stays as the adapter the callers already import.
+ * WHICH MODEL DESIGNS AUTOMATIONS (2026-11-04): the builder's model comes from the model connection
+ * (`runtime-model.service.ts`). Personal thin: pass the chat owner's `subject` so Forge bills their BYOK key.
+ * Harnesses / callers without a subject still resolve the env / singleton fallback.
  */
 
 export interface ResolvedGenerationProvider {
@@ -22,8 +22,8 @@ export interface ResolvedGenerationProvider {
   allowedModels: string[];
 }
 
-export async function resolveGenerationProvider(): Promise<ResolvedGenerationProvider> {
-  const c = await resolveModelConnection();
+export async function resolveGenerationProvider(subject?: string | null): Promise<ResolvedGenerationProvider> {
+  const c = await resolveModelConnection(subject);
   return {
     baseUrl: c.baseUrl || null,
     apiKey: c.apiKey || null,
@@ -36,6 +36,6 @@ export async function resolveGenerationProvider(): Promise<ResolvedGenerationPro
 }
 
 /** Test seam — the harnesses and the route both need a way to force a re-read. */
-export function invalidateGenerationProvider(): void {
-  invalidateModelConnection();
+export function invalidateGenerationProvider(subject?: string | null): void {
+  invalidateModelConnection(subject);
 }

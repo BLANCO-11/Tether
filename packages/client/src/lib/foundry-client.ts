@@ -1342,12 +1342,25 @@ export interface FARunCall {
  * eight hex characters of a salted digest — enough to tell two keys apart, not
  * enough to reconstruct either. Same rule as `WorkspaceSecret.hasValue`.
  */
+export type FALlmProviderPresetId = "openai" | "openrouter" | "opencode" | "groq" | "custom";
+
+export interface FALlmProviderPreset {
+  id: FALlmProviderPresetId;
+  label: string;
+  baseUrl: string;
+  baseUrlEditable: boolean;
+  keyHint: string;
+  blurb: string;
+}
+
 export interface FALlmProvider {
   configured: boolean;
   baseUrl: string;
   keyFingerprint: string;
   defaultModel: string;
   allowedModels: string[];
+  /** Preset id when personal BYOK. */
+  providerId?: string;
   /** `env` until someone saves a configuration; `configured` afterwards. */
   source: "env" | "configured";
   updatedAt: string | null;
@@ -1355,6 +1368,8 @@ export interface FALlmProvider {
   /** False when Forge's network cannot reach this gateway (its egress allows only LLM_BASE_URL's host or FORGE_EGRESS_ALLOW). */
   forgeReachable?: boolean;
   forgeWarning?: string | null;
+  /** Personal product: provider cards for the connect form. */
+  presets?: FALlmProviderPreset[];
 }
 export interface FALlmTest {
   ok: boolean;
@@ -3394,14 +3409,15 @@ export const foundryApi = {
     apiKey?: string;
     defaultModel: string;
     allowedModels: string[];
+    providerId?: string;
   }) => req<FALlmProvider>("/runtime-model/provider", { method: "PUT", body: JSON.stringify(body) }),
   clearLlmProvider: () => req<FALlmProvider>("/runtime-model/provider", { method: "DELETE" }),
-  llmModels: (probe?: { baseUrl?: string; apiKey?: string }) =>
+  llmModels: (probe?: { baseUrl?: string; apiKey?: string; providerId?: string }) =>
     req<{ models: string[]; caveat: string }>("/runtime-model/models", {
       method: "POST",
       body: JSON.stringify(probe ?? {}),
     }),
-  llmTest: (probe?: { baseUrl?: string; apiKey?: string; model?: string }) =>
+  llmTest: (probe?: { baseUrl?: string; apiKey?: string; model?: string; providerId?: string }) =>
     req<FALlmTest>("/runtime-model/test", { method: "POST", body: JSON.stringify(probe ?? {}) }),
 
   // Model prices (the model connection itself is the /runtime-model methods above, 2026-11-04).

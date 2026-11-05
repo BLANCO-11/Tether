@@ -2,12 +2,14 @@
  * Edge agent devices (personal thin Phase 6) — secure setup link + connect approval, or legacy OTP.
  *
  * Setup URL bootstrap token only lets a host *request* to connect. The owner Approves in Foundry; the agent then
- * collects a one-time device token and polls jobs. run_command / write_path still need separate job approval.
+ * collects a one-time device token and polls jobs. Non-allowlisted run_command / write_path need job approval
+ * (in-chat card and/or Needs you / Devices). Harmless commands skip approval — see edge-command-allowlist.ts.
  */
 import { createHash, randomBytes, randomInt } from "node:crypto";
 import { and, asc, desc, eq, isNull } from "drizzle-orm";
 import { db } from "../db/index.js";
 import { edgeDevices, edgeJobs, edgeSetupLinks } from "../db/schema.js";
+import { edgeJobNeedsApproval } from "./edge-command-allowlist.js";
 
 export type EdgeDevice = typeof edgeDevices.$inferSelect;
 export type EdgeJob = typeof edgeJobs.$inferSelect;
@@ -34,10 +36,22 @@ function mintWaitSecret(): string {
 
 const PAIRING_TTL_MS = 10 * 60 * 1000;
 const SETUP_TTL_MS = 30 * 60 * 1000;
+/** Agent polls claim every ~2s and updates lastSeenAt; older than this ⇒ not connected. */
+export const EDGE_ONLINE_MS = 15_000;
+
+export type EdgeConnection = "online" | "offline" | "pairing" | "awaiting_connect" | "revoked";
+
+export function connectionOf(row: Pick<EdgeDevice, "status" | "lastSeenAt">, now = Date.now()): EdgeConnection {
+  if (row.status === "pairing") return "pairing";
+  if (row.status === "awaiting_connect") return "awaiting_connect";
+  if (row.status === "revoked") return "revoked";
+  if (row.lastSeenAt && now - new Date(row.lastSeenAt).getTime() < EDGE_ONLINE_MS) return "online";
+  return "offline";
+}
 
 function publicDevice(row: EdgeDevice) {
   const { pairingCodeHash: _p, tokenHash: _t, waitSecretHash: _w, connectTokenOnce: _c, ...rest } = row;
-  return rest;
+  return { ...rest, connection: connectionOf(row) };
 }
 
 export const edgeDeviceService = {
@@ -86,8 +100,10 @@ export const edgeDeviceService = {
       label: clean.slice(0, 120),
       expiresAt,
     });
-    const url = `${apiBase.replace(/\/+$/, "")}/api/edge/setup?t=${encodeURIComponent(token)}`;
-    const curl = `curl -fsSL '${url}'`;
+    const base = apiBase.replace(/\/+$/, "");
+    const url = `${base}/api/edge/setup?t=${encodeURIComponent(token)}`;
+    // One-shot for paste-into-agent: fetch bootstrap shell and run it. After Approve, the script starts the agent loop.
+    const curl = `curl -fsSL '${base}/api/edge/setup?t=${encodeURIComponent(token)}&fmt=sh' | bash`;
     return { curl, url, expiresAt, label: clean.slice(0, 120) };
   },
 
@@ -101,56 +117,61 @@ export const edgeDeviceService = {
     return link;
   },
 
-  /** Markdown / plain instructions for agents (and humans). */
+  /**
+   * Bash bootstrap: download edge-agent.mjs from this API, run setup (registers → waits for Approve → starts poll loop).
+   * The only human step is Approve in Foundry.
+   */
+  setupBootstrapShell(apiBase: string, setupToken: string, label: string): string {
+    const base = apiBase.replace(/\/+$/, "");
+    const safeLabel = label.replace(/'/g, "'\\''");
+    return `#!/usr/bin/env bash
+# Foundry edge setup for "${label.replace(/"/g, "")}"
+# Only human step: Approve in Foundry → Devices (or Needs you). Then this script finishes and starts the agent.
+set -euo pipefail
+command -v node >/dev/null 2>&1 || { echo "Node.js is required (node not found on PATH)." >&2; exit 1; }
+command -v curl >/dev/null 2>&1 || { echo "curl is required." >&2; exit 1; }
+BASE='${base}'
+TOKEN='${setupToken}'
+DIR="$HOME/.foundry-edge"
+mkdir -p "$DIR"
+chmod 700 "$DIR"
+curl -fsSL "$BASE/api/edge/agent.mjs" -o "$DIR/edge-agent.mjs"
+chmod 700 "$DIR/edge-agent.mjs"
+echo ">>> Opening Foundry connect for '${safeLabel}'."
+echo ">>> When prompted, Approve once in Foundry → Devices (or Needs you)."
+exec node "$DIR/edge-agent.mjs" setup --token "$TOKEN" --url "$BASE" --name '${safeLabel}'
+`;
+  },
+
+  /** Markdown for agents/humans: one primary action; Approve is the only pause. */
   setupInstructions(apiBase: string, setupToken: string, label: string): string {
     const base = apiBase.replace(/\/+$/, "");
+    const sh = `${base}/api/edge/setup?t=${encodeURIComponent(setupToken)}&fmt=sh`;
     return `# Foundry edge agent setup
 
-You are connecting **${label}** to Foundry as an edge device.
+Connect **${label}** to Foundry. You do the work; the person only Approves once in the app.
 
-## Security
-- This link only lets you **request** to connect.
-- The Foundry user must **Approve** the attempt in the Devices page (or Needs you).
-- After approval you receive a device credential once — store it under \`~/.foundry-edge/credentials.json\`.
-- \`run_command\` and \`write_path\` still need a separate approval for each job.
-
-## Steps
-1. Register this host (replace NAME if you want):
+## Do this (one command)
 
 \`\`\`bash
-curl -fsSL -X POST '${base}/api/edge/setup/register' \\
-  -H 'content-type: application/json' \\
-  -d '{"t":"${setupToken}","name":"${label.replace(/"/g, "")}"}'
+curl -fsSL '${sh}' | bash
 \`\`\`
 
-Response includes \`deviceId\` and \`waitSecret\`.
+That registers this host, waits until the Foundry user Approves in **Devices** or **Needs you**, saves the credential under \`~/.foundry-edge/\`, and **starts the agent loop**. Do not ask them for further shell steps after Approve.
 
-2. Tell the user: **Open Foundry → Devices (or Needs you) and Approve the connect request.**
+While waiting, tell them once: **Open Foundry → Devices (or Needs you) and Approve “${label.replace(/"/g, "")}”.** Then keep the command running.
 
-3. Poll until approved (every 2s, up to ~10 minutes):
-
-\`\`\`bash
-curl -fsSL -X POST '${base}/api/edge/setup/wait' \\
-  -H 'content-type: application/json' \\
-  -d '{"deviceId":"DEVICE_ID","waitSecret":"WAIT_SECRET"}'
-\`\`\`
-
-- HTTP 202 → still waiting  
-- HTTP 200 → \`token\`, \`workspaceId\`, \`name\` — save credentials, then start the agent loop  
-- HTTP 410 → denied or expired  
-
-4. Persist and run (or use the repo helper):
+## If you already have the Foundry repo on this machine
 
 \`\`\`bash
-# From the Foundry repo on this machine:
 node scripts/edge-agent.mjs setup --token '${setupToken}' --url '${base}' --name '${label.replace(/'/g, "")}'
-node scripts/edge-agent.mjs run --url '${base}'
 \`\`\`
 
-For a **persistent** process, keep \`edge-agent.mjs run\` supervised (LaunchAgent / systemd user / tmux). One-shot is fine for a single session.
+Same behaviour (auto-starts the poll loop after Approve). Use \`--setup-only\` only if you must not start polling yet.
 
-## Verify
-Foundry → Devices should show this host as **active** with a recent "seen" time.
+## Notes
+- \`run_command\` / \`write_path\` jobs still need a separate Approve in Foundry when queued from chat or Devices.
+- Keep the agent process running (terminal, tmux, or LaunchAgent) so chat can reach this computer.
 `;
   },
 
@@ -366,7 +387,7 @@ Foundry → Devices should show this host as **active** with a recent "seen" tim
       .from(edgeDevices)
       .where(and(eq(edgeDevices.id, deviceId), eq(edgeDevices.workspaceId, workspaceId), eq(edgeDevices.status, "active")));
     if (!dev) throw httpErr("No such device, or it is not paired.", 404);
-    const needsApproval = kind === "run_command" || kind === "write_path";
+    const needsApproval = edgeJobNeedsApproval(kind, payload);
     const [job] = await db
       .insert(edgeJobs)
       .values({
@@ -388,6 +409,20 @@ Foundry → Devices should show this host as **active** with a recent "seen" tim
     const [dev] = await db.select().from(edgeDevices).where(eq(edgeDevices.id, job.deviceId));
     if (!asAdmin && dev?.ownerSubject !== actorSubject) throw httpErr("Only the device's owner can approve this.", 403);
     const [updated] = await db.update(edgeJobs).set({ status: "approved" }).where(eq(edgeJobs.id, jobId)).returning();
+    return updated!;
+  },
+
+  async rejectJob(workspaceId: string, jobId: string, actorSubject: string, asAdmin: boolean): Promise<EdgeJob> {
+    const [job] = await db.select().from(edgeJobs).where(and(eq(edgeJobs.id, jobId), eq(edgeJobs.workspaceId, workspaceId)));
+    if (!job) throw httpErr("No such job.", 404);
+    if (job.status !== "awaiting_approval") throw httpErr("That job is not waiting for approval.", 409);
+    const [dev] = await db.select().from(edgeDevices).where(eq(edgeDevices.id, job.deviceId));
+    if (!asAdmin && dev?.ownerSubject !== actorSubject) throw httpErr("Only the device's owner can decline this.", 403);
+    const [updated] = await db
+      .update(edgeJobs)
+      .set({ status: "revoked", error: "Declined.", finishedAt: new Date() })
+      .where(eq(edgeJobs.id, jobId))
+      .returning();
     return updated!;
   },
 
@@ -456,5 +491,54 @@ Foundry → Devices should show this host as **active** with a recent "seen" tim
       )
       .orderBy(desc(edgeJobs.createdAt))
       .then((rows) => rows.map((r) => r.job));
+  },
+
+  async getJob(
+    workspaceId: string,
+    jobId: string,
+    ownerSubject: string,
+    asAdmin: boolean,
+  ): Promise<EdgeJob & { needsApproval: boolean; deviceName: string | null }> {
+    let [row] = await db
+      .select({ job: edgeJobs, device: edgeDevices })
+      .from(edgeJobs)
+      .innerJoin(edgeDevices, eq(edgeJobs.deviceId, edgeDevices.id))
+      .where(and(eq(edgeJobs.id, jobId), eq(edgeJobs.workspaceId, workspaceId)))
+      .limit(1);
+    if (!row) throw httpErr("No such job.", 404);
+    if (!asAdmin && row.device.ownerSubject !== ownerSubject) throw httpErr("No such job.", 404);
+    // Allowlist may have landed after enqueue (or a stuck pre-allowlist whoami): release without a person click.
+    if (
+      row.job.status === "awaiting_approval" &&
+      !edgeJobNeedsApproval(row.job.kind as EdgeJobKind, (row.job.payload ?? {}) as Record<string, unknown>)
+    ) {
+      const [released] = await db.update(edgeJobs).set({ status: "approved" }).where(eq(edgeJobs.id, row.job.id)).returning();
+      if (released) row = { job: released, device: row.device };
+    }
+    return {
+      ...row.job,
+      needsApproval: row.job.status === "awaiting_approval",
+      deviceName: row.device.name,
+    };
+  },
+
+  /**
+   * Poll a job until terminal or timeout.
+   * Keeps waiting through `awaiting_approval` so an in-chat Approve mid-wait can finish in the same poll.
+   */
+  async waitForJob(
+    workspaceId: string,
+    jobId: string,
+    ownerSubject: string,
+    asAdmin: boolean,
+    timeoutMs = 60_000,
+  ): Promise<EdgeJob & { needsApproval: boolean; deviceName: string | null; timedOut?: boolean }> {
+    const deadline = Date.now() + Math.min(Math.max(timeoutMs, 1_000), 120_000);
+    for (;;) {
+      const job = await this.getJob(workspaceId, jobId, ownerSubject, asAdmin);
+      if (job.status === "succeeded" || job.status === "failed" || job.status === "revoked") return job;
+      if (Date.now() >= deadline) return { ...job, timedOut: true };
+      await new Promise((r) => setTimeout(r, 1_500));
+    }
   },
 };

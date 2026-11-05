@@ -1,6 +1,5 @@
 /**
- * The one model connection (2026-11-04), resolved against a mocked database: env fallback, a saved row, an empty
- * base URL, the TTL cache, a failed read that throws, and the generation adapter over it.
+ * Personal BYOK model connection: env harness fallback, per-subject row, TTL cache, generation adapter.
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -13,8 +12,10 @@ import { invalidateModelConnection, resolveModelConnection, viewOf, type Runtime
 import { resolveGenerationProvider } from "./generation-provider.service.js";
 import { lastModelConnection } from "./model-connection.js";
 
+const SUBJECT = "user-a";
 const row = {
-  id: 1,
+  subject: SUBJECT,
+  providerId: "openai",
   baseUrl: "https://gw2.example/v1/",
   apiKeyEnc: "x",
   defaultModel: "m1",
@@ -29,52 +30,54 @@ beforeEach(() => {
 });
 
 describe("resolveModelConnection", () => {
-  it("(a) uses the environment when there is no row", async () => {
+  it("(a) harness without subject uses the environment (never a shared interactive key)", async () => {
     limit.mockResolvedValue([]);
     const c = await resolveModelConnection();
     expect(c.source).toBe("env");
     expect(c.baseUrl).toBe(config.inference.baseUrl.replace(/\/+$/, ""));
     expect(c.apiKey).toBe(config.inference.apiKey);
-    expect(c.allowedModels).toEqual([...new Set(config.runtimeModel.fallbackModels)]);
+    expect(limit).not.toHaveBeenCalled();
   });
 
-  it("(b) uses a saved row and remembers it for Forge", async () => {
+  it("(b) uses a saved per-subject row and remembers it for Forge", async () => {
     limit.mockResolvedValue([row]);
-    const c = await resolveModelConnection();
+    const c = await resolveModelConnection(SUBJECT);
     expect(c.source).toBe("configured");
     expect(c.baseUrl).toBe("https://gw2.example/v1");
     expect(c.apiKey).toBe("dec:x");
+    expect(c.providerId).toBe("openai");
     expect(c.updatedBy).toBe("a@b.example");
     expect(lastModelConnection()).toEqual({ baseUrl: "https://gw2.example/v1", apiKey: "dec:x" });
   });
 
-  it("(c) falls back to the environment for an empty base URL and a null key", async () => {
-    limit.mockResolvedValue([{ ...row, baseUrl: "", apiKeyEnc: null }]);
-    const c = await resolveModelConnection();
-    expect(c.baseUrl).toBe(config.inference.baseUrl.replace(/\/+$/, ""));
-    expect(c.apiKey).toBe(config.inference.apiKey);
+  it("(c) interactive subject with no row is empty (does not fall back to env)", async () => {
+    limit.mockResolvedValue([]);
+    const c = await resolveModelConnection(SUBJECT);
+    expect(c.baseUrl).toBe("");
+    expect(c.apiKey).toBe("");
+    expect(viewOf(c).configured).toBe(false);
   });
 
-  it("(d) caches, until invalidated", async () => {
+  it("(d) caches per subject, until invalidated", async () => {
     limit.mockResolvedValue([row]);
-    await resolveModelConnection();
-    await resolveModelConnection();
+    await resolveModelConnection(SUBJECT);
+    await resolveModelConnection(SUBJECT);
     expect(limit).toHaveBeenCalledTimes(1);
-    invalidateModelConnection();
-    await resolveModelConnection();
+    invalidateModelConnection(SUBJECT);
+    await resolveModelConnection(SUBJECT);
     expect(limit).toHaveBeenCalledTimes(2);
   });
 
   it("(e) throws when the row cannot be read", async () => {
     limit.mockRejectedValue(new Error("db down"));
-    await expect(resolveModelConnection()).rejects.toThrow("db down");
+    await expect(resolveModelConnection(SUBJECT)).rejects.toThrow("db down");
   });
 });
 
 describe("resolveGenerationProvider", () => {
-  it("(f) is the connection, shaped for the builder", async () => {
+  it("(f) is the connection, shaped for the builder, for that subject", async () => {
     limit.mockResolvedValue([row]);
-    const p = await resolveGenerationProvider();
+    const p = await resolveGenerationProvider(SUBJECT);
     expect(p.model).toBe("m1");
     expect(p.allowedModels).toEqual(["m1", "m2"]);
     expect(p.source).toBe("configured");

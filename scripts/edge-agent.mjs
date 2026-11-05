@@ -1,16 +1,14 @@
 #!/usr/bin/env node
 /**
- * Personal Foundry edge agent — secure setup (approve-then-credential) or legacy OTP pair.
+ * Personal Foundry edge agent — setup (approve once → credential → poll) or legacy OTP.
  *
- *   # Prefer: paste curl from Devices, or:
  *   node scripts/edge-agent.mjs setup --token esetup_… [--url http://localhost:4000] [--name "MacBook"]
+ *   # After Approve in Foundry, continues into the run loop unless --setup-only.
+ *
  *   node scripts/edge-agent.mjs run [--url http://localhost:4000]
+ *   node scripts/edge-agent.mjs pair --code 123456 […]
  *
- *   # Legacy:
- *   node scripts/edge-agent.mjs pair --code 123456 [--name "MacBook"] [--url http://localhost:4000]
- *
- * Token is stored in ~/.foundry-edge/credentials.json.
- * Capabilities: read_path (immediate), run_command / write_path (after UI approval).
+ * Token: ~/.foundry-edge/credentials.json
  */
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
@@ -24,6 +22,10 @@ const AGENT_LABEL = "foundry-edge-agent/1";
 function arg(flag, fallback = null) {
   const i = process.argv.indexOf(flag);
   return i >= 0 ? process.argv[i + 1] : fallback;
+}
+
+function hasFlag(flag) {
+  return process.argv.includes(flag);
 }
 
 async function loadCreds() {
@@ -43,15 +45,16 @@ function sleep(ms) {
   return new Promise((r) => setTimeout(r, ms));
 }
 
-/** Setup link → register → wait for owner Approve → save device token. */
+/** Setup link → register → wait for Approve → save token → (default) start run loop. */
 async function setup() {
   const token = arg("--token");
   if (!token || !token.startsWith("esetup_")) {
-    console.error("Usage: edge-agent.mjs setup --token esetup_… [--name Host] [--url http://localhost:4000]");
+    console.error("Usage: edge-agent.mjs setup --token esetup_… [--name Host] [--url http://localhost:4000] [--setup-only]");
     process.exit(1);
   }
   const url = (arg("--url") || "http://localhost:4000").replace(/\/$/, "");
   const name = arg("--name") || undefined;
+  const setupOnly = hasFlag("--setup-only");
 
   console.log("Registering connect request…");
   const reg = await fetch(`${url}/api/edge/setup/register`, {
@@ -64,9 +67,13 @@ async function setup() {
     console.error(regBody.message || regBody.error || reg.status);
     process.exit(1);
   }
-  console.log(`Device ${regBody.deviceId} (“${regBody.name}”) — awaiting Approve in Foundry → Devices (or Needs you).`);
+  console.log("");
+  console.log(`>>> Approve “${regBody.name}” in Foundry → Devices (or Needs you).`);
+  console.log(`>>> Waiting (device ${regBody.deviceId}). No further steps needed from you after Approve.`);
+  console.log("");
 
   const deadline = Date.now() + 10 * 60 * 1000;
+  let dots = 0;
   while (Date.now() < deadline) {
     const wait = await fetch(`${url}/api/edge/setup/wait`, {
       method: "POST",
@@ -76,6 +83,8 @@ async function setup() {
     const body = await wait.json().catch(() => ({}));
     if (wait.status === 202 || body.status === "waiting") {
       process.stdout.write(".");
+      dots++;
+      if (dots % 30 === 0) process.stdout.write("\n(still waiting for Approve…)\n");
       await sleep(2000);
       continue;
     }
@@ -95,7 +104,12 @@ async function setup() {
       name: body.name,
     });
     console.log(`\nConnected as “${body.name}” (${body.deviceId}). Token saved to ${CREDS}`);
-    console.log(`Next: node scripts/edge-agent.mjs run --url ${url}`);
+    if (setupOnly) {
+      console.log(`Next: node ${process.argv[1]} run --url ${url}`);
+      return;
+    }
+    console.log("Starting agent loop…");
+    await runLoop();
     return;
   }
   console.error("\nTimed out waiting for Approve (10 minutes). Mint a new setup curl in Devices.");
@@ -122,6 +136,10 @@ async function pair() {
   }
   await saveCreds({ url, deviceId: body.deviceId, workspaceId: body.workspaceId, token: body.token, name: body.name });
   console.log(`Paired as “${body.name}” (${body.deviceId}). Token saved to ${CREDS}`);
+  if (!hasFlag("--setup-only")) {
+    console.log("Starting agent loop…");
+    await runLoop();
+  }
 }
 
 function runCmd(command, cwd) {

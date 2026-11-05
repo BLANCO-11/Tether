@@ -225,6 +225,12 @@ export function outcomeLine(p: PiProposal): string {
     if (p.status === "done") return `The person confirmed ${what}: ${p.result ?? ""}${p.setting.on ? " Use it now; read its inputs with tools/connector-actions.mjs first." : ""}`;
     return `The person tried ${what} but it FAILED: ${p.result ?? ""}`;
   }
+  if (p.kind === "edge" && p.edge) {
+    const what = `edge job on ${p.edge.deviceName}: ${p.summary}`;
+    if (p.status === "declined") return `The person DECLINED ${what}; it will not run.`;
+    if (p.status === "done") return `The person APPROVED ${what}. Keep polling edge-job for the result.`;
+    return `The person tried to approve ${what} but it FAILED: ${p.result ?? ""}`;
+  }
   if (p.status === "declined") return `The person DECLINED your proposed change "${p.summary}" (${p.tool}); nothing was done.`;
   if (p.status === "done") return `The person confirmed "${p.summary}" (${p.tool}) and it was DONE through ${p.account ? `“${p.account.label}”${p.account.personal ? " (their own)" : " (the workspace's)"}` : p.via === "personal" ? "their own connection" : "the workspace's connection"}. The service answered: ${p.result ?? ""}`;
   if (p.status === "partial") {

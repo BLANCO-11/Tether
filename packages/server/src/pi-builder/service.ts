@@ -101,6 +101,8 @@ import { schemaRepo } from "../repositories/schema.repo.js";
 import { filesUsedBy, workspaceFileService } from "../services/workspace-file.service.js";
 import { stepApprovalService } from "../services/step-approval.service.js";
 import { usageService } from "../services/usage.service.js";
+import { edgeDeviceService, type EdgeJobKind } from "../services/edge-device.service.js";
+import { PERSONAL_PRODUCT } from "../personal.js";
 import type { RunRequester } from "../services/run-requester.js";
 import type { RevisionAuthor } from "../services/revision-author.js";
 import { allSteps } from "./types.js";
@@ -248,6 +250,8 @@ type Session = {
   model: string | null;
   /** The builder's models as last read (resolveGenerationProvider): at open, every turn, and a model change. */
   generation: Generation | null;
+  /** Chat owner's subject — personal BYOK resolves this person's AI connection for Forge. */
+  ownerSubject: string | null;
   /** Whether the workspace offers Forge Agent, as last read (at open, at every turn, at a switch). */
   agentAllowed: boolean;
   /** A Forge Agent turn changed the workflow and it was put back: the next turn tells Forge so. */
@@ -480,8 +484,10 @@ function forgeModelOf(s: Session): string {
   return effectiveModel(s.model, s.generation, piModel());
 }
 
-async function loadGeneration(): Promise<Generation | null> {
-  return resolveGenerationProvider().then((g) => ({ model: g.model, allowedModels: g.allowedModels })).catch(() => null);
+async function loadGeneration(subject?: string | null): Promise<Generation | null> {
+  return resolveGenerationProvider(subject)
+    .then((g) => ({ model: g.model, allowedModels: g.allowedModels }))
+    .catch(() => null);
 }
 
 /** Live Forge processes — one per open conversation, timed out and capped (forge-pool.ts). */
@@ -1693,7 +1699,7 @@ async function runTurn(
       pushNote(s, "Forge Agent is turned off for this workspace, so this chat is in Workflow Builder now.");
     }
     // 2026-11-03: the admin's model list is read per turn; a Forge running a model no longer chosen is restarted on the right one.
-    s.generation = (await loadGeneration()) ?? s.generation;
+    s.generation = (await loadGeneration(s.ownerSubject)) ?? s.generation;
     const live = forgePool.peek(s.id);
     if (live && !live.busy && live.model !== forgeModelOf(s)) forgePool.release(s.id);
     // Rewritten every turn from the server's template: Forge can write its own folder, SYSTEM.md included.
@@ -2027,13 +2033,15 @@ export const piBuilderService = {
       })(),
       at: now,
     };
-    const generation = await loadGeneration();
+    const ownerSubject = chat?.createdBySubject?.trim() || o.person?.subject?.trim() || null;
+    const generation = await loadGeneration(ownerSubject);
     const s: Session = {
       id,
       workspaceId,
       flowId,
       draftKey,
       chatId: chat?.id ?? null,
+      ownerSubject,
       chatPending: null,
       // A new chat lives where it was started (a project the route held the person to), else where its workflow does.
       projectId: chat ? null : o.projectId?.trim() || saved?.flow.projectId || null,
@@ -2188,7 +2196,7 @@ export const piBuilderService = {
   async setModel(workspaceId: string, sessionId: string, model: string): Promise<PiSessionPublic> {
     const s = getOrThrow(workspaceId, sessionId);
     if (s.abort || s.testing) throw httpErr("Forge is still working. Wait for it to finish, then change it.", 409);
-    s.generation = (await loadGeneration()) ?? s.generation;
+    s.generation = (await loadGeneration(s.ownerSubject)) ?? s.generation;
     const bare = bareModel(model);
     if (!modelChoices(s.generation, piModel()).includes(bare)) {
       throw httpErr("That model is not turned on for the Workflow Builder. Choose one from the list.", 400);
@@ -2961,7 +2969,192 @@ export const piBuilderService = {
       .catch((e) => console.warn(`[pi-builder] could not record Forge's data read: ${(e as Error).message}`));
     return { rows: rows.slice(0, ASK_ROWS), total: rows.length, shown: Math.min(rows.length, ASK_ROWS) };
   },
+
+  /**
+   * Personal thin: Forge talks to the person's paired edge devices (tools/edge-*.mjs → /api/forge/edge/*).
+   * Scoped to the person talking. Harmless run_command is auto-approved; other run_command / write_path
+   * get an in-chat Approve card (Needs you / Devices still work as backup).
+   */
+  async edgeListDevices(token: string): Promise<{ devices: Array<{ id: string; name: string; lastSeenAt: string | null; status: string }> }> {
+    const { workspaceId, subject } = forgeEdgeCaller(token);
+    const devices = (await edgeDeviceService.list(workspaceId, subject))
+      .filter((d) => d.status === "active")
+      .map((d) => ({
+        id: d.id,
+        name: d.name,
+        lastSeenAt: d.lastSeenAt ? new Date(d.lastSeenAt).toISOString() : null,
+        status: d.status,
+      }));
+    return { devices };
+  },
+
+  async edgeEnqueue(
+    token: string,
+    body: { deviceId: string; kind: EdgeJobKind; payload?: Record<string, unknown> },
+  ): Promise<{ job: { id: string; status: string; kind: string; needsApproval: boolean }; message: string }> {
+    const { workspaceId, subject, session: s } = forgeEdgeCaller(token);
+    const payload = body.payload ?? {};
+    const job = await edgeDeviceService.enqueue(workspaceId, body.deviceId, subject, body.kind, payload);
+    // Re-read after enqueue: getJob may auto-release allowlisted jobs that were awaiting.
+    const detail = await edgeDeviceService.getJob(workspaceId, job.id, subject, false);
+    const needsApproval = detail.needsApproval;
+    if (needsApproval) {
+      showEdgeApprovalCard(s, {
+        jobId: detail.id,
+        deviceId: body.deviceId,
+        deviceName: detail.deviceName ?? "your computer",
+        kind: body.kind,
+        payload,
+      });
+    }
+    return {
+      job: { id: detail.id, status: detail.status, kind: detail.kind, needsApproval },
+      message: needsApproval
+        ? "Queued. An Approve card is already in this chat — wait until the person Approves it, then keep polling with edge-job. The edge agent on that computer must be running."
+        : "Queued and approved (harmless command, or read). Poll with edge-job until it finishes. The edge agent on that computer must be running.",
+    };
+  },
+
+  async edgeJob(
+    token: string,
+    body: { jobId: string; waitMs?: number },
+  ): Promise<{
+    job: {
+      id: string;
+      status: string;
+      kind: string;
+      needsApproval: boolean;
+      deviceName: string | null;
+      result: Record<string, unknown> | null;
+      error: string | null;
+      timedOut?: boolean;
+    };
+    message: string;
+  }> {
+    const { workspaceId, subject, session: s } = forgeEdgeCaller(token);
+    const waitMs = body.waitMs ?? 45_000;
+    // Show the card before waiting so the person can Approve while we poll.
+    {
+      const snap = await edgeDeviceService.getJob(workspaceId, body.jobId, subject, false);
+      if (snap.needsApproval) {
+        showEdgeApprovalCard(s, {
+          jobId: snap.id,
+          deviceId: snap.deviceId ?? "",
+          deviceName: snap.deviceName ?? "your computer",
+          kind: snap.kind as EdgeJobKind,
+          payload: (snap.payload ?? {}) as Record<string, unknown>,
+        });
+      }
+    }
+    const job =
+      waitMs > 0
+        ? await edgeDeviceService.waitForJob(workspaceId, body.jobId, subject, false, waitMs)
+        : await edgeDeviceService.getJob(workspaceId, body.jobId, subject, false);
+    let message = `Status: ${job.status}.`;
+    const timedOut = "timedOut" in job && job.timedOut === true;
+    if (job.needsApproval) {
+      message = "Still waiting for Approve on the card in this chat. Tell them once, then poll again.";
+    } else if (job.status === "succeeded") {
+      message = "Done.";
+    } else if (job.status === "failed") {
+      message = `Failed: ${job.error ?? "unknown"}`;
+    } else if (job.status === "revoked") {
+      message = `Declined: ${job.error ?? "the person cancelled this job"}`;
+    } else if (timedOut) {
+      message = `Still ${job.status} after waiting. The edge agent may be offline — ask them to check Devices / the agent process.`;
+    } else if (job.status === "approved" || job.status === "running") {
+      message = "Approved; waiting for the edge agent to claim and finish. Keep polling.";
+    }
+    return {
+      job: {
+        id: job.id,
+        status: job.status,
+        kind: job.kind,
+        needsApproval: job.needsApproval,
+        deviceName: job.deviceName,
+        result: job.result,
+        error: job.error,
+        timedOut: timedOut || undefined,
+      },
+      message,
+    };
+  },
 };
+
+/** Live Forge turn + personal product + talking subject → edge device owner. */
+function forgeEdgeCaller(token: string): { workspaceId: string; subject: string; session: Session } {
+  if (!PERSONAL_PRODUCT) throw httpErr("Edge devices are only available in personal Foundry.", 404);
+  const sid = toolTokens.get(token);
+  const s = sid ? sessions.get(sid) : undefined;
+  if (!s) throw httpErr("This key does not belong to an open conversation.", 401);
+  if (!s.abort) throw httpErr("Edge devices can only be used while Forge is answering a message.", 409);
+  const subject = talker(s)?.subject ?? null;
+  if (!subject) throw httpErr("Edge devices need a signed-in person in this chat.", 403);
+  return { workspaceId: s.workspaceId, subject, session: s };
+}
+
+/** One-line summary for an edge job card. */
+function edgeJobSummary(kind: EdgeJobKind, payload: Record<string, unknown>, deviceName: string): string {
+  if (kind === "run_command") {
+    const cmd = typeof payload.command === "string" ? payload.command.trim() : "";
+    return cmd ? `Run \`${cmd}\` on ${deviceName}` : `Run a command on ${deviceName}`;
+  }
+  if (kind === "write_path") {
+    const path = typeof payload.path === "string" ? payload.path : "a file";
+    return `Write to ${path} on ${deviceName}`;
+  }
+  const path = typeof payload.path === "string" ? payload.path : "a path";
+  return `Read ${path} on ${deviceName}`;
+}
+
+function edgeJobAction(kind: EdgeJobKind): string {
+  if (kind === "run_command") return "Run a command";
+  if (kind === "write_path") return "Write a file";
+  return "Read a file";
+}
+
+/**
+ * Edge approval must appear WHILE Forge is still waiting (unlike connector proposals, which land on the finished reply).
+ * Emit a chat message with the card immediately — do not park it only on s.proposals for end-of-turn.
+ */
+function showEdgeApprovalCard(
+  s: Session,
+  job: { jobId: string; deviceId: string; deviceName: string; kind: EdgeJobKind; payload: Record<string, unknown> },
+): void {
+  const open = [...s.proposals, ...s.messages.flatMap((m) => m.proposals ?? [])].some(
+    (p) => p.kind === "edge" && p.edge?.jobId === job.jobId && p.status === "pending",
+  );
+  if (open) return;
+  const card: PiProposal = {
+    id: randomUUID(),
+    kind: "edge",
+    tool: "edge-run",
+    connector: job.deviceName,
+    action: edgeJobAction(job.kind),
+    summary: edgeJobSummary(job.kind, job.payload, job.deviceName),
+    params: job.payload,
+    status: "pending",
+    at: new Date().toISOString(),
+    edge: { jobId: job.jobId, deviceId: job.deviceId, deviceName: job.deviceName, kind: job.kind },
+  };
+  const host = [...s.messages].reverse().find((m) => m.role === "assistant" && m.proposals?.some((p) => p.kind === "edge" && p.status === "pending"));
+  if (host) {
+    host.proposals = [...(host.proposals ?? []), card];
+    emit(s, { type: "messages", messages: s.messages });
+  } else {
+    const msg = {
+      id: randomUUID(),
+      role: "assistant" as const,
+      text: "This needs your approval before it runs on your computer.",
+      at: card.at,
+      mode: s.mode,
+      proposals: [card],
+    };
+    s.messages.push(msg);
+    emit(s, { type: "message", message: msg });
+  }
+  persistChat(s);
+}
 
 /** A connected service's name as people read it ("GitHub"), from the installed piece. */
 async function pieceName(piece: string): Promise<string> {
@@ -3385,7 +3578,36 @@ async function decideProposal(
     persistChat(s);
   };
   if (decision === "decline") {
+    if (p.kind === "edge" && p.edge?.jobId) {
+      await edgeDeviceService.rejectJob(workspaceId, p.edge.jobId, person.subject, false).catch((e) => {
+        // Already approved/revoked elsewhere — still mark the card declined.
+        if ((e as { statusCode?: number }).statusCode !== 409) throw e;
+      });
+    }
     update({ status: "declined", decidedBy: label, decidedAt: new Date().toISOString() });
+    s.proposalOutcomes.push(outcomeLine(p));
+    return p;
+  }
+  if (p.kind === "edge" && p.edge) {
+    update({ status: "running", decidedBy: label, decidedAt: new Date().toISOString() });
+    try {
+      await edgeDeviceService.approveJob(workspaceId, p.edge.jobId, person.subject, false);
+      update({
+        status: "done",
+        result: `Approved. Running on ${p.edge.deviceName} — Forge will pick up the result.`,
+      });
+    } catch (e) {
+      const code = (e as { statusCode?: number }).statusCode;
+      if (code === 409) {
+        // Approved from Needs you / Devices while the card was still open.
+        update({
+          status: "done",
+          result: `Already approved. Running on ${p.edge.deviceName} — Forge will pick up the result.`,
+        });
+      } else {
+        update({ status: "failed", result: (e as Error).message });
+      }
+    }
     s.proposalOutcomes.push(outcomeLine(p));
     return p;
   }

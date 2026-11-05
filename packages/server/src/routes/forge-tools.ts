@@ -108,3 +108,43 @@ forgeToolsRouter.post(
     res.json(await proposeSetting(token, body.service, body.action, body.on, body.reason));
   }),
 );
+
+/** Personal thin: list / enqueue / wait on the person's paired edge devices (tools/edge-*.mjs). */
+forgeToolsRouter.post(
+  "/edge/devices",
+  express.json({ limit: "4kb" }),
+  asyncHandler(async (req, res) => {
+    const token = req.header("x-forge-token") ?? "";
+    res.json(await piBuilderService.edgeListDevices(token));
+  }),
+);
+
+forgeToolsRouter.post(
+  "/edge/enqueue",
+  express.json({ limit: "64kb" }),
+  asyncHandler(async (req, res) => {
+    const token = req.header("x-forge-token") ?? "";
+    const body = z
+      .object({
+        deviceId: z.string().uuid(),
+        kind: z.enum(["run_command", "read_path", "write_path"]),
+        payload: z.record(z.unknown()).default({}),
+      })
+      .strict()
+      .parse(req.body ?? {});
+    res.status(201).json(await piBuilderService.edgeEnqueue(token, body));
+  }),
+);
+
+forgeToolsRouter.post(
+  "/edge/job",
+  express.json({ limit: "4kb" }),
+  asyncHandler(async (req, res) => {
+    const token = req.header("x-forge-token") ?? "";
+    const body = z
+      .object({ jobId: z.string().uuid(), waitMs: z.number().int().min(0).max(120_000).optional() })
+      .strict()
+      .parse(req.body ?? {});
+    res.json(await piBuilderService.edgeJob(token, body));
+  }),
+);

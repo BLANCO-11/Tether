@@ -1,41 +1,34 @@
-// src/app/(app)/ai-provider/page.tsx — the model connection for the
-// deployment: which gateway, which key, which models may be used.
+// src/app/(app)/ai-provider/page.tsx — your AI connection (personal BYOK).
 //
 // ── Three things this page is deliberately careful about ────────────────────
 //
 //  1. **The key is write-only.** It is posted once, stored encrypted in Foundry, and
 //     never returned by any route. What comes back is a `keyFingerprint` — eight
 //     hex characters of a salted digest, enough to tell two keys apart and not
-//     enough to reconstruct either. This is the same rule `/keys` follows for
-//     workspace secrets, and a settings page is exactly where it gets broken "so
-//     the operator can check what they pasted".
+//     enough to reconstruct either.
 //
 //  2. **A populated model list is NOT a working configuration.** Listing models
-//     proves the gateway answered a GET. A gateway enumerates models happily for
-//     a key with no quota, no access to any of them and no billing attached —
-//     which is precisely the documented `llmConnected: true` false green on
-//     a health probe that "verifies" an LLM by listing models.
-//     So the two actions are separate, labelled differently, and only "Run a
-//     test completion" is presented as evidence.
+//     proves the gateway answered a GET. Only "Test connection" runs a completion.
 //
-//  3. **The allowlist is a spend control, not a convenience.** A flow may name a
-//     model; anything off this list is refused by name. Ticking every box
-//     available is a decision about what a caller may bill, so the page says so
-//     rather than defaulting to all.
+//  3. **The allowlist is a spend control.** Forge chats and workflow steps can only
+//     choose enabled models; ticking every box is a billing decision.
 //
-// ── 2026-11-04: ONE model connection ────────────────────────────────────────
-//
-// One gateway, one enabled-model list and one default for the whole deployment,
-// set here and used by workflow steps (llm_complete), the builder and Forge
-// chats. The old Runtime/Builder split (D-35) was reversed by the product owner.
-// Three steps (connection, models, save); the Costs tab holds model prices.
+// Personal product: each signed-in person owns one OpenAI-compatible connection
+// (OpenAI, OpenRouter for Claude, OpenCode, Groq, or Custom). Native Anthropic
+// is out of scope — use OpenRouter for Claude models.
 
 "use client";
 
 import { Suspense } from "react";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { foundryApi, type FALlmProvider, type FALlmTest } from "@/lib/foundry-client";
+import {
+  foundryApi,
+  type FALlmProvider,
+  type FALlmProviderPreset,
+  type FALlmProviderPresetId,
+  type FALlmTest,
+} from "@/lib/foundry-client";
 import { useAsync } from "@/lib/hooks";
 import { useToast } from "@/lib/toast";
 import { Page, Zone } from "@/components/layout/Page";
@@ -60,15 +53,20 @@ function AiProviderPageContent() {
   return (
     <Page>
       <PageHeader
-        eyebrow="Admin"
-        title="AI models"
-        purpose="One connection for the whole deployment. Workflows, the builder and Forge chats all use the models you enable here."
+        eyebrow="Settings"
+        title="Your AI connection"
+        purpose="Paste your own API key. Chats, the builder and workflow AI steps use this connection — not a shared deployment key."
       />
 
       <Zone name="notices">
-        {provider.error && <Notice tone="danger" title="Could not read the model connection">{provider.error}</Notice>}
+        {provider.error && <Notice tone="danger" title="Could not read your AI connection">{provider.error}</Notice>}
         {p?.forgeReachable === false && p.forgeWarning && (
           <Notice tone="warn" title="Forge chats cannot reach this gateway">{p.forgeWarning}</Notice>
+        )}
+        {p && !p.configured && (
+          <Notice tone="info" title="Not connected yet">
+            Pick a provider below and paste your API key. Until then, chats will ask you to connect here first.
+          </Notice>
         )}
       </Zone>
 
@@ -140,6 +138,8 @@ function TestLine({ test }: { test: FALlmTest }) {
 
 function ModelSettings({ p, reload }: { p: FALlmProvider; reload: () => void }) {
   const toast = useToast();
+  const presets = p.presets ?? [];
+  const [providerId, setProviderId] = useState<FALlmProviderPresetId | string>(p.providerId || "openai");
   const [baseUrl, setBaseUrl] = useState("");
   const [apiKey, setApiKey] = useState("");
   const [defaultModel, setDefaultModel] = useState("");
@@ -151,13 +151,24 @@ function ModelSettings({ p, reload }: { p: FALlmProvider; reload: () => void }) 
   const [error, setError] = useState<string | null>(null);
   const [q, setQ] = useState("");
 
-  // Seed the form from the server once it arrives. The key box stays empty: the server never sends it, and
-  // pre-filling a placeholder would make "leave blank to keep the existing key" impossible to express.
+  const preset: FALlmProviderPreset | undefined = presets.find((x) => x.id === providerId) ?? presets[presets.length - 1];
+
   useEffect(() => {
+    setProviderId(p.providerId || "openai");
     setBaseUrl(p.baseUrl);
     setDefaultModel(p.defaultModel);
     setAllowed(p.allowedModels);
   }, [p]);
+
+  const pickPreset = (id: string) => {
+    setProviderId(id);
+    const next = presets.find((x) => x.id === id);
+    if (next && !next.baseUrlEditable && next.baseUrl) setBaseUrl(next.baseUrl);
+    else if (next?.id === "custom" && !p.configured) setBaseUrl("");
+    setDiscovered(null);
+    setCaveat(null);
+    setTest(null);
+  };
 
   const run = async <T,>(kind: typeof busy, fn: () => Promise<T>): Promise<T | null> => {
     setBusy(kind);
@@ -172,19 +183,24 @@ function ModelSettings({ p, reload }: { p: FALlmProvider; reload: () => void }) 
     }
   };
 
+  const probe = () => ({
+    baseUrl: baseUrl || undefined,
+    apiKey: apiKey || undefined,
+    providerId: String(providerId),
+  });
+
   const discover = () =>
     run("models", async () => {
-      const r = await foundryApi.llmModels({ baseUrl, apiKey: apiKey || undefined });
+      const r = await foundryApi.llmModels(probe());
       setDiscovered(r.models);
       setCaveat(r.caveat);
-      // Discovering does not enable anything. Enabling is a spend decision and stays an explicit choice.
       return r;
     });
 
   const runTest = () =>
     run("test", async () => {
       setTest(null);
-      const r = await foundryApi.llmTest({ baseUrl, apiKey: apiKey || undefined, model: defaultModel || undefined });
+      const r = await foundryApi.llmTest({ ...probe(), model: defaultModel || undefined });
       setTest(r);
       return r;
     });
@@ -193,14 +209,13 @@ function ModelSettings({ p, reload }: { p: FALlmProvider; reload: () => void }) 
     run("save", async () => {
       const saved = await foundryApi.saveLlmProvider({
         baseUrl: baseUrl.trim(),
-        // Empty means "keep the stored key", which is what makes changing the model list possible without
-        // re-pasting a credential.
         apiKey: apiKey.trim() || undefined,
         defaultModel,
         allowedModels: allowed,
+        providerId: String(providerId),
       });
       setApiKey("");
-      toast.success("Models saved");
+      toast.success("AI connection saved");
       reload();
       return saved;
     });
@@ -209,13 +224,13 @@ function ModelSettings({ p, reload }: { p: FALlmProvider; reload: () => void }) 
     run("clear", async () => {
       const r = await foundryApi.clearLlmProvider();
       setApiKey("");
-      toast.success("Cleared — falling back to the environment");
+      toast.success("Cleared — connect a provider again when you need AI");
       reload();
       return r;
     });
 
-  // Back to what is saved: the form only, nothing is sent.
   const resetForm = () => {
+    setProviderId(p.providerId || "openai");
     setBaseUrl(p.baseUrl);
     setApiKey("");
     setDefaultModel(p.defaultModel);
@@ -226,30 +241,66 @@ function ModelSettings({ p, reload }: { p: FALlmProvider; reload: () => void }) 
   const toggle = (model: string) =>
     setAllowed((prev) => {
       const next = prev.includes(model) ? prev.filter((m) => m !== model) : [...prev, model];
-      // A default that is not on the list is refused by the server, so turning the default off clears it here
-      // rather than letting the save fail.
       if (!next.includes(defaultModel)) setDefaultModel(next[0] ?? "");
       return next;
     });
 
-  // What can be picked: whatever the gateway advertised, plus anything already enabled (so a saved model does not
-  // vanish before anyone has fetched the list).
   const choices = useMemo(() => [...new Set([...(discovered ?? []), ...allowed])].sort(), [discovered, allowed]);
   const shown = choices.filter((m) => !q.trim() || m.toLowerCase().includes(q.trim().toLowerCase()));
   const dirty =
+    String(providerId) !== (p.providerId || "openai") ||
     baseUrl !== p.baseUrl ||
     apiKey !== "" ||
     defaultModel !== p.defaultModel ||
     allowed.slice().sort().join("|") !== p.allowedModels.slice().sort().join("|");
 
+  const baseUrlEditable = preset?.baseUrlEditable !== false;
+  const effectiveBase = baseUrl || preset?.baseUrl || "";
+
   return (
     <div className="pane">
-      <Step n={1} title="Connection" hint="The OpenAI-compatible gateway every model call goes through: workflow steps, the builder and Forge chats.">
+      <Step n={1} title="Provider" hint="OpenAI-compatible gateways only. For Claude / Anthropic models, choose OpenRouter.">
+        {presets.length > 0 ? (
+          <div className="mb-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3" role="radiogroup" aria-label="AI provider">
+            {presets.map((pr) => {
+              const on = providerId === pr.id;
+              return (
+                <button
+                  key={pr.id}
+                  type="button"
+                  role="radio"
+                  aria-label={pr.label}
+                  aria-checked={on}
+                  onClick={() => pickPreset(pr.id)}
+                  className={`rounded-lg border px-3 py-3 text-left transition-colors ${
+                    on ? "border-accent bg-accent/5" : "border-line hover:border-muted"
+                  }`}
+                >
+                  <div className="text-body font-medium text-text">{pr.label}</div>
+                  <p className="mt-1 text-caption text-dim">{pr.blurb}</p>
+                </button>
+              );
+            })}
+          </div>
+        ) : null}
         <div className="grid gap-3 md:grid-cols-2">
-          <Field label="Gateway base URL">
-            <Input value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)} placeholder="https://gateway.example/v1" />
+          <Field label="Gateway base URL" hint={baseUrlEditable ? undefined : "Filled by the provider you picked."}>
+            <Input
+              value={baseUrl}
+              onChange={(e) => setBaseUrl(e.target.value)}
+              placeholder={preset?.baseUrl || "https://gateway.example/v1"}
+              disabled={!baseUrlEditable}
+              readOnly={!baseUrlEditable}
+            />
           </Field>
-          <Field label="API key" hint={p.keyFingerprint ? `Stored key ${p.keyFingerprint}. Leave blank to keep it.` : "Leave blank to keep the stored key."}>
+          <Field
+            label="API key"
+            hint={
+              p.keyFingerprint
+                ? `Stored key ${p.keyFingerprint}. Leave blank to keep it.`
+                : preset?.keyHint || "Paste your API key."
+            }
+          >
             <Input
               type="password"
               value={apiKey}
@@ -260,7 +311,7 @@ function ModelSettings({ p, reload }: { p: FALlmProvider; reload: () => void }) 
           </Field>
         </div>
         <div className="mt-3 flex flex-wrap items-center gap-2">
-          <Button size="sm" variant="ghost" onClick={runTest} disabled={busy !== "" || !baseUrl}>
+          <Button size="sm" variant="ghost" onClick={runTest} disabled={busy !== "" || !effectiveBase}>
             {busy === "test" ? "Testing…" : "Test connection"}
           </Button>
           <span className="text-caption text-dim">Runs one real completion with the default model.</span>
@@ -273,12 +324,11 @@ function ModelSettings({ p, reload }: { p: FALlmProvider; reload: () => void }) 
         title="Models"
         hint={`${allowed.length} of ${choices.length} enabled. Forge chats and workflow steps can only choose enabled models; the default is used when none is chosen.`}
         action={
-          <Button size="sm" variant="ghost" onClick={discover} disabled={busy !== "" || !baseUrl}>
+          <Button size="sm" variant="ghost" onClick={discover} disabled={busy !== "" || !effectiveBase}>
             {busy === "models" ? "Fetching…" : "Fetch models"}
           </Button>
         }
       >
-        {/* ⚠ Rendered from the payload, never paraphrased: a model list proves the gateway answered a GET. */}
         {caveat && <p className="mb-3 text-caption text-warn">{caveat}</p>}
         {choices.length === 0 ? (
           <p className="text-caption text-muted">No models yet — fetch them from the gateway.</p>
@@ -326,12 +376,11 @@ function ModelSettings({ p, reload }: { p: FALlmProvider; reload: () => void }) 
       <div className="flex flex-wrap items-center justify-end gap-2 rounded-b-xl border-t border-line bg-surface-2 px-4 py-3">
         <span className={`mr-auto text-caption ${dirty ? "text-warn" : "text-dim"}`} aria-live="polite">
           {dirty ? "Unsaved changes" : "No unsaved changes."}
-          {/* Back to the deployment's own settings: a real choice, kept quiet beside the everyday Reset. */}
           {!dirty && p.source === "configured" && (
             <>
               {" "}
               <button type="button" onClick={clear} disabled={busy !== ""} className="text-accent hover:underline disabled:text-dim">
-                Use the environment's settings instead
+                Disconnect
               </button>
             </>
           )}
@@ -339,7 +388,7 @@ function ModelSettings({ p, reload }: { p: FALlmProvider; reload: () => void }) 
         <Button size="sm" variant="ghost" onClick={resetForm} disabled={busy !== "" || !dirty}>
           Reset to saved
         </Button>
-        <Button size="sm" onClick={save} disabled={busy !== "" || !baseUrl || allowed.length === 0 || !dirty}>
+        <Button size="sm" onClick={save} disabled={busy !== "" || !effectiveBase || allowed.length === 0 || !dirty}>
           {busy === "save" ? "Saving…" : "Save"}
         </Button>
       </div>
@@ -347,9 +396,6 @@ function ModelSettings({ p, reload }: { p: FALlmProvider; reload: () => void }) 
   );
 }
 
-// ⚠ `useSearchParams()` makes a statically prerendered page bail out to the client, and Next 15 refuses to BUILD one that does
-// so outside a Suspense boundary ("Missing Suspense boundary with useSearchParams"). The boundary is here, around the page, so
-// the page's own loading and error states are untouched.
 export default function AiProviderPage() {
   return (
     <Suspense fallback={<Skeleton className="m-6" />}>

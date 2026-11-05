@@ -14,6 +14,7 @@ import { eq } from "drizzle-orm";
 import { config } from "../config/index.js";
 import { db, pool } from "../db/index.js";
 import { runtimeModelProvider } from "../db/schema.js";
+import { PERSONAL_PRODUCT } from "../personal.js";
 import { keyFingerprint, saveRuntimeProvider } from "./runtime-model.service.js";
 
 function openOpsSealed(sealed: string, opsApiKey: string): string {
@@ -26,6 +27,10 @@ function openOpsSealed(sealed: string, opsApiKey: string): string {
 }
 
 async function main() {
+  if (PERSONAL_PRODUCT) {
+    console.log("[runtime-model:import] personal product uses per-user AI keys — nothing to import into the singleton.");
+    return;
+  }
   const [existing] = await db.select({ id: runtimeModelProvider.id }).from(runtimeModelProvider).where(eq(runtimeModelProvider.id, 1));
   if (existing) {
     console.log("[runtime-model:import] settings are already saved here — nothing copied.");

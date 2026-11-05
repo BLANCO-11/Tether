@@ -1686,6 +1686,21 @@ export const runtimeModelProvider = pgTable("runtime_model_provider", {
 });
 
 /**
+ * Per-user AI provider (personal thin, 0141): each signed-in subject owns one OpenAI-compatible connection.
+ * The deployment singleton `runtime_model_provider` stays as the env/harness fallback only.
+ */
+export const userLlmProviders = pgTable("user_llm_providers", {
+  subject: text("subject").primaryKey(),
+  providerId: varchar("provider_id", { length: 32 }).notNull().default("custom"),
+  baseUrl: text("base_url").notNull(),
+  apiKeyEnc: text("api_key_enc"),
+  defaultModel: text("default_model").notNull().default(""),
+  allowedModels: jsonb("allowed_models").$type<string[]>().notNull().default([]),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedBy: varchar("updated_by", { length: 255 }),
+});
+
+/**
  * Every web fetch (0133): by a workflow step (`executionId`) or by Forge while it builds (`sessionId`). The address is
  * stored with credential-shaped query values redacted. A refusal is a row too (`ok` false, `error` says why).
  */

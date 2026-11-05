@@ -189,13 +189,23 @@ export type PiProposal = {
    * `setting`: not a call to the service but switching one of its actions on or off (agent-grants.ts). `params` is then
    * empty and `setting` says everything the card shows; the person picks WHERE (`scope`) by the button they press.
    */
-  kind?: "action" | "setting" | "account";
+  kind?: "action" | "setting" | "account" | "edge";
   setting?: PiSettingChange;
   /** `account`: which connection this chat should use for a service — the person picks one of `options`. */
   choice?: PiAccountQuestion;
+  /** `edge`: a job on the person's paired computer that needs Approve before the agent runs it. */
+  edge?: PiEdgeJob;
   /** Where the person applied a setting change. */
   /** `chat` is only on cards decided before 0117, when an action was switched on for one chat. */
   scope?: "me" | "workspace" | "chat" | null;
+};
+
+/** An edge job waiting in chat — Approve runs it on the named device; Cancel revokes it. */
+export type PiEdgeJob = {
+  jobId: string;
+  deviceId: string;
+  deviceName: string;
+  kind: "run_command" | "read_path" | "write_path";
 };
 
 /** One connection a chat could use for a service, as the person reads it. */

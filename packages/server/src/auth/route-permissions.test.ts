@@ -134,18 +134,18 @@ describe("every mounted route is declared", () => {
   // +1 workspace 2026-10-29: `POST …/sessions/:sessionId/thinking` (Forge Agent's thinking level).
   // +2 workspace 2026-11-03: `POST …/sessions/:sessionId/model` (a chat's model) and `POST …/sessions/:sessionId/steer` (Send now on a queued message).
   // −5 2026-11-04: one model connection — GET/PUT/DELETE /api/generation/llm/provider, POST …/llm/models and …/llm/test removed (2 platform, 3 identity); /api/runtime-model/* is the one model API.
-  it("the counts are the ones the design states: 348 = 255 + 42 + 22 + 29", () => {
+  it("the counts are the ones the design states: 351 = 266 + 37 + 27 + 39", () => {
     const byKind = { workspace: 0, platform: 0, identity: 0 };
     for (const req of ROUTE_PERMISSIONS.values()) {
       if (req.kind === "workspace") byKind.workspace += 1;
       else if (req.kind === "platform") byKind.platform += 1;
       else byKind.identity += 1;
     }
-    expect(byKind.workspace).toBe(255); // + 4 project files (list, add, download, remove — 0132), + 8 projects (list, create, read, change, delete, add member, remove member, hand over) and 4 moves (a workflow's and a chat's preview and move — sharing-boundaries phase 5), + 2 readiness and my account (phase 4), + 2 turn on for me (read, set — sharing-boundaries phase 3), + 1 read a chat without opening it, + 2 own notices (list, mark read), + 2 ask a reviewer to approve / withdraw (sharing-boundaries), + 5 personal actions (mine, mine actions, mine pack, mine call off, personal-use), + 4 declared API calls (list, declare, pack, switch off), + 3 restricted workspaces (restrict, list and end emergency access), + PUT flows/:flowId/owner (rbac-observability), + 7 connector routes (plugins), + 2 sign-in routes (start, callback), + 1 confirm-a-proposed-change, + 1 clear a chat's chosen connection, + 2 a workflow's run-as (read, change), + 3 a workflow's visibility, switch on, switch off (plugins phase 9)
-    expect(byKind.platform).toBe(42); // − PUT and DELETE /api/generation/llm/provider (one model connection, 2026-11-04); − the 10 /api/ops routes, + the 5 runtime-model routes (ops-api retired 2026-10-30), + the People list (admin simplify phase 3), + start emergency access (restricted workspaces), + the deployment-wide observability summary (P-OBS), + model pricing, + spend by model, + the access grid, + 6 connector install routes, + 3 OAuth app routes
-    expect(byKind.identity).toBe(22); // + GET /api/reports/forecast (the report dashboard, PR 1542; same per-workspace check as /runs); − GET /api/generation/llm/provider, POST …/llm/models, POST …/llm/test (2026-11-04); + the four cost-report routes (2026-10-26), + the four invitation routes (admin simplify phase 2)
-    expect(EXEMPT.size).toBe(29); // + llm_complete's endpoint (2026-10-30), + web_fetch's endpoint and Forge's build-time fetch (2026-10-30)
-    expect(routes.length).toBe(348);
+    expect(byKind.workspace).toBe(267); // +12 edge device routes (+ reject) (personal thin); prior 255: + 4 project files (list, add, download, remove — 0132), + 8 projects (list, create, read, change, delete, add member, remove member, hand over) and 4 moves (a workflow's and a chat's preview and move — sharing-boundaries phase 5), + 2 readiness and my account (phase 4), + 2 turn on for me (read, set — sharing-boundaries phase 3), + 1 read a chat without opening it, + 2 own notices (list, mark read), + 2 ask a reviewer to approve / withdraw (sharing-boundaries), + 5 personal actions (mine, mine actions, mine pack, mine call off, personal-use), + 4 declared API calls (list, declare, pack, switch off), + 3 restricted workspaces (restrict, list and end emergency access), + PUT flows/:flowId/owner (rbac-observability), + 7 connector routes (plugins), + 2 sign-in routes (start, callback), + 1 confirm-a-proposed-change, + 1 clear a chat's chosen connection, + 2 a workflow's run-as (read, change), + 3 a workflow's visibility, switch on, switch off (plugins phase 9)
+    expect(byKind.platform).toBe(37); // −5 runtime-model routes → identity (personal BYOK); prior 42: − PUT and DELETE /api/generation/llm/provider (one model connection, 2026-11-04); − the 10 /api/ops routes, + the 5 runtime-model routes (ops-api retired 2026-10-30), + the People list (admin simplify phase 3), + start emergency access (restricted workspaces), + the deployment-wide observability summary (P-OBS), + model pricing, + spend by model, + the access grid, + 6 connector install routes, + 3 OAuth app routes
+    expect(byKind.identity).toBe(27); // +5 runtime-model (personal BYOK); prior 22: + GET /api/reports/forecast (the report dashboard, PR 1542; same per-workspace check as /runs); − GET /api/generation/llm/provider, POST …/llm/models, POST …/llm/test (2026-11-04); + the four cost-report routes (2026-10-26), + the four invitation routes (admin simplify phase 2)
+    expect(EXEMPT.size).toBe(39); // +10 edge public + Forge edge (personal thin); prior 29 included llm/web/forge fetch
+    expect(routes.length).toBe(351); // +3 Forge edge tools (devices/enqueue/job); edge workspace/public were already mounted
   });
 });
 
@@ -383,7 +383,7 @@ describe("T027: the declared guard is actually mounted", () => {
     // parent key, after which every flow died at `begin` with no `flow_executions` row.
     // This is the assertion that would catch that shape returning.
     const exemptMounted = routes.filter((r) => EXEMPT.has(routeKey(r.method, r.path)));
-    expect(exemptMounted.length).toBe(29); // + llm_complete's endpoint (2026-10-30), + web_fetch's endpoint and Forge's build-time fetch (2026-10-30), + Forge's connector actions list and setting proposal (2026-10-28), + Forge's connector propose tool (plugins phase 6), + Forge's connector tool (plugins), + the runner's step-result and pause callbacks, a step's saved files, its workspace files (execution token), and Forge's data and file tools (its conversation key)
+    expect(exemptMounted.length).toBe(39); // +10 edge setup/pair/claim + Forge edge tools (personal thin); prior 29 as above
     for (const r of exemptMounted) {
       expect(r.rbac, `${routeKey(r.method, r.path)} is exempt but carries a guard`).toBeUndefined();
     }

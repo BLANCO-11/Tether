@@ -305,10 +305,9 @@ export function Sidebar({
     () => (PERSONAL_PRODUCT && workspaceId ? listEdgePending() : Promise.resolve({ jobs: [], connects: [] })),
     [workspaceId, epoch],
   );
+  // Edge *jobs* approve in chat; Needs you only counts connect requests (+ flow approvals).
   const pendingCount =
-    (!approvalsError ? (pendingApprovals?.length ?? 0) : 0) +
-    (edgePending.data?.jobs.length ?? 0) +
-    (edgePending.data?.connects.length ?? 0);
+    (!approvalsError ? (pendingApprovals?.length ?? 0) : 0) + (edgePending.data?.connects.length ?? 0);
 
   /* ⚠ An unreadable access check leaves the Admin row HIDDEN — see the comment at the group filter below. */
   const isVisible = (i: NavItem) =>
