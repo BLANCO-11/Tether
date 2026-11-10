@@ -402,7 +402,7 @@ export const flowRunnerService = {
   }): Promise<{ flowExecutionId: string; revision: number }> {
     const flow = await flowRepo.get(input.workspaceId, input.flowId);
     if (!flow) throw new FlowRunnerError("flow not found", 404);
-    if (flow.runtime !== "foundry") throw new FlowRunnerError("only a workflow built with Forge runs on Foundry's runner", 409);
+    if (flow.runtime !== "foundry") throw new FlowRunnerError("only a workflow built with Forge runs on Tether's runner", 409);
     const { flowApprovalService } = await import("./flow-approval.service.js");
     const revision = await flowApprovalService.assertMayRunLive(input.workspaceId, flow);
     const row = await flowRepo.getRevision(flow.id, revision);
@@ -647,7 +647,7 @@ export const flowRunnerService = {
     const row = await flowExecutionRepo.get(flowExecutionId);
     if (!row) throw new FlowRunnerError("run not found", 404);
     if (!row.kestraExecutionId.startsWith(RUNNER_EXECUTION_PREFIX)) {
-      throw new FlowRunnerError("this run is not on Foundry's runner", 409);
+      throw new FlowRunnerError("this run is not on Tether's runner", 409);
     }
     if (row.status !== "running" && row.status !== "waiting") {
       return { cancelled: false, status: row.status };

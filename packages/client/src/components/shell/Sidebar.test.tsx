@@ -27,12 +27,13 @@ beforeEach(() => {
 });
 afterEach(cleanup);
 
-const me = (superAdmin: boolean, canViewReports = false) => ({
+const me = (superAdmin: boolean, canViewReports = false, userAdmin?: boolean) => ({
   subject: "oid-x",
   email: "x@x.test",
   superAdmin,
   superAdminConfigured: true,
   canViewReports,
+  userAdmin,
 });
 
 describe("Sidebar — personal fork thins enterprise Admin", () => {
@@ -47,6 +48,21 @@ describe("Sidebar — personal fork thins enterprise Admin", () => {
     vi.mocked(api.getMe).mockResolvedValue(me(false));
     render(<Sidebar />);
     await waitFor(() => expect(screen.getByText("AI models")).toBeTruthy());
+  });
+});
+
+describe("Sidebar — Users link", () => {
+  it("shows Users to a user admin", async () => {
+    vi.mocked(api.getMe).mockResolvedValue(me(false, false, true));
+    render(<Sidebar />);
+    await waitFor(() => expect(document.querySelector('a[href="/admin/users"]')).toBeTruthy());
+  });
+
+  it.each([false, undefined])("hides Users when userAdmin is %s", async (ua) => {
+    vi.mocked(api.getMe).mockResolvedValue(me(false, false, ua));
+    render(<Sidebar />);
+    await waitFor(() => expect(screen.getByText("Workflows")).toBeTruthy());
+    expect(document.querySelector('a[href="/admin/users"]')).toBeNull();
   });
 });
 

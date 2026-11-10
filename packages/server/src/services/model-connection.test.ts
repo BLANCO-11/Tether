@@ -12,6 +12,11 @@ describe("last resolved model connection", () => {
     rememberModelConnection({ baseUrl: "https://a/v1", apiKey: "k" });
     expect(lastModelConnection()).toEqual({ baseUrl: "https://a/v1", apiKey: "k" });
   });
+
+  it("keeps the provider id when one is remembered", () => {
+    rememberModelConnection({ baseUrl: "https://a/v1", apiKey: "k", providerId: "opencode_go" });
+    expect(lastModelConnection()).toEqual({ baseUrl: "https://a/v1", apiKey: "k", providerId: "opencode_go" });
+  });
 });
 
 describe("mergeModelLists", () => {

@@ -136,7 +136,7 @@
 
   /* ── Alpha-stage chrome. Deliberately NOT --warn (D-86) ───────────────────
      `--warn` already means "this automation needs your attention". The alpha
-     notice means "this part of Foundry is unfinished". One hue for both makes a
+     notice means "this part of Tether is unfinished". One hue for both makes a
      permanent product disclaimer and a live incident look identical — and since
      the disclaimer is on every page, it is the incident that stops being read. */
   --alpha: var(--mauve); /* unfinished / pending — character mauve */

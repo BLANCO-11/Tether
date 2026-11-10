@@ -125,8 +125,8 @@ export const edgeDeviceService = {
     const base = apiBase.replace(/\/+$/, "");
     const safeLabel = label.replace(/'/g, "'\\''");
     return `#!/usr/bin/env bash
-# Foundry edge setup for "${label.replace(/"/g, "")}"
-# Only human step: Approve in Foundry → Devices (or Needs you). Then this script finishes and starts the agent.
+# Tether edge setup for "${label.replace(/"/g, "")}"
+# Only human step: Approve in Tether → Devices (or Needs you). Then this script finishes and starts the agent.
 set -euo pipefail
 command -v node >/dev/null 2>&1 || { echo "Node.js is required (node not found on PATH)." >&2; exit 1; }
 command -v curl >/dev/null 2>&1 || { echo "curl is required." >&2; exit 1; }
@@ -137,8 +137,8 @@ mkdir -p "$DIR"
 chmod 700 "$DIR"
 curl -fsSL "$BASE/api/edge/agent.mjs" -o "$DIR/edge-agent.mjs"
 chmod 700 "$DIR/edge-agent.mjs"
-echo ">>> Opening Foundry connect for '${safeLabel}'."
-echo ">>> When prompted, Approve once in Foundry → Devices (or Needs you)."
+echo ">>> Opening Tether connect for '${safeLabel}'."
+echo ">>> When prompted, Approve once in Tether → Devices (or Needs you)."
 exec node "$DIR/edge-agent.mjs" setup --token "$TOKEN" --url "$BASE" --name '${safeLabel}'
 `;
   },
@@ -147,9 +147,9 @@ exec node "$DIR/edge-agent.mjs" setup --token "$TOKEN" --url "$BASE" --name '${s
   setupInstructions(apiBase: string, setupToken: string, label: string): string {
     const base = apiBase.replace(/\/+$/, "");
     const sh = `${base}/api/edge/setup?t=${encodeURIComponent(setupToken)}&fmt=sh`;
-    return `# Foundry edge agent setup
+    return `# Tether edge agent setup
 
-Connect **${label}** to Foundry. You do the work; the person only Approves once in the app.
+Connect **${label}** to Tether. You do the work; the person only Approves once in the app.
 
 ## Do this (one command)
 
@@ -157,11 +157,11 @@ Connect **${label}** to Foundry. You do the work; the person only Approves once 
 curl -fsSL '${sh}' | bash
 \`\`\`
 
-That registers this host, waits until the Foundry user Approves in **Devices** or **Needs you**, saves the credential under \`~/.foundry-edge/\`, and **starts the agent loop**. Do not ask them for further shell steps after Approve.
+That registers this host, waits until the Tether user Approves in **Devices** or **Needs you**, saves the credential under \`~/.foundry-edge/\`, and **starts the agent loop**. Do not ask them for further shell steps after Approve.
 
-While waiting, tell them once: **Open Foundry → Devices (or Needs you) and Approve “${label.replace(/"/g, "")}”.** Then keep the command running.
+While waiting, tell them once: **Open Tether → Devices (or Needs you) and Approve “${label.replace(/"/g, "")}”.** Then keep the command running.
 
-## If you already have the Foundry repo on this machine
+## If you already have the Tether repo on this machine
 
 \`\`\`bash
 node scripts/edge-agent.mjs setup --token '${setupToken}' --url '${base}' --name '${label.replace(/'/g, "")}'
@@ -170,7 +170,7 @@ node scripts/edge-agent.mjs setup --token '${setupToken}' --url '${base}' --name
 Same behaviour (auto-starts the poll loop after Approve). Use \`--setup-only\` only if you must not start polling yet.
 
 ## Notes
-- \`run_command\` / \`write_path\` jobs still need a separate Approve in Foundry when queued from chat or Devices.
+- \`run_command\` / \`write_path\` jobs still need a separate Approve in Tether when queued from chat or Devices.
 - Keep the agent process running (terminal, tmux, or LaunchAgent) so chat can reach this computer.
 `;
   },
@@ -314,7 +314,7 @@ Same behaviour (auto-starts the poll loop after Approve). Use \`--setup-only\` o
 
   async completePairing(pairingCode: string, name?: string): Promise<{ deviceId: string; workspaceId: string; token: string; name: string }> {
     const code = pairingCode.replace(/\s+/g, "").trim();
-    if (!/^\d{6}$/.test(code)) throw httpErr("Enter the 6-digit code from Foundry.", 400);
+    if (!/^\d{6}$/.test(code)) throw httpErr("Enter the 6-digit code from Tether.", 400);
     const [row] = await db
       .select()
       .from(edgeDevices)
@@ -322,7 +322,7 @@ Same behaviour (auto-starts the poll loop after Approve). Use \`--setup-only\` o
       .limit(1);
     if (!row) throw httpErr("That code is wrong or already used.", 404);
     if (!row.pairingExpiresAt || row.pairingExpiresAt.getTime() < Date.now()) {
-      throw httpErr("That code has expired. Start pairing again in Foundry.", 410);
+      throw httpErr("That code has expired. Start pairing again in Tether.", 410);
     }
     const token = mintDeviceToken();
     const label = name?.replace(/\s+/g, " ").trim();

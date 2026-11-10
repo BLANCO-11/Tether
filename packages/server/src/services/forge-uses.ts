@@ -77,7 +77,7 @@ export function useRefusal(workflow: PiBundle["workflow"] | undefined, use: Step
     }
     return `the workflow declares no read that is "${use.ref}"${use.sql !== undefined ? " with this statement" : ""}`;
   }
-  return `a Forge workflow's steps reach Foundry only through foundry.read, foundry.call and foundry.file — not ${use.what}`;
+  return `a Forge workflow's steps reach Tether only through foundry.read, foundry.call and foundry.file — not ${use.what}`;
 }
 
 /**

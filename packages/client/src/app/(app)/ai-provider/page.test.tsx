@@ -35,6 +35,15 @@ const presets = [
     blurb: "Use this for Anthropic/Claude models.",
   },
   {
+    id: "opencode_go" as const,
+    label: "OpenCode Go",
+    baseUrl: "https://opencode.ai/inference/go/openai/v1",
+    modelsUrl: "https://opencode.ai/inference/go/v1/models",
+    baseUrlEditable: false,
+    keyHint: "OpenCode API key (Go subscription)",
+    blurb: "Models included in your OpenCode Go subscription.",
+  },
+  {
     id: "custom" as const,
     label: "Custom gateway",
     baseUrl: "",
@@ -103,6 +112,39 @@ describe("AI connection (personal BYOK)", () => {
     expect((screen.getByDisplayValue("https://openrouter.ai/api/v1") as HTMLInputElement).value).toBe(
       "https://openrouter.ai/api/v1",
     );
+  });
+
+  it("picking OpenCode Go fills its URL and locks it", async () => {
+    render(<Page />);
+    await screen.findByRole("button", { name: "Save" });
+    fireEvent.click(screen.getByRole("button", { name: /OpenAI/ }));
+    fireEvent.click(screen.getByRole("option", { name: /OpenCode Go/ }));
+    const input = screen.getByDisplayValue("https://opencode.ai/inference/go/openai/v1") as HTMLInputElement;
+    expect(input.disabled).toBe(true);
+  });
+
+  it("Test connection probes OpenCode Go", async () => {
+    api.llmTest.mockResolvedValue({ ok: true, model: "gpt-a", text: "OK", latencyMs: 5, promptTokens: 1, completionTokens: 1 });
+    render(<Page />);
+    await screen.findByRole("button", { name: "Save" });
+    fireEvent.click(screen.getByRole("button", { name: /OpenAI/ }));
+    fireEvent.click(screen.getByRole("option", { name: /OpenCode Go/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Test connection" }));
+    await waitFor(() =>
+      expect(api.llmTest).toHaveBeenCalledWith(
+        expect.objectContaining({ providerId: "opencode_go", baseUrl: "https://opencode.ai/inference/go/openai/v1" }),
+      ),
+    );
+  });
+
+  it("switching from OpenCode Go to Custom clears the URL", async () => {
+    render(<Page />);
+    await screen.findByRole("button", { name: "Save" });
+    fireEvent.click(screen.getByRole("button", { name: /OpenAI/ }));
+    fireEvent.click(screen.getByRole("option", { name: /OpenCode Go/ }));
+    fireEvent.click(screen.getByRole("button", { name: /OpenCode Go/ }));
+    fireEvent.click(screen.getByRole("option", { name: /Custom gateway/ }));
+    expect(screen.queryByDisplayValue("https://opencode.ai/inference/go/openai/v1")).toBeNull();
   });
 
   it("Save sends providerId with the list and default", async () => {

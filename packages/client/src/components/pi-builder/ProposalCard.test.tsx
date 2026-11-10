@@ -232,7 +232,7 @@ describe("plugin relay from a device", () => {
       />,
     );
     expect(screen.getByText(/MacBook ·/)).toBeTruthy();
-    expect(screen.getByText(/Requested from MacBook through Foundry/)).toBeTruthy();
+    expect(screen.getByText(/Requested from MacBook through Tether/)).toBeTruthy();
   });
 });
 

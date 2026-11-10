@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { config } from "../config/index.js";
 import { rememberModelConnection } from "../services/model-connection.js";
-import { forgeEnv, forgeGateway, rebaseForgeSession } from "./pi-runner.js";
+import { forgeEnv, forgeGateway, forgeOpenCodeEnv, rebaseForgeSession } from "./pi-runner.js";
 
 const OLD = "/repo/packages/server/.pi-sandboxes/ws/old-session/sandbox";
 const NEW = "/repo/packages/server/.pi-sandboxes/ws/new-session/sandbox";
@@ -42,7 +42,7 @@ describe("forgeEnv", () => {
     DATABASE_URL: "postgres://x",
     CREDENTIAL_ENC_KEY: "c",
     RUNTIME_JWT_SECRET: "j",
-    MAIL_GRAPH_CLIENT_SECRET_VALUE: "m",
+    SMTP_PASS: "m",
     LOCAL_ADMIN_PASSWORD: "p",
     LLM_API_KEY: "l",
     SOMETHING_ADDED_LATER: "s",
@@ -69,5 +69,26 @@ describe("forgeGateway (2026-11-04) — the one model connection's gateway", () 
   it("is the last resolved connection once one is remembered", () => {
     rememberModelConnection({ baseUrl: "https://gw2.example/v1", apiKey: "k2" });
     expect(forgeGateway()).toEqual({ LITELLM_BASE_URL: "https://gw2.example", LITELLM_API_KEY: "k2" });
+  });
+});
+
+describe("forgeOpenCodeEnv — OpenCode's session headers via the tether-gateway extension", () => {
+  it("Go: switches to the extension provider with the session header", () => {
+    const url = "https://opencode.ai/inference/go/openai/v1";
+    rememberModelConnection({ baseUrl: url, apiKey: "k", providerId: "opencode_go" });
+    const env = forgeOpenCodeEnv("sess-1");
+    expect(env.PI_PROVIDER).toBe("tether-gateway");
+    expect(env.PI_GATEWAY_BASE_URL).toBe(url);
+    expect(JSON.parse(env.PI_GATEWAY_HEADERS)).toEqual({ "x-opencode-session": "sess-1", "User-Agent": "Tether/1.0" });
+  });
+
+  it("Zen: only the User-Agent", () => {
+    rememberModelConnection({ baseUrl: "https://opencode.ai/zen/v1", apiKey: "k", providerId: "opencode_zen" });
+    expect(JSON.parse(forgeOpenCodeEnv("sess-1").PI_GATEWAY_HEADERS)).toEqual({ "User-Agent": "Tether/1.0" });
+  });
+
+  it("a custom gateway gets nothing", () => {
+    rememberModelConnection({ baseUrl: "https://gw2.example/v1", apiKey: "k", providerId: "custom" });
+    expect(forgeOpenCodeEnv("sess-1")).toEqual({});
   });
 });

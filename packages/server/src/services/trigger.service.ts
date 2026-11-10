@@ -643,7 +643,7 @@ export const triggerService = {
     if (retired) throw conflict(retired);
     if (!FLOW_TRIGGER_TYPES.has(input.type)) {
       throw conflict(
-        `a flow cannot have a "${input.type}" trigger in Foundry — Kestra owns schedules from ` +
+        `a flow cannot have a "${input.type}" trigger in Tether — Kestra owns schedules from ` +
           "§5.4 on. Put the cron on the flow model and approve a revision; approval deploys the " +
           "Schedule trigger and revoking removes it.",
       );

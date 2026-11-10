@@ -41,7 +41,7 @@ export function ConsumerTopbar() {
           style={{ background: "var(--grad)" }}
           aria-hidden
         />
-        <span className="text-sm font-semibold tracking-tight text-text">Foundry</span>
+        <span className="text-sm font-semibold tracking-tight text-text">Tether</span>
       </div>
 
       <div className="ml-auto flex shrink-0 items-center gap-1">

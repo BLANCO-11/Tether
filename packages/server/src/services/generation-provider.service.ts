@@ -18,6 +18,8 @@ export interface ResolvedGenerationProvider {
   source: "configured" | "environment";
   updatedAt: Date | null;
   updatedBy: string | null;
+  /** Preset id of the connection (decides gateway headers). */
+  providerId?: string;
   /** The connection's enabled-model list. */
   allowedModels: string[];
 }
@@ -32,6 +34,7 @@ export async function resolveGenerationProvider(subject?: string | null): Promis
     updatedAt: c.updatedAt ? new Date(c.updatedAt) : null,
     updatedBy: c.updatedBy,
     allowedModels: c.allowedModels,
+    providerId: c.providerId ?? config.inference.provider,
   };
 }
 

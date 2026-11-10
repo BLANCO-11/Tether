@@ -286,9 +286,11 @@ function ModelSettings({ p, reload }: { p: FALlmProvider; reload: () => void }) 
   }, [p]);
 
   const pickPreset = (id: string) => {
+    const prev = presets.find((x) => x.id === providerId);
     setProviderId(id);
     const next = presets.find((x) => x.id === id);
     if (next && !next.baseUrlEditable && next.baseUrl) setBaseUrl(next.baseUrl);
+    else if (next?.baseUrlEditable && prev && !prev.baseUrlEditable) setBaseUrl(next.id === p.providerId ? p.baseUrl : "");
     else if (next?.id === "custom" && !p.configured) setBaseUrl("");
     setDiscovered(null);
     setCaveat(null);

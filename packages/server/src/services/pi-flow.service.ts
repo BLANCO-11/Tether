@@ -185,7 +185,7 @@ export function forgeScheduleRefusal(model: PiRevisionModel): string | null {
 export function refuseFoundryRuntime(flow: { runtime: string; name: string }, action: string): void {
   if (flow.runtime !== FOUNDRY_RUNTIME) return;
   throw Object.assign(
-    new Error(`“${flow.name}” is built with Forge and runs on Foundry's runner — ${action} is not available for it yet. Test it from its builder.`),
+    new Error(`“${flow.name}” is built with Forge and runs on Tether's runner — ${action} is not available for it yet. Test it from its builder.`),
     { statusCode: 409 },
   );
 }

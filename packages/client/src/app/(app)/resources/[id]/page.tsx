@@ -421,7 +421,7 @@ export default function ResourceDetailPage() {
                   <AssetTree nodes={metadata ?? []} />
                 ) : gConn.status === "error" ? (
                   <p className="p-3 text-sm text-muted">
-                    Foundry couldn&apos;t read this resource&apos;s schema — fix the connection, then re-scan.
+                    Tether couldn&apos;t read this resource&apos;s schema — fix the connection, then re-scan.
                   </p>
                 ) : (
                   <p className="p-3 text-sm text-muted">

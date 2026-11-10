@@ -3,6 +3,7 @@ import { copyFileSync, mkdirSync } from "node:fs";
 import { connect } from "node:net";
 import { join } from "node:path";
 import { config } from "../config/index.js";
+import { gatewayHeaders } from "../services/llm-gateway-headers.js";
 import { lastModelConnection } from "../services/model-connection.js";
 import { resolvePiBin, TEMPLATE_ROOT } from "./paths.js";
 import { sandboxDir, sessionRoot } from "./sandbox-fs.js";
@@ -23,6 +24,21 @@ export type TurnEnd = {
 
 export function piModel(): string {
   return (process.env.PI_MODEL || config.inference.model || "gpt-6-luna").replace(/^.*\//, "");
+}
+
+/**
+ * Env that makes pi send OpenCode's session headers. pi 0.74.2 predates its own OpenCode fix and its `litellm` provider
+ * cannot send custom headers, so for OpenCode connections the tether-gateway.js extension registers the gateway as a
+ * provider with them (PI_PROVIDER switches to it). The session key is the Forge session id: stable for the whole
+ * conversation and across process restarts. `{}` for every other gateway, which stays on litellm.
+ */
+export function forgeOpenCodeEnv(sessionId: string): Record<string, string> {
+  const c = lastModelConnection();
+  const baseUrl = (c?.baseUrl || config.inference.baseUrl).replace(/\/+$/, "");
+  const providerId = c?.baseUrl ? c.providerId : config.inference.provider;
+  const headers = gatewayHeaders({ providerId, baseUrl }, sessionId);
+  if (Object.keys(headers).length === 0) return {};
+  return { PI_PROVIDER: "tether-gateway", PI_GATEWAY_BASE_URL: baseUrl, PI_GATEWAY_HEADERS: JSON.stringify(headers) };
 }
 
 /**
@@ -137,7 +153,7 @@ export class ForgeProcess {
     // The extensions come from the server's template every time (the conversation's copies are Forge's to change).
     const ext = join(root, "pi-extensions");
     mkdirSync(ext, { recursive: true });
-    for (const f of ["luna-tools-compat.js", "image-budget.js", "bash-timeout.js"]) copyFileSync(join(TEMPLATE_ROOT, "pi-extensions", f), join(ext, f));
+    for (const f of ["luna-tools-compat.js", "image-budget.js", "bash-timeout.js", "tether-gateway.js"]) copyFileSync(join(TEMPLATE_ROOT, "pi-extensions", f), join(ext, f));
     const ai = {
       ...forgeGateway(),
       // Offline needs ~/.pi/agent/litellm-models.json keyed to the API-key fingerprint; a fresh container has none.
@@ -146,6 +162,7 @@ export class ForgeProcess {
       PI_MODEL: model,
       // Read by luna-tools-compat.js, which sets the request's reasoning_effort from it. `PI_` so the forge host passes it on.
       PI_FORGE_REASONING_EFFORT: opts.effort ?? "none",
+      ...forgeOpenCodeEnv(opts.sessionId),
     };
     const args = [
       "--mode",
@@ -160,6 +177,8 @@ export class ForgeProcess {
       join(ext, "image-budget.js"),
       "-e",
       join(ext, "bash-timeout.js"),
+      "-e",
+      join(ext, "tether-gateway.js"),
       "--provider",
       ai.PI_PROVIDER,
       "--model",

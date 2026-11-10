@@ -75,7 +75,7 @@ export function retentionCoupling(days = retentionDays()): string {
   return (
     `Executions are retained for ${days} days, and that IS the replay window — ` +
     `KESTRA_RETENTION_DAYS is one number with both meanings. Replay needs the engine's copy ` +
-    `of the upstream step outputs and Foundry keeps the pointer, not the data, so shortening ` +
+    `of the upstream step outputs and Tether keeps the pointer, not the data, so shortening ` +
     `retention shortens how far back a run can be replayed.`
   );
 }

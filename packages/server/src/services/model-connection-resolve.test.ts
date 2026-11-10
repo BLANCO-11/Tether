@@ -53,7 +53,13 @@ describe("resolveModelConnection", () => {
     expect(c.apiKey).toBe("dec:x");
     expect(c.providerId).toBe("openai");
     expect(c.updatedBy).toBe("a@b.example");
-    expect(lastModelConnection()).toEqual({ baseUrl: "https://gw2.example/v1", apiKey: "dec:x" });
+    expect(lastModelConnection()).toEqual({ baseUrl: "https://gw2.example/v1", apiKey: "dec:x", providerId: "openai" });
+  });
+
+  it("(b2) maps the legacy opencode preset to opencode_zen", async () => {
+    limit.mockResolvedValue([{ ...row, providerId: "opencode" }]);
+    const c = await resolveModelConnection(SUBJECT);
+    expect(c.providerId).toBe("opencode_zen");
   });
 
   it("(c) interactive subject with no row is empty (does not fall back to env)", async () => {

@@ -485,7 +485,7 @@ const GROUPS = [
   { key: "reads", title: "Reads", note: "Looks things up; changes nothing." },
   { key: "changes", title: "Changes data", note: "Creates or updates. A test run records the call and does not perform it." },
   { key: "deletes", title: "Deletes data", note: "Removes data. Never used from a Forge chat." },
-  { key: "unavailable", title: "Not offered", note: "Foundry cannot run these yet, or will not." },
+  { key: "unavailable", title: "Not offered", note: "Tether cannot run these yet, or will not." },
 ] as const;
 type GroupKey = (typeof GROUPS)[number]["key"];
 function groupOf(a: ConnectorAction): GroupKey {
@@ -1007,7 +1007,7 @@ function SignInDialog({
         }}
       >
         <p className="text-muted">
-          You will be sent to {p.displayName} to sign in and approve access, then brought back here. Foundry stores the
+          You will be sent to {p.displayName} to sign in and approve access, then brought back here. Tether stores the
           access it is given, encrypted; nobody types or sees a token.
         </p>
         {!again && (
@@ -1094,7 +1094,7 @@ function OauthAppPanel({ short, name, onChange }: { short: string; name: string;
         <StatusPill status={app.configured ? "ok" : "warn"}>{app.configured ? "Set up" : "Not set up"}</StatusPill>
       </div>
       <p className="text-xs text-muted">
-        {name} sends people back to Foundry only at an address registered with it. Register an OAuth app with {name} once
+        {name} sends people back to Tether only at an address registered with it. Register an OAuth app with {name} once
         {app.newAppUrl ? (
           <>
             {" "}
@@ -1124,7 +1124,7 @@ function OauthAppPanel({ short, name, onChange }: { short: string; name: string;
       {app.signInAppOffered && (
         <label className="flex items-start gap-2 text-xs">
           <input type="checkbox" checked={signInApp} onChange={(e) => setSignInApp(e.target.checked)} />
-          <span>Use Foundry&rsquo;s own Microsoft sign-in app — no second app to register; add this return address and the permissions below to it.</span>
+          <span>Use Tether&rsquo;s own Microsoft sign-in app — no second app to register; add this return address and the permissions below to it.</span>
         </label>
       )}
       {!signInApp && (

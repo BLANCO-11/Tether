@@ -232,7 +232,7 @@ export default function ToolsPage() {
             tone="warn"
             title={`${undocumented} ${undocumented === 1 ? "tool has" : "tools have"} a parameter with no description`}
           >
-            Foundry reads these when it designs a flow — an undescribed parameter is one it has to
+            Tether reads these when it designs a flow — an undescribed parameter is one it has to
             guess at. Expand a row below to see which.
           </Notice>
         )}
@@ -469,7 +469,7 @@ function toolRow(
           {platformManaged && (
             <span
               className="shrink-0 rounded border border-border px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted"
-              title="Foundry registers and maintains this tool. Run `mail:register` to restore or refresh it."
+              title="Tether registers and maintains this tool. Run `mail:register` to restore or refresh it."
             >
               Platform
             </span>
@@ -500,7 +500,7 @@ function toolRow(
             {params.map((p) => (
               <span
                 key={p.name}
-                title={p.description?.trim() || "No description — Foundry has to guess what this means."}
+                title={p.description?.trim() || "No description — Tether has to guess what this means."}
                 className={
                   "rounded border px-2 py-0.5 font-mono text-caption " +
                   (p.description?.trim()
@@ -529,7 +529,7 @@ function toolRow(
         // ⚠ Not disabled buttons — absent ones. A disabled control invites a
         // hover-and-wonder; the text says which rule applies and what to run.
         <div className="flex items-center justify-end gap-2">
-          <span className="text-xs text-dim">Managed by Foundry</span>
+          <span className="text-xs text-dim">Managed by Tether</span>
         </div>
       ) : (
         <div className="flex items-center justify-end gap-2">
@@ -545,7 +545,7 @@ function toolRow(
         {/* ⚠ The description IN FULL, and it is the first thing here. The row
             above shows one truncated line; this is where the rest of it lives,
             and without it a long description is a fact the page holds and never
-            shows anybody. It is also the text Foundry sends to the drafter
+            shows anybody. It is also the text Tether sends to the drafter
             verbatim, so it is worth reading in full at least once. */}
         <div className="mb-3">
           <span className="mb-1 block text-micro uppercase tracking-label text-dim">
@@ -555,7 +555,7 @@ function toolRow(
             <p className="whitespace-pre-wrap text-xs text-muted">{tool.description}</p>
           ) : (
             <p className="text-xs text-warn">
-              No description. Foundry has nothing to go on when deciding whether this tool fits a
+              No description. Tether has nothing to go on when deciding whether this tool fits a
               goal, so it will either be skipped or called wrongly.
             </p>
           )}
@@ -571,7 +571,7 @@ function toolRow(
               {params.map((p) => (
                 <span
                   key={p.name}
-                  title={p.description?.trim() || "No description — Foundry has to guess what this means."}
+                  title={p.description?.trim() || "No description — Tether has to guess what this means."}
                   className={
                     "rounded border px-2 py-0.5 font-mono text-caption " +
                     (p.description?.trim()
@@ -611,7 +611,7 @@ function toolRow(
             {tool.lastProbe ? markLine(tool.lastProbe, now) : null}
           </span>
           {/* ⚠ Absent for a platform-managed tool, matching the row's Edit and
-              Remove controls — Foundry maintains those and a test from here
+              Remove controls — Tether maintains those and a test from here
               answers a question about the probe rather than about the tool. */}
           {!platformManaged && (
             <Button
@@ -1009,7 +1009,7 @@ function ToolFormModal({ tool, onClose, onSaved }: {
         <div className="rounded-xl border border-line/60 bg-surface p-4 shadow-sm transition-colors duration-150">
           <div className="mb-2 text-[13px] font-medium text-text">How it signs in</div>
           <p className="mb-3 text-xs text-muted">
-            Foundry stores the value once, under a name, and presents it the way you choose here.
+            Tether stores the value once, under a name, and presents it the way you choose here.
             A tool that presents nothing gets whatever the endpoint gives an anonymous caller —
             usually a 401 in the middle of a run.
           </p>
@@ -1056,7 +1056,7 @@ function ToolFormModal({ tool, onClose, onSaved }: {
                   picker above belongs to the styles that present one stored
                   value, which is why it is not rendered here. */}
               <div className="space-y-3">
-                <Field label="Token URL" hint="The OAuth2 token endpoint Foundry calls with the client credentials.">
+                <Field label="Token URL" hint="The OAuth2 token endpoint Tether calls with the client credentials.">
                   <Input
                     value={tokenUrl}
                     aria-label="Token URL"
@@ -1205,7 +1205,7 @@ function ToolFormModal({ tool, onClose, onSaved }: {
             </span>
           </div>
         </div>
-        <Field label="API endpoint" hint="The full URL Foundry calls. Must start with http:// or https://.">
+        <Field label="API endpoint" hint="The full URL Tether calls. Must start with http:// or https://.">
           <Input value={endpoint} aria-label="API endpoint" onChange={(e) => setEndpoint(e.target.value)} placeholder="https://api.example.com/incidents" />
         </Field>
 
@@ -1278,7 +1278,7 @@ function ToolFormModal({ tool, onClose, onSaved }: {
         {endpoint.trim() !== "" && !endpointValid && (
           <p className="text-xs text-danger">
             Include the scheme — <code>https://api.example.com/incidents</code>, not a path on its
-            own. This is the address Foundry will call.
+            own. This is the address Tether will call.
           </p>
         )}
 
@@ -1380,7 +1380,7 @@ function ToolFormModal({ tool, onClose, onSaved }: {
               reason reads as a broken page. */}
           {!liveOffered && (
             <p className="mt-2 text-xs text-muted">
-              {name.trim()} is managed by Foundry, so it is never INVOKED from here
+              {name.trim()} is managed by Tether, so it is never INVOKED from here
               {modeRefused ? "." : " — this checks the host only."}
             </p>
           )}
@@ -1696,7 +1696,7 @@ function CurlPastePanel({ existingSecretNames, onRead, onSecretName }: {
         onClick={() => setOpen(true)}
         className="w-full rounded-md border border-dashed border-line px-3 py-2 text-left text-xs text-muted hover:border-accent hover:text-text focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
       >
-        Have a <code>curl</code> command for this endpoint? Paste it and Foundry fills in the URL,
+        Have a <code>curl</code> command for this endpoint? Paste it and Tether fills in the URL,
         the method, the parameters and how it signs in.
       </button>
     );

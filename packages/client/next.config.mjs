@@ -34,7 +34,8 @@ const nextConfig = {
       // Admin / org / incidents / reports stay in the tree for now but are not
       // product. See packages/client/src/lib/personal.ts.
       { source: "/admin", destination: "/dashboard", permanent: false },
-      { source: "/admin/:path*", destination: "/dashboard", permanent: false },
+      // /admin/users is the allowlist admin page: deliberately not redirected.
+      { source: "/admin/:path((?!users).*)", destination: "/dashboard", permanent: false },
       { source: "/organization", destination: "/dashboard", permanent: false },
       { source: "/organization/:path*", destination: "/dashboard", permanent: false },
       { source: "/incidents", destination: "/dashboard", permanent: false },

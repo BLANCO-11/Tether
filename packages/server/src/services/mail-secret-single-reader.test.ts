@@ -1,10 +1,10 @@
 /**
- * The Graph mail credential has exactly ONE reader.
+ * The SMTP mail credential has exactly ONE reader.
  * email-send-tool · SC-004 · plan.md Decision 2
  *
  * ── Why this is asserted by reading the source tree ──────────────────────────
  *
- * A second place that reads `MAIL_GRAPH_CLIENT_SECRET_VALUE` would work
+ * A second place that reads `SMTP_PASS` would work
  * perfectly, pass every other test in this repo, and report nothing. That is the
  * one-reader-per-secret shape (D-42) and the reason
  * `revision-author.test.ts` reads the tree for its own one-minter rule: some
@@ -57,31 +57,31 @@ const files = tsFilesUnder(SRC).map((full) => ({
   text: readFileSync(full, "utf8"),
 }));
 
-describe("SC-004 — one reader for the Graph mail secret", () => {
-  it("only mail.service.ts reads `config.mail.clientSecret`", () => {
+describe("SC-004 — one reader for the SMTP mail secret", () => {
+  it("only mail.service.ts reads `config.mail.pass`", () => {
     const readers = files
       .filter((f) => f.rel !== THIS_FILE)
-      .filter((f) => /config\.mail\.clientSecret/.test(f.text))
+      .filter((f) => /config\.mail\.pass/.test(f.text))
       .map((f) => f.rel)
       .sort();
 
     expect(readers).toEqual([THE_READER]);
   });
 
-  it("only config/index.ts reads `MAIL_GRAPH_CLIENT_SECRET_VALUE` from the environment", () => {
+  it("only config/index.ts reads `SMTP_PASS` from the environment", () => {
     // The env var itself has one read site too, and it is the config module —
     // every other consumer goes through `config.mail`. A direct `process.env`
     // read elsewhere would bypass the `missing[]` accounting that FR-008's
     // one-refusal-names-everything behaviour depends on.
     //
-    // ⚠ Matches the READ EXPRESSION (`process.env.MAIL_GRAPH_…`), not the name.
+    // ⚠ Matches the READ EXPRESSION (`process.env.SMTP_PASS`), not the name.
     // `mail.service.test.ts` legitimately names the variable in a `missing[]`
     // fixture, and a suite asserting on the wording of a refusal is not a second
     // place the credential can leak from. Matching the bare name would have made
     // this test fail on the test that proves FR-008 works.
     const readers = files
       .filter((f) => f.rel !== THIS_FILE)
-      .filter((f) => /process\.env\.MAIL_GRAPH_CLIENT_SECRET_VALUE|process\.env\[["']MAIL_GRAPH_CLIENT_SECRET_VALUE/.test(f.text))
+      .filter((f) => /process\.env\.SMTP_PASS|process\.env\[["']SMTP_PASS/.test(f.text))
       .map((f) => f.rel)
       .sort();
 
@@ -90,7 +90,7 @@ describe("SC-004 — one reader for the Graph mail secret", () => {
 
   it("the credential is not interpolated into a log or thrown message anywhere", () => {
     // A narrower, cheaper version of the same worry: even inside the one allowed
-    // reader, the secret must only ever be a form-body field.
+    // reader, the secret must only ever be the transport's auth field.
     const reader = files.find((f) => f.rel === THE_READER);
     expect(reader).toBeDefined();
 
@@ -102,13 +102,13 @@ describe("SC-004 — one reader for the Graph mail secret", () => {
       .filter((line) => !/^\s*(\/\/|\*|\/\*)/.test(line));
 
     const offending = codeLines
-      .filter((line) => /config\.mail\.clientSecret/.test(line))
+      .filter((line) => /config\.mail\.pass/.test(line))
       .filter((line) => /console\.|logger|throw |Error\(|JSON\.stringify|\$\{/.test(line));
     expect(offending).toEqual([]);
 
     // The positive control: the read site itself is still there, on a code line,
     // so this is an assertion about how it is used rather than an empty match.
-    expect(codeLines.filter((l) => /config\.mail\.clientSecret/.test(l))).toHaveLength(1);
+    expect(codeLines.filter((l) => /config\.mail\.pass/.test(l))).toHaveLength(1);
   });
 
   it("the positive control: the walk actually found the source tree", () => {

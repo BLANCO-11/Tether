@@ -178,7 +178,7 @@ export function NotificationBell() {
                   : // ⚠ Says WHAT it covers and SINCE WHEN. "No notifications" over
                     // a list that only starts when the page loads is a claim about
                     // the whole day.
-                    "Nothing has started or finished since you opened Foundry. Designs and runs show up here as they happen — including ones started by a schedule."}
+                    "Nothing has started or finished since you opened Tether. Designs and runs show up here as they happen — including ones started by a schedule."}
               </p>
             ) : (
               <ul>
@@ -221,7 +221,7 @@ export function NotificationBell() {
           {/* ⚠ Polled, and it says so. A "live" dot that is sometimes 20 seconds
               stale is a smaller lie told more often. */}
           <p className="border-t border-line px-4 py-2 text-caption text-dim">
-            {checkedAt ? `Checked at ${when(checkedAt)}` : "Not checked yet"} · Foundry looks every
+            {checkedAt ? `Checked at ${when(checkedAt)}` : "Not checked yet"} · Tether looks every
             few seconds while something is running, and less often when nothing is.
           </p>
         </div>

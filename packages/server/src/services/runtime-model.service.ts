@@ -13,7 +13,8 @@ import { runtimeModelProvider, userLlmProviders } from "../db/schema.js";
 import { PERSONAL_PRODUCT } from "../personal.js";
 import { decrypt, encrypt } from "../utils/encryptor.js";
 import { forgeReachability, rememberModelConnection } from "./model-connection.js";
-import { presetById, resolvePresetBaseUrl, type LlmProviderPresetId } from "./llm-provider-presets.js";
+import { modelsListUrl, normalizeProviderId, presetById, resolvePresetBaseUrl, type LlmProviderPresetId } from "./llm-provider-presets.js";
+import { gatewayHeaders } from "./llm-gateway-headers.js";
 
 export interface RuntimeProvider {
   baseUrl: string;
@@ -54,8 +55,9 @@ export function keyFingerprint(key: string): string {
 function fromEnv(): RuntimeProvider {
   const models = [...new Set(config.runtimeModel.fallbackModels)];
   return {
-    baseUrl: config.inference.baseUrl.replace(/\/+$/, ""),
+    baseUrl: (config.inference.baseUrl || (config.inference.provider !== "custom" ? presetById(config.inference.provider).baseUrl : "")).replace(/\/+$/, ""),
     apiKey: config.inference.apiKey,
+    providerId: config.inference.provider,
     defaultModel: models[0] ?? "",
     allowedModels: models,
     source: "env",
@@ -86,6 +88,7 @@ async function loadSingleton(): Promise<RuntimeProvider> {
     apiKey: row.apiKeyEnc ? decrypt(row.apiKeyEnc) : fromEnv().apiKey,
     defaultModel: row.defaultModel,
     allowedModels: Array.isArray(row.allowedModels) ? row.allowedModels : [],
+    providerId: normalizeProviderId(row.provider),
     source: "configured",
     updatedAt: row.updatedAt.toISOString(),
     updatedBy: row.updatedBy ?? null,
@@ -100,7 +103,7 @@ async function loadUserRow(subject: string): Promise<RuntimeProvider | null> {
     apiKey: row.apiKeyEnc ? decrypt(row.apiKeyEnc) : "",
     defaultModel: row.defaultModel,
     allowedModels: Array.isArray(row.allowedModels) ? row.allowedModels : [],
-    providerId: row.providerId,
+    providerId: normalizeProviderId(row.providerId),
     source: "configured",
     updatedAt: row.updatedAt.toISOString(),
     updatedBy: row.updatedBy ?? null,
@@ -151,14 +154,14 @@ export async function resolveModelConnection(subject?: string | null): Promise<M
   const key = PERSONAL_PRODUCT && subject ? `u:${subject}` : "singleton";
   const hit = cache.get(key);
   if (hit && Date.now() - hit.at < TTL_MS) {
-    rememberModelConnection({ baseUrl: hit.value.baseUrl, apiKey: hit.value.apiKey });
+    rememberModelConnection({ baseUrl: hit.value.baseUrl, apiKey: hit.value.apiKey, providerId: hit.value.providerId });
     return hit.value;
   }
   const value = await loadRuntimeProvider({
     subject,
     mode: PERSONAL_PRODUCT && subject ? "interactive" : "harness",
   });
-  rememberModelConnection({ baseUrl: value.baseUrl, apiKey: value.apiKey });
+  rememberModelConnection({ baseUrl: value.baseUrl, apiKey: value.apiKey, providerId: value.providerId });
   cache.set(key, { at: Date.now(), value });
   return value;
 }
@@ -211,7 +214,7 @@ export async function saveRuntimeProvider(
   by: string | null,
   subject?: string | null,
 ): Promise<RuntimeProvider> {
-  const providerId = (update.providerId?.trim() || "custom") as string;
+  const providerId = normalizeProviderId(update.providerId);
   const baseUrl = resolvePresetBaseUrl(providerId, update.baseUrl);
   if (!/^https?:\/\/.+/.test(baseUrl)) {
     throw new RuntimeModelError(
@@ -235,7 +238,7 @@ export async function saveRuntimeProvider(
     const key = update.apiKey?.trim() ?? current?.apiKey ?? "";
     if (!key) throw new RuntimeModelError(400, "bad_request", "Paste an API key to connect this provider.");
     const values = {
-      providerId: presetById(providerId).id,
+      providerId,
       baseUrl,
       apiKeyEnc: encrypt(key),
       defaultModel,
@@ -255,6 +258,7 @@ export async function saveRuntimeProvider(
   const key = update.apiKey?.trim() ?? current.apiKey;
   const values = {
     baseUrl,
+    provider: providerId,
     apiKeyEnc: key ? encrypt(key) : null,
     defaultModel,
     allowedModels,
@@ -279,7 +283,13 @@ export async function clearRuntimeProvider(subject?: string | null): Promise<Run
   return fromEnv();
 }
 
-async function providerFetch(p: RuntimeProvider, path: string, init: RequestInit, timeoutMs: number): Promise<Response> {
+async function providerFetch(
+  p: RuntimeProvider,
+  url: string,
+  init: RequestInit,
+  timeoutMs: number,
+  extraHeaders: Record<string, string>,
+): Promise<Response> {
   if (!p.baseUrl || !p.apiKey) {
     throw new RuntimeModelError(
       503,
@@ -290,10 +300,10 @@ async function providerFetch(p: RuntimeProvider, path: string, init: RequestInit
     );
   }
   try {
-    return await fetch(`${p.baseUrl}${path}`, {
+    return await fetch(url, {
       ...init,
       signal: AbortSignal.timeout(timeoutMs),
-      headers: { ...(init.headers ?? {}), authorization: `Bearer ${p.apiKey}` },
+      headers: { ...(init.headers ?? {}), ...extraHeaders, authorization: `Bearer ${p.apiKey}` },
     });
   } catch (e) {
     const name = (e as Error).name;
@@ -303,7 +313,7 @@ async function providerFetch(p: RuntimeProvider, path: string, init: RequestInit
 }
 
 export async function listModels(p: RuntimeProvider): Promise<string[]> {
-  const res = await providerFetch(p, "/models", { method: "GET" }, 20_000);
+  const res = await providerFetch(p, modelsListUrl(p.providerId, p.baseUrl), { method: "GET" }, 20_000, gatewayHeaders(p));
   if (!res.ok) {
     const text = await res.text().catch(() => "");
     throw new RuntimeModelError(res.status === 401 || res.status === 403 ? 401 : 502, "provider_rejected", `The model gateway answered ${res.status} listing models: ${text.slice(0, 300)}`);
@@ -328,12 +338,13 @@ export interface CompletionResult {
 const RUNTIME_TEMPERATURE = 1;
 const rejectsTemperature = (status: number, body: string) => status === 400 && /temperature/i.test(body);
 
-export async function complete(p: RuntimeProvider, opts: { model: string; system: string; user: string; maxTokens: number }): Promise<CompletionResult> {
+export async function complete(p: RuntimeProvider, opts: { model: string; system: string; user: string; maxTokens: number; sessionId?: string }): Promise<CompletionResult> {
   const startedAt = Date.now();
+  const extra = gatewayHeaders(p, opts.sessionId);
   const send = (withTemperature: boolean) =>
     providerFetch(
       p,
-      "/chat/completions",
+      `${p.baseUrl}/chat/completions`,
       {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -349,6 +360,7 @@ export async function complete(p: RuntimeProvider, opts: { model: string; system
         }),
       },
       config.runtimeModel.timeoutMs,
+      extra,
     );
   let res = await send(true);
   let text = await res.text();
@@ -389,10 +401,11 @@ export async function probeOf(
   subject?: string | null,
 ): Promise<RuntimeProvider> {
   const stored = await loadRuntimeProvider({ subject, mode: PERSONAL_PRODUCT ? "interactive" : "harness" });
-  const providerId = b.providerId ?? stored.providerId ?? "custom";
-  const baseUrl = b.baseUrl?.trim()
-    ? resolvePresetBaseUrl(providerId, b.baseUrl)
-    : stored.baseUrl;
+  const providerId = normalizeProviderId(b.providerId ?? stored.providerId);
+  const baseUrl =
+    b.baseUrl?.trim() || !presetById(providerId).baseUrlEditable
+      ? resolvePresetBaseUrl(providerId, b.baseUrl ?? "")
+      : stored.baseUrl;
   return {
     ...stored,
     providerId,

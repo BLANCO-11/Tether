@@ -1027,13 +1027,13 @@ export function buildPrompt(
       ? [
           "Do the job now. Never change workflow.json, GOAL.md or steps/: this chat's workflow is not yours to change here. A job that should repeat on its own is a workflow: say they can turn off the Forge Agent switch under the message box to build it.",
           ...(workflowRestored
-            ? ["Last turn changed this chat's workflow, so Foundry put it back as it was. Do not change it in this mode."]
+            ? ["Last turn changed this chat's workflow, so Tether put it back as it was. Do not change it in this mode."]
             : []),
         ]
       : [
           "Build only when the user describes an automation; answer questions about this chat's work in text. A one-off job unrelated to the workflow belongs to Forge Agent: say they can turn on the Forge Agent switch under the message box.",
         ]),
-    "You are Forge, Foundry's friendly assistant (see SYSTEM.md).",
+    "You are Forge, Tether's friendly assistant (see SYSTEM.md).",
     "Sandbox layout is already in SYSTEM.md. Do not ls/find/re-read GOAL, SYSTEM, questions, answers, context, or templates unless you need a specific detail.",
     "Chat/greetings: reply in text only; never open questions.json; never invent a goal from a greeting.",
     "Ask through questions.json only when something genuinely cannot be settled, including which file the person means (SYSTEM.md, Asking the person).",
@@ -3128,8 +3128,8 @@ export const piBuilderService = {
     return {
       job: { id: detail.id, status: detail.status, kind: detail.kind, needsApproval },
       message: needsApproval
-        ? "Queued. An Approve card is in this chat. Once they Approve, the job runs on their computer and Foundry continues this chat with the result automatically — do NOT ask them to say okay, and do NOT poll edge-job. Keep your reply short (one line that the card needs Approve)."
-        : "Queued in the background (job " + detail.id + "). Do NOT poll edge-job — finish a short reply. Foundry will continue this chat with the result when the edge agent finishes. Do not ask them to say okay.",
+        ? "Queued. An Approve card is in this chat. Once they Approve, the job runs on their computer and Tether continues this chat with the result automatically — do NOT ask them to say okay, and do NOT poll edge-job. Keep your reply short (one line that the card needs Approve)."
+        : "Queued in the background (job " + detail.id + "). Do NOT poll edge-job — finish a short reply. Tether will continue this chat with the result when the edge agent finishes. Do not ask them to say okay.",
     };
   },
 
@@ -3306,7 +3306,7 @@ function findSessionForEdgeJob(job: { id: string; sessionId: string | null; work
 
 /** Live Forge turn + personal product + talking subject → edge device owner. */
 function forgeEdgeCaller(token: string): { workspaceId: string; subject: string; session: Session } {
-  if (!PERSONAL_PRODUCT) throw httpErr("Edge devices are only available in personal Foundry.", 404);
+  if (!PERSONAL_PRODUCT) throw httpErr("Edge devices are only available in personal Tether.", 404);
   const sid = toolTokens.get(token);
   const s = sid ? sessions.get(sid) : undefined;
   if (!s) throw httpErr("This key does not belong to an open conversation.", 401);
@@ -3476,7 +3476,7 @@ function scheduleFlushEdgeContinues(s: Session): void {
 function edgeContinueBy(s: Session): { subject: string | null; name: string | null } | undefined {
   const t = talker(s);
   if (!t?.subject) return undefined;
-  return { subject: t.subject, name: t.email ?? "Foundry" };
+  return { subject: t.subject, name: t.email ?? "Tether" };
 }
 
 /**
@@ -3967,7 +3967,7 @@ export async function usePlugin(token: string, toolName: string, params: Record<
   if (r.captured) {
     const canPropose = s.mode === "agent" && (await changesAllowed(s.workspaceId)).ok;
     throw httpErr(
-      `"${toolName}" changes something outside Foundry, so it was not done. ` +
+      `"${toolName}" changes something outside Tether, so it was not done. ` +
         (canPropose
           ? `Propose it instead: node tools/propose-change.mjs ${toolName} '<the same params>' "<one line of what it does>" — the person confirms it on a card.`
           : "This workspace lets Forge read connected services, not change them. A super admin can allow confirmed changes in the workspace's settings; a workflow can also do it after approval."),

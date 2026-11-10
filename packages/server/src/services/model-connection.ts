@@ -73,14 +73,14 @@ export function forgeReachability(
   };
 }
 
-export type ModelConnectionSnapshot = { baseUrl: string; apiKey: string };
+export type ModelConnectionSnapshot = { baseUrl: string; apiKey: string; providerId?: string };
 
 /** The connection most recently resolved from the database; null until something is remembered. */
 let lastConnection: ModelConnectionSnapshot | null = null;
 
 /** Remember the resolved connection so pi-runner can read it synchronously. */
 export function rememberModelConnection(c: ModelConnectionSnapshot): void {
-  lastConnection = { baseUrl: c.baseUrl, apiKey: c.apiKey };
+  lastConnection = { baseUrl: c.baseUrl, apiKey: c.apiKey, ...(c.providerId ? { providerId: c.providerId } : {}) };
 }
 
 export function lastModelConnection(): ModelConnectionSnapshot | null {

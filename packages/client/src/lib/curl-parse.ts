@@ -258,7 +258,7 @@ export function parseCurl(text: string): CurlTool {
       const letters = flag.slice(1).split("").map((c) => `-${c}`);
       if (letters.every((l) => IGNORED_FLAGS.has(l))) continue;
       unread.push(
-        `the bundled flags \`${flag}\` — Foundry does not know what they would change, and ` +
+        `the bundled flags \`${flag}\` — Tether does not know what they would change, and ` +
           "splitting them apart could consume the wrong argument",
       );
       continue;
@@ -316,7 +316,7 @@ export function parseCurl(text: string): CurlTool {
       case "-b":
       case "--cookie":
         unread.push(
-          "a cookie credential (`-b`) — Foundry presents a credential as bearer, a header, a " +
+          "a cookie credential (`-b`) — Tether presents a credential as bearer, a header, a " +
             "query parameter or basic auth, and none of those is a cookie jar",
         );
         if (inlineValue === null && next() !== undefined) take();
@@ -330,7 +330,7 @@ export function parseCurl(text: string): CurlTool {
         if (inlineValue === null && next() !== undefined) take();
         break;
       default:
-        unread.push(`the flag \`${flag}\` — Foundry does not know what it would change`);
+        unread.push(`the flag \`${flag}\` — Tether does not know what it would change`);
         break;
     }
   }
@@ -381,7 +381,7 @@ export function parseCurl(text: string): CurlTool {
       authStyle = "basic";
       unread.push(
         "the value of the `Authorization: Basic …` header — it did not decode to " +
-          "`user:password`, and Foundry stores the pair rather than the encoded form, so it " +
+          "`user:password`, and Tether stores the pair rather than the encoded form, so it " +
           "cannot be lifted out of this paste",
       );
     } else {
@@ -472,7 +472,7 @@ export function parseCurl(text: string): CurlTool {
     } catch {
       unread.push(
         `the endpoint URL — \`${url}\` is not a full \`http(s)://\` address, and that is what ` +
-          "Foundry calls",
+          "Tether calls",
       );
       cleanUrl = null;
     }

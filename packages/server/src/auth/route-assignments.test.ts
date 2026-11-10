@@ -141,7 +141,8 @@ describe("the exemptions, each for its own stated reason", () => {
     // 30–36: public edge setup / pair / claim / complete / agent.mjs (personal thin; setup token or device Bearer).
     // 37–39: Forge edge devices / enqueue / job (personal thin; per-conversation tool key).
     // 41–42: edge plugin relay POST/GET (device Bearer).
-    expect(EXEMPT.size).toBe(42);
+    // 43–45: email sign-in code request/verify/status (pre-session, API key + throttles).
+    expect(EXEMPT.size).toBe(45);
     expect(EXEMPT.get("POST /api/llm/complete")?.reason).toBe("requireLlmKey");
     expect(EXEMPT.get("POST /api/web/fetch")?.reason).toBe("requireWebKey");
     for (const path of [
@@ -160,6 +161,17 @@ describe("the exemptions, each for its own stated reason", () => {
       expect(req?.kind).toBe("exempt");
       if (req?.kind === "exempt") expect(req.reason).toMatch(/per-conversation tool key|edge/);
     }
+  });
+});
+
+describe("email sign-in and the allowlist admin", () => {
+  it("the email-otp routes answer before a session; the allowlist admin routes are identity-gated", () => {
+    for (const p of ["request", "verify", "status"]) {
+      const req = requirementFor("POST", `/api/email-otp/${p}`);
+      expect(req?.kind).toBe("exempt");
+      if (req?.kind === "exempt") expect(req.reason).toMatch(/before anybody has a session/i);
+    }
+    expect(requirementFor("GET", "/api/allowed-users")?.kind).toBe("identity");
   });
 });
 

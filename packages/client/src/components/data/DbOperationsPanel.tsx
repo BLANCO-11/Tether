@@ -409,7 +409,7 @@ function ProposalFlow({
           Propose one for me
         </Button>
         <p className="mt-1 text-caption text-dim">
-          Describe the data you need in one sentence. Foundry reads this source&apos;s introspected
+          Describe the data you need in one sentence. Tether reads this source&apos;s introspected
           schema — never its rows — and proposes a spec for you to review. Nothing is created until
           you approve it.
         </p>
@@ -918,7 +918,7 @@ export function DbOperationsPanel({
           because the reason arrives after the click instead of before it. */}
       {tables.length === 0 ? (
         <p className="border-t border-line px-4 py-3 text-caption text-muted">
-          Foundry hasn&apos;t read this source&apos;s schema, so an operation can&apos;t be built or
+          Tether hasn&apos;t read this source&apos;s schema, so an operation can&apos;t be built or
           proposed yet — every identifier in one has to resolve against it. Fix the connection and
           re-scan the source.
         </p>
@@ -937,7 +937,7 @@ export function DbOperationsPanel({
         <div className="space-y-3 border-t border-line p-4">
           {tables.length === 0 ? (
             <p className="text-sm text-muted">
-              Foundry couldn&apos;t read this source&apos;s schema — every identifier in an
+              Tether couldn&apos;t read this source&apos;s schema — every identifier in an
               operation must resolve against it, so nothing can be built until the connection is
               fixed and re-scanned.
             </p>

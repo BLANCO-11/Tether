@@ -293,7 +293,7 @@ export const enginePluginService = {
           "kestra/kestra:v1.3.29-no-plugins plus one plugin, because the full image registers " +
           "1404 of them and exhausts the engine's memory — it comes up healthy and then every " +
           "call hangs.",
-        `A registered class is not something an automation can ask for. Foundry's compiler is the ` +
+        `A registered class is not something an automation can ask for. Tether's compiler is the ` +
           `only thing that writes flow definitions, and it emits ${FOUNDRY_EMITS.length} of the ` +
           `${classes} classes below. The rest are what the engine knows how to run, not what this ` +
           `product will run.`,
@@ -387,12 +387,12 @@ export const enginePluginService = {
       notes: [
         plugin.counts.reachable > 0
           ? `An automation can use ${plugin.counts.reachable} of this plugin's ${plugin.counts.total} capabilities.`
-          : `No automation can call this plugin yet. Foundry writes every flow definition itself and ` +
+          : `No automation can call this plugin yet. Tether writes every flow definition itself and ` +
             `emits ${FOUNDRY_EMITS.length} class types, none of them from this plugin — so a value ` +
             `stored for it today would not be read by anything.`,
         `Read from the engine's own schema for ${scan.read} of this plugin's ` +
           `${plugin.classes.length} capabilities. There is no list of plugin credentials maintained ` +
-          `by Foundry.`,
+          `by Tether.`,
         // ⚠ The heuristic declares itself. See `CREDENTIAL_NAME` below.
         scan.fields.some((f) => f.source === "inferred")
           ? `Fields marked "declared" are ones the plugin's own author classified as part of ` +

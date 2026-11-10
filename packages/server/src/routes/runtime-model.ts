@@ -303,7 +303,7 @@ llmCompleteRouter.post(
     }
     let result;
     try {
-      result = await complete(provider, { model, system: LLM_SYSTEM, user: `INSTRUCTION:\n${instruction}\n\nINPUT:\n${input}`, maxTokens });
+      result = await complete(provider, { model, system: LLM_SYSTEM, user: `INSTRUCTION:\n${instruction}\n\nINPUT:\n${input}`, maxTokens, sessionId: runId || undefined });
     } catch (e) {
       return answer(res, e);
     }

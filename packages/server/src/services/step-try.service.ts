@@ -88,10 +88,10 @@ export type TryableKind = (typeof TRYABLE_KINDS)[number];
  */
 export const UNTRYABLE_REASON: Record<Exclude<StepKind, TryableKind>, string> = {
   transform:
-    "A transform is an expression Kestra evaluates. Foundry has no evaluator for it, " +
+    "A transform is an expression Kestra evaluates. Tether has no evaluator for it, " +
     "and building a second one would let it disagree with the engine that runs the flow.",
   code:
-    "A code step runs in a container Kestra starts. Foundry holds no Docker socket, " +
+    "A code step runs in a container Kestra starts. Tether holds no Docker socket, " +
     "deliberately, so there is nowhere here to run the fragment.",
   approval: "An approval step does not do anything — it waits for a person to decide.",
   branch: "A branch produces no output. It only decides whether the steps after it run.",

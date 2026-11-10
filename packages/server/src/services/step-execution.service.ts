@@ -48,6 +48,7 @@ import { dbOperationRepo } from "../repositories/db-operation.repo.js";
 import { specParamOrder } from "./db-operation.service.js";
 import { checkSqlShape } from "./datasource-query.service.js";
 import { decrypt } from "../utils/encryptor.js";
+import { gatewayHeaders } from "./llm-gateway-headers.js";
 import type { ReadFrom } from "./sandbox.service.js";
 import { driverFor } from "./mock-engine/registry.js";
 import { isSqliteType, sqliteFileService } from "./sqlite-file.service.js";
@@ -408,7 +409,7 @@ async function invokePlugin(
   const warnings: string[] = [];
   if (failed > 0) warnings.push(`${failed} of ${results.length} call(s) to "${tool.name}" failed`);
   const captured = results.filter((r) => r.captured).length;
-  if (captured > 0) warnings.push(`${captured} call(s) to "${tool.name}" were recorded, not performed (a test run does not change anything outside Foundry)`);
+  if (captured > 0) warnings.push(`${captured} call(s) to "${tool.name}" were recorded, not performed (a test run does not change anything outside Tether)`);
   return {
     results: results.map(({ captured: _c, ...r }) => r),
     succeeded: results.length - failed,
@@ -1358,6 +1359,10 @@ async function invokeLlm(
   // provider names it in a 400 (the verbatim `inference.service.ts` rule, own
   // copy and own test by that file's decree); an unserved model falls back to
   // the deployment's resolved model, and the substitution is stated in `text`.
+  if (!config.inference.baseUrl) {
+    throw new Error("No AI model configured — set one on the AI models page");
+  }
+  const extra = gatewayHeaders({ providerId: config.inference.provider, baseUrl: config.inference.baseUrl }, runId);
   const send = (withTemperature: boolean, model: string) =>
     fetch(`${config.inference.baseUrl}/chat/completions`, {
       method: "POST",
@@ -1365,6 +1370,7 @@ async function invokeLlm(
       headers: {
         "content-type": "application/json",
         authorization: `Bearer ${config.inference.apiKey}`,
+        ...extra,
         ...(runId ? { "x-foundry-run": runId } : {}),
       },
       body: JSON.stringify({

@@ -55,7 +55,7 @@ export const CREATABLE: readonly TriggerKindSpec[] = [
   {
     type: "manual",
     label: "Start by hand",
-    quote: "Someone starts it from Foundry when it is needed.",
+    quote: "Someone starts it from Tether when it is needed.",
     config: [],
   },
   {
@@ -73,12 +73,12 @@ export const CREATABLE: readonly TriggerKindSpec[] = [
   {
     type: "poll",
     label: "Watch a web address",
-    quote: "Foundry checks an address on a timer and starts when what it returns changes.",
+    quote: "Tether checks an address on a timer and starts when what it returns changes.",
     config: [
       {
         key: "url",
         label: "Address to watch",
-        hint: "Foundry fetches this and starts the automation when the response changes.",
+        hint: "Tether fetches this and starts the automation when the response changes.",
         placeholder: "https://example.com/status.json",
       },
       {
@@ -134,7 +134,7 @@ export const UNAVAILABLE: readonly { label: string; reason: string }[] = [
   {
     label: "Email · file drop · Kafka · a work queue",
     reason:
-      "Foundry has no connector for these yet. They were pickable here until they were found to " +
+      "Tether has no connector for these yet. They were pickable here until they were found to " +
       "create a trigger that stored fine and could never start anything.",
   },
 ] as const;

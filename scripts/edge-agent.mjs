@@ -77,7 +77,7 @@ async function setup() {
     process.exit(1);
   }
   console.log("");
-  console.log(`>>> Approve “${regBody.name}” in Foundry → Devices (or Needs you).`);
+  console.log(`>>> Approve “${regBody.name}” in Tether → Devices (or Needs you).`);
   console.log(`>>> Waiting (device ${regBody.deviceId}). No further steps needed from you after Approve.`);
   console.log("");
 

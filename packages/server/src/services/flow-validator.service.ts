@@ -1057,7 +1057,7 @@ export function checkHttpSteps(model: FlowModel): FlowFinding[] {
           message:
             `http step "${step.id}" stores "${field}", which is not an environment variable ` +
             `name — that field names where the secret lives, never the secret itself. ` +
-            `The value is read server-side when Foundry dials and never logged`,
+            `The value is read server-side when Tether dials and never logged`,
           facts: { stepId: step.id, field },
           blocking: true,
         });
@@ -1071,7 +1071,7 @@ export function checkHttpSteps(model: FlowModel): FlowFinding[] {
             `http step "${step.id}" stores what looks like a literal credential in ` +
             `"${field}" — credentials live in environment variables named by ` +
             `\`auth.secretRef\`, never in the step. The value is read server-side ` +
-            `when Foundry dials and never logged`,
+            `when Tether dials and never logged`,
           facts: { stepId: step.id, field },
           blocking: true,
         });

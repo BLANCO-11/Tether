@@ -217,3 +217,39 @@ describe("GatewayInference — the refusal is remembered, not re-discovered", ()
     expect(sent[2]).toHaveProperty("temperature", 1);
   });
 });
+
+/**
+ * The gateway headers ride on every request. OpenCode Go answers 400
+ * MissingSessionID without `x-opencode-session`; an ordinary gateway gets
+ * neither header, so nothing it did not ask for is added.
+ */
+describe("GatewayInference — gateway headers", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  function stubHeaders() {
+    const sent: Array<Record<string, string>> = [];
+    vi.stubGlobal("fetch", async (_url: string, init: RequestInit) => {
+      sent.push({ ...(init.headers as Record<string, string>) });
+      return new Response(OK, { status: 200 });
+    });
+    return sent;
+  }
+
+  it("sends the session id and User-Agent to OpenCode Go", async () => {
+    const sent = stubHeaders();
+    const reply = await new GatewayInference("https://opencode.ai/inference/go/openai/v1", "k", "m", "opencode_go").complete("p", {
+      label: "l",
+      sessionId: "chat-9",
+    });
+    expect(reply).toBe("the answer");
+    expect(sent[0]).toHaveProperty("x-opencode-session", "chat-9");
+    expect(sent[0]).toHaveProperty("User-Agent", "Tether/1.0");
+  });
+
+  it("sends neither header to an ordinary gateway", async () => {
+    const sent = stubHeaders();
+    await client().complete("p", { label: "l" });
+    expect(sent[0]).not.toHaveProperty("x-opencode-session");
+    expect(sent[0]).not.toHaveProperty("User-Agent");
+  });
+});

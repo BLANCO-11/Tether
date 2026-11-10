@@ -557,7 +557,7 @@ function ActionCard({ p, onDecide }: { p: PiProposal; onDecide: Decide | null })
       </div>
       <p className="text-body font-medium leading-snug text-text">{p.summary}</p>
       {p.relay && p.status === "pending" ? (
-        <p className="text-caption text-dim">Requested from {p.relay.deviceName} through Foundry (plugin relay).</p>
+        <p className="text-caption text-dim">Requested from {p.relay.deviceName} through Tether (plugin relay).</p>
       ) : null}
       {entries.length > 0 && (
         <dl className="pc-values" aria-label="The exact values">

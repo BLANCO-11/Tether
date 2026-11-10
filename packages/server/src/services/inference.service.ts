@@ -1,6 +1,7 @@
 import { config } from "../config/index.js";
 import { usageContext } from "./usage-context.js";
 import { usageService } from "./usage.service.js";
+import { gatewayHeaders } from "./llm-gateway-headers.js";
 
 /**
  * One prompt in, one text answer out.
@@ -63,6 +64,8 @@ export interface InferenceClient {
        * Absent means today's single-user-message body, byte-identical.
        */
       system?: string;
+      /** OpenCode Go's x-opencode-session: a stable conversation id (chat id, run id). Absent = a fresh uuid per call. Ignored by other gateways. */
+      sessionId?: string;
       /**
        * Strict structured output (compiled-builder D-307): sent as `response_format: {type: "json_schema", strict: true}`, so
        * the gateway decodes only replies the schema admits (E0.1: 6/6 features enforced). The caller still validates the reply
@@ -299,6 +302,7 @@ export class GatewayInference implements InferenceClient {
     private readonly baseUrl: string,
     private readonly apiKey: string,
     private readonly model: string,
+    private readonly providerId?: string,
   ) {}
 
   /**
@@ -326,15 +330,17 @@ export class GatewayInference implements InferenceClient {
 
   async complete(
     prompt: string,
-    opts: { label: string; timeoutMs?: number; maxTokens?: number; model?: string; system?: string; schema?: { name: string; schema: Record<string, unknown> } },
+    opts: { label: string; timeoutMs?: number; maxTokens?: number; model?: string; system?: string; sessionId?: string; schema?: { name: string; schema: Record<string, unknown> } },
   ): Promise<string> {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), opts.timeoutMs ?? DEFAULT_TIMEOUT_MS);
+    // Once per call, so the temperature retry below keeps the same session.
+    const extra = gatewayHeaders({ providerId: this.providerId, baseUrl: this.baseUrl }, opts.sessionId);
     const send = (withTemperature: boolean) =>
       fetch(`${this.baseUrl}/chat/completions`, {
         method: "POST",
         signal: controller.signal,
-        headers: { "content-type": "application/json", authorization: `Bearer ${this.apiKey}` },
+        headers: { "content-type": "application/json", authorization: `Bearer ${this.apiKey}`, ...extra },
         body: JSON.stringify({
           // Per-call override wins; absent is this instance's resolved default.
           model: opts.model ?? this.model,
@@ -471,13 +477,14 @@ async function currentConnection() {
 class ResolvingInference implements InferenceClient {
   async complete(
     prompt: string,
-    opts: { label: string; timeoutMs?: number; maxTokens?: number; model?: string; system?: string; schema?: { name: string; schema: Record<string, unknown> } },
+    opts: { label: string; timeoutMs?: number; maxTokens?: number; model?: string; system?: string; sessionId?: string; schema?: { name: string; schema: Record<string, unknown> } },
   ): Promise<string> {
-    // `config.inference` gets both credentials from `required()`, so the `||`
-    // fallbacks never yield an empty string arriving as a request to
-    // `/chat/completions`. A per-call model override wins over the default.
+    // `config.inference` may be empty (env is optional); an empty base URL
+    // throws below rather than arriving as a request to `/chat/completions`. A per-call model override wins over the default.
     const p = await currentConnection();
-    return new GatewayInference(p.baseUrl || config.inference.baseUrl, p.apiKey || config.inference.apiKey, opts.model ?? p.model).complete(prompt, opts);
+    const baseUrl = p.baseUrl || config.inference.baseUrl;
+    if (!baseUrl) throw new Error("No AI model configured — set one on the AI models page");
+    return new GatewayInference(baseUrl, p.apiKey || config.inference.apiKey, opts.model ?? p.model, p.baseUrl ? p.providerId : config.inference.provider).complete(prompt, opts);
   }
 }
 

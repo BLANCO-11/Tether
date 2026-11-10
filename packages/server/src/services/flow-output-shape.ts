@@ -504,7 +504,7 @@ function shapeFinding(
   if (kind === "tool" && !ENVELOPE_SEGMENTS.has(segment) && correct.includes(".body")) {
     return (
       `${head} A field the tool's description names — like \`{text}\` — is not at the top of the ` +
-      `body: the body is Foundry's envelope and every call's own payload sits at ` +
+      `body: the body is Tether's envelope and every call's own payload sits at ` +
       `\`.results[0].data\`. Write \`${correct}.results[0].data.${segment}\`, never ` +
       `\`outputs.${target}.${segment}\` and never \`${correct}.${segment}\`.`
     );
@@ -604,7 +604,7 @@ export function checkOutputShapes(
         findings.push(
           llmHttpBodyFinding(who, field, target!, key!, kind, byId.get(target!)) ??
             `step "${who}".${field} reads \`json(outputs.${target}.body).${key}\`, but there is no ` +
-              `\`.${key}\` there. A step's body is Foundry's own envelope — ` +
+              `\`.${key}\` there. A step's body is Tether's own envelope — ` +
               `\`{results, succeeded, failed, warnings}\` — and the ${kind === "datasource" || kind === "query" ? "query's rows are" : "call's own payload is"} ` +
               `at \`json(outputs.${target}.body).results[0].data\`. Use that; inventing a key at ` +
               `the top of the body compiles and deploys, then fails the run with ` +

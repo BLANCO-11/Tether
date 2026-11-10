@@ -191,7 +191,7 @@ function signatures(): Signature[] {
   return [
     {
       id: "foundry_parent",
-      label: "Foundry's own control-plane database",
+      label: "Tether's own control-plane database",
       stake:
         "a read-only credential on it reads every workspace's secrets, encrypted connection " +
         "strings, flow revisions and generated fragments",
@@ -241,7 +241,7 @@ function matchSignature(present: Set<string>): TargetFinding | null {
         rule: `control_plane_signature:${sig.id}`,
         message:
           `this database looks like ${sig.label} — ${hits.length} of its tables are present ` +
-          `(${hits.slice(0, 6).join(", ")}${hits.length > 6 ? ", …" : ""}). Foundry's own state is ` +
+          `(${hits.slice(0, 6).join(", ")}${hits.length > 6 ? ", …" : ""}). Tether's own state is ` +
           `not a tenant datasource — ${sig.stake}. Read-only is not a mitigation here; it is ` +
           `exactly the credential that would be wanted.`,
         facts: { signature: sig.id, matched: hits.length, required: sig.min, examples: hits.slice(0, 6) },
@@ -557,7 +557,7 @@ export const datasourceTargetService = {
       findings.push({
         rule: "control_plane_identity",
         message:
-          `this is Foundry's own database ("${target.database}") on Foundry's own Postgres ` +
+          `this is Tether's own database ("${target.database}") on Tether's own Postgres ` +
           `cluster. The address in the connection string does not change that — the cluster ` +
           `was asked who it is.`,
         facts: { database: target.database, clusterId: target.clusterId },

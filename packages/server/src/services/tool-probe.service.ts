@@ -393,8 +393,8 @@ function sentenceFor(args: {
          * it would leave a person unable to match the message to the egress
          * policy that produced it.
          */
-        message: `Foundry refused to dial ${host}: ${args.detail ?? "egress policy"}.`,
-        remedy: `This is Foundry's egress policy, not the endpoint. A run would refuse the same host for the same reason.`,
+        message: `Tether refused to dial ${host}: ${args.detail ?? "egress policy"}.`,
+        remedy: `This is Tether's egress policy, not the endpoint. A run would refuse the same host for the same reason.`,
       };
     case "unreachable":
       return {
@@ -473,7 +473,7 @@ export const toolProbeService = {
      */
     if (mode === "live" && isPlatformToolName(tool.name)) {
       throw new StepError(
-        `"${tool.name}" is managed by Foundry and cannot be invoked from a test`,
+        `"${tool.name}" is managed by Tether and cannot be invoked from a test`,
         409,
         { error: "platform_managed_live_probe", name: tool.name },
       );

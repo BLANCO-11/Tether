@@ -933,8 +933,8 @@ export const pluginService = {
     const decl = oauthAuth(p).oauth!;
     const prior = await pluginRepo.getOauthApp(piece);
     const useSignInApp = input.useSignInApp === true;
-    if (useSignInApp && !isMicrosoft(decl)) fail("Foundry's sign-in app signs in to Microsoft only", 400);
-    if (useSignInApp && !signInAppAvailable()) fail("Foundry's sign-in app is not configured on this deployment (AUTH_MICROSOFT_ENTRA_ID_ID / _SECRET)", 409);
+    if (useSignInApp && !isMicrosoft(decl)) fail("Tether's sign-in app signs in to Microsoft only", 400);
+    if (useSignInApp && !signInAppAvailable()) fail("Tether's sign-in app is not configured on this deployment (AUTH_MICROSOFT_ENTRA_ID_ID / _SECRET)", 409);
     const clientId = useSignInApp ? null : String(input.clientId ?? prior?.clientId ?? "").trim();
     if (!useSignInApp && !clientId) fail("an OAuth app needs its client id", 400);
     if (clientId && clientId.length > 300) fail("that client id is too long", 400);

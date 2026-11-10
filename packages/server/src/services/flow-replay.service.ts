@@ -171,7 +171,7 @@ async function ownedExecution(workspaceId: string, executionId: string): Promise
   if (!row || row.workspaceId !== workspaceId) throw httpError("execution not found", 404);
   // A flow-runner run has no Kestra execution to replay from (pi-runtime P3) — refused by name, not a Kestra 404.
   if (row.kestraExecutionId.startsWith(RUNNER_EXECUTION_PREFIX)) {
-    throw httpError("this run was made by Foundry's runner (a workflow built with Forge); replaying it is not available yet", 409);
+    throw httpError("this run was made by Tether's runner (a workflow built with Forge); replaying it is not available yet", 409);
   }
   return row;
 }
@@ -292,7 +292,7 @@ export function partialReplayObstacle(
 ): string | undefined {
   if (!model) {
     return (
-      `Foundry does not hold this flow's model — the execution predates the flow being ` +
+      `Tether does not hold this flow's model — the execution predates the flow being ` +
       `registered, or its revision has been removed — so it cannot check whether a partial ` +
       `replay is safe. Replay the whole execution instead.`
     );
@@ -403,7 +403,7 @@ async function fullReplay(row: FlowExecution, engine: KestraExecution): Promise<
     execution: null,
     lineageRecorded: false,
     note:
-      `the engine accepted the replay (${started.id}) but no Foundry row appeared within 10s. ` +
+      `the engine accepted the replay (${started.id}) but no Tether row appeared within 10s. ` +
       `Either the engine is slow, or the flow's first task was refused — a revoked or stale ` +
       `approval refuses \`begin\`, which is the gate working. Check the flow's approval state.`,
   };

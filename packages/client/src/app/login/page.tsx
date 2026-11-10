@@ -1,7 +1,8 @@
-// src/app/login/page.tsx — sign-in screen. Two ways in, both env-driven:
-//   • your work account (Microsoft Entra ID SSO), and
-//   • local credentials (email + password) — the env admin and created accounts.
-// SSO appears when its env is configured; local sign-in always, unless LOCAL_LOGIN=off. Real
+// src/app/login/page.tsx — sign-in screen. Three ways in:
+//   • an emailed 6-digit code (always shown, the primary method),
+//   • your work account (Microsoft Entra ID SSO), when its env is configured, and
+//   • local credentials (email + password) — the env admin and created accounts, tucked under
+//     "Sign in with password" unless LOCAL_LOGIN=off. Real
 // sign-in replaced the earlier mock; components elsewhere still use useAuth().
 import { signIn } from "@/auth";
 import { Button } from "@/components/ui/Button";
@@ -10,6 +11,7 @@ import { Cube } from "@/components/ui/icons";
 // thing in `src/**` that legitimately holds colour literals — see that file.
 import { MicrosoftMark } from "@/components/ui/MicrosoftMark";
 import { LocalLoginForm } from "./local-login-form";
+import { EmailOtpForm } from "./email-otp-form";
 import { safeNext } from "@/lib/session-expiry";
 
 // Must be dynamic so the auth env (LOCAL_ADMIN_PASSWORD, Entra credentials) is
@@ -17,7 +19,7 @@ import { safeNext } from "@/lib/session-expiry";
 export const dynamic = "force-dynamic";
 
 export const metadata = {
-  title: "Sign in · Foundry",
+  title: "Sign in · Tether",
 };
 
 // Expose the configured admin email to the client form for pre-fill. The
@@ -31,20 +33,21 @@ const LOCAL_LOGIN_ENABLED = process.env.LOCAL_LOGIN !== "off";
 const SSO_ENABLED = !!(
   process.env.AUTH_MICROSOFT_ENTRA_ID_ID && process.env.AUTH_MICROSOFT_ENTRA_ID_SECRET
 );
+const GOOGLE_ENABLED = !!(process.env.AUTH_GOOGLE_ID && process.env.AUTH_GOOGLE_SECRET);
 
 // ⚠ `searchParams` is a PROMISE from Next 15 (a plain object on 14, the synchronous form removed in 16). Reading it without
 // `await` leaves `callbackUrl` and `expired` undefined: the page still renders, the return address is silently `/dashboard`
 // and the "your session ended" line never shows — which is why `page.params.test.tsx` asserts both.
-export default async function LoginPage({ searchParams }: { searchParams?: Promise<{ callbackUrl?: string; expired?: string }> }) {
-  const showDivider = SSO_ENABLED && LOCAL_LOGIN_ENABLED;
-  const query = (await searchParams) ?? {};
+export default async function LoginPage({ searchParams }: { searchParams?: Promise<{ callbackUrl?: string; expired?: string; error?: string }> }) {
+    const query = (await searchParams) ?? {};
   // Where the person was, when their session ended or they opened a link signed out — they go back there.
   const next = safeNext(query.callbackUrl);
   const expired = query.expired === "1";
+  const accessDenied = query.error === "AccessDenied";
 
   return (
     <main className="relative flex min-h-screen items-center justify-center p-6">
-      {/* Soft focal glow behind the card, in Foundry's accent. */}
+      {/* Soft focal glow behind the card, in Tether's accent. */}
       <div
         aria-hidden="true"
         className="pointer-events-none absolute left-1/2 top-1/2 -z-10 h-[440px] w-[440px] -translate-x-1/2 -translate-y-1/2 rounded-full blur-3xl"
@@ -56,7 +59,7 @@ export default async function LoginPage({ searchParams }: { searchParams?: Promi
           <span className="btn-grad mb-4 flex h-12 w-12 items-center justify-center rounded-lg text-[color:var(--on-cta)]">
             <Cube s={24} />
           </span>
-          <h1 className="text-lg font-semibold">Welcome to Foundry</h1>
+          <h1 className="text-lg font-semibold">Welcome to Tether</h1>
           <p className="mt-1 text-sm text-muted">Sign in to your Automation Studio.</p>
         </div>
 
@@ -65,6 +68,40 @@ export default async function LoginPage({ searchParams }: { searchParams?: Promi
             Your session ended. Sign in again to carry on where you were.
           </p>
         ) : null}
+
+        {accessDenied ? (
+          <p role="alert" className="mb-5 rounded-md border border-warn/30 bg-warn/5 px-3 py-2 text-center text-xs text-text">
+            This Google account is not allowed. Ask an admin to add your email.
+          </p>
+        ) : null}
+
+        {GOOGLE_ENABLED && (
+          <>
+            <form
+              action={async () => {
+                "use server";
+                await signIn("google", { redirectTo: next });
+              }}
+            >
+              <Button type="submit" className="w-full gap-2.5">
+                Continue with Google
+              </Button>
+            </form>
+            <div className="my-5 flex items-center gap-3 text-xs text-dim">
+              <span className="h-px flex-1 bg-line" /> or <span className="h-px flex-1 bg-line" />
+            </div>
+          </>
+        )}
+
+        {/* Email code — the primary method. */}
+        <EmailOtpForm next={next} />
+
+        {/* Divider — before the work-account button. */}
+        {SSO_ENABLED && (
+          <div className="my-5 flex items-center gap-3 text-xs text-dim">
+            <span className="h-px flex-1 bg-line" /> or <span className="h-px flex-1 bg-line" />
+          </div>
+        )}
 
         {/* Microsoft Entra ID — the work-account path. */}
         {SSO_ENABLED && (
@@ -81,32 +118,25 @@ export default async function LoginPage({ searchParams }: { searchParams?: Promi
           </form>
         )}
 
-        {/* Divider — only when both methods are available. */}
-        {showDivider && (
-          <div className="my-5 flex items-center gap-3 text-xs text-dim">
-            <span className="h-px flex-1 bg-line" /> or <span className="h-px flex-1 bg-line" />
-          </div>
-        )}
-
-        {/* Local admin credentials. */}
+        {/* Password — kept in the DOM inside <details>. */}
         {LOCAL_LOGIN_ENABLED && (
-          <div className={SSO_ENABLED ? "" : "mt-2"}>
-            {!SSO_ENABLED && (
-              <p className="mb-3 text-center text-xs text-muted">Sign in with your Foundry account.</p>
-            )}
-            <LocalLoginForm defaultEmail={LOCAL_ADMIN_EMAIL} next={next} />
-          </div>
+          <details className="mt-5">
+            <summary className="cursor-pointer text-center text-xs text-muted">Sign in with password</summary>
+            <div className="mt-3">
+              <LocalLoginForm defaultEmail={LOCAL_ADMIN_EMAIL} next={next} />
+            </div>
+          </details>
         )}
 
         {/* Footer note — reflects which methods are on. */}
         <p className="mt-6 text-center text-xs text-dim">
           {SSO_ENABLED && LOCAL_LOGIN_ENABLED
-            ? "Work account or Foundry account"
+            ? "Work account, email code or password"
             : SSO_ENABLED
-            ? "Protected by Microsoft Entra ID"
+            ? "Work account or email code"
             : LOCAL_LOGIN_ENABLED
-            ? "Foundry account"
-            : "No sign-in method is configured"}
+            ? "Email code or password"
+            : "Email code"}
         </p>
       </div>
     </main>

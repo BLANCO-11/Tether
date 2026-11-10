@@ -1266,7 +1266,7 @@ function Workbench_({
     >
     <DecideProposal.Provider value={decideProposal}>
     <div className="relative flex h-full min-h-0 flex-col">
-      {/* Same 48px draft strip the manual builder uses, with Foundry actions */}
+      {/* Same 48px draft strip the manual builder uses, with Tether actions */}
 
 
       <Workbench

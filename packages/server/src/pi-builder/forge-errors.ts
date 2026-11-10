@@ -20,8 +20,8 @@ const RULES: Rule[] = [
   },
   {
     test: /\b401\b|unauthori[sz]ed|invalid.{0,20}(api.?)?key|authentication|no api key/i,
-    title: "Foundry could not sign in to the AI service",
-    said: "The AI service did not accept Foundry's credentials. Trying again won't help. An administrator needs to check the AI service settings.",
+    title: "Tether could not sign in to the AI service",
+    said: "The AI service did not accept Tether's credentials. Trying again won't help. An administrator needs to check the AI service settings.",
     retryable: false,
   },
   {
@@ -50,7 +50,7 @@ const RULES: Rule[] = [
   },
   {
     test: /time[d ]?out|ETIMEDOUT|ECONNRESET|ECONNREFUSED|ENOTFOUND|fetch failed|network|socket hang up/i,
-    title: "Foundry could not reach the AI service",
+    title: "Tether could not reach the AI service",
     said: "The connection to the AI service failed. Trying again normally works; if it keeps happening, the service may be down.",
     retryable: true,
   },

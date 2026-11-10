@@ -68,7 +68,7 @@ const OUTCOME: Record<
   refused: {
     label: "Refused",
     tone: "danger",
-    what: "Foundry declined before contacting the mail provider.",
+    what: "Tether declined before contacting the mail provider.",
   },
   failed: {
     label: "Failed",

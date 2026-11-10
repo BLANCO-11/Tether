@@ -1355,6 +1355,8 @@ export interface Me {
   forgeDefaultMode?: "workflow" | "agent";
   /** Whether the cost report is theirs to open (an Admin of some workspace, or a super admin). Absent reads as "no". */
   canViewReports?: boolean;
+  /** May manage who can sign in. The server decides; absent reads as "no". */
+  userAdmin?: boolean;
 }
 
 /** A permission string from the server's catalogue. Never invented client-side. */

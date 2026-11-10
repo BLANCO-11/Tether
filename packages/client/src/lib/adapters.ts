@@ -235,14 +235,14 @@ export function toolInputToFA(input: {
   const endpoint = input.endpoint?.trim();
   if (!endpoint || !/^https?:\/\//i.test(endpoint)) {
     throw new Error(
-      "a tool needs a full endpoint URL starting with http:// or https:// — that is the address Foundry calls",
+      "a tool needs a full endpoint URL starting with http:// or https:// — that is the address Tether calls",
     );
   }
 
   const method = (input.method ?? (input.type === "changes data" ? "POST" : "GET")).toUpperCase();
   if (!(HTTP_METHODS as readonly string[]).includes(method)) {
     throw new Error(
-      `"${method}" is not an HTTP method Foundry can call — one of ${HTTP_METHODS.join(", ")}`,
+      `"${method}" is not an HTTP method Tether can call — one of ${HTTP_METHODS.join(", ")}`,
     );
   }
 

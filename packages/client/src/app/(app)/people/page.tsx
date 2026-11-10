@@ -127,7 +127,7 @@ export default function PeoplePage() {
       <PageHeader
         eyebrow="Access"
         title="People"
-        purpose="Who may use this Foundry, and invitations waiting for them to sign in."
+        purpose="Who may use this Tether, and invitations waiting for them to sign in."
       />
       <Zone name="content" className="space-y-8">
         {people.loading ? <p className="text-sm text-muted">Loading…</p> : null}

@@ -267,7 +267,7 @@ export default function NewDataSourcePage() {
       setTested({
         ok,
         message: ok
-          ? "Connected, and Foundry could read the schema."
+          ? "Connected, and Tether could read the schema."
           : conn.error_message ?? "Registered, but the connection could not be made.",
       });
       ok ? toast.success("Connection works") : toast.error("Couldn't connect — check the details.");
@@ -439,7 +439,7 @@ export default function NewDataSourcePage() {
               ) : (<>
               <Field
                 label="Schemas to read"
-                hint="Separate with commas. Foundry introspects only these, so a table in a schema that is not listed is invisible to every automation."
+                hint="Separate with commas. Tether introspects only these, so a table in a schema that is not listed is invisible to every automation."
               >
                 <Input
                   value={schemasRaw}
@@ -511,7 +511,7 @@ export default function NewDataSourcePage() {
 
               {isFile && (
                 <p className="-mt-3 text-xs text-muted">
-                  Read-only is the only choice for an uploaded file: Foundry keeps a snapshot, so a write would land
+                  Read-only is the only choice for an uploaded file: Tether keeps a snapshot, so a write would land
                   in a temporary copy and be lost. SQLite itself refuses the write — the file is always opened read-only.
                 </p>
               )}
@@ -551,22 +551,22 @@ export default function NewDataSourcePage() {
                 is picked — before that there is no credential to talk about. */}
             {manifest && isFile ? (
               <p className="rounded-md border border-line bg-surface-2 px-4 py-3 text-sm text-muted">
-                The file is this data source&apos;s credential. Foundry encrypts it at rest with the same key as every
+                The file is this data source&apos;s credential. Tether encrypts it at rest with the same key as every
                 sign-in, never lets anyone download it again — including you — and reads it only through a
                 read-only handle. To change the data, upload a new file.
               </p>
             ) : manifest && (needsAuth ? (
               <div className="space-y-4">
                 <p className="text-sm text-muted">
-                  You type {manifest?.display_name ?? "the database"}&apos;s sign-in once. Foundry encrypts it at rest,
+                  You type {manifest?.display_name ?? "the database"}&apos;s sign-in once. Tether encrypts it at rest,
                   never shows it again — including to you — and checks it before storing anything.
                 </p>
                 <div className="rounded-lg border border-line bg-surface-2 p-4">
                   <div className="text-sm font-medium">Checked at registration, not later</div>
                   <ul className="mt-2 space-y-2 text-sm text-muted">
                     <li>
-                      Foundry asks the database <em>who it is</em> and refuses a connection pointed at its own
-                      state — a read-only credential on Foundry&apos;s database is exactly the one that would read
+                      Tether asks the database <em>who it is</em> and refuses a connection pointed at its own
+                      state — a read-only credential on Tether&apos;s database is exactly the one that would read
                       every workspace&apos;s secrets.
                     </li>
                     <li>

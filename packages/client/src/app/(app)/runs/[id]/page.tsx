@@ -315,7 +315,7 @@ export default function RunPage() {
                 <FactRow label="Stopped" value={run.endedAt} />
                 <FactRow label="Duration" value={run.durationMs != null ? fmtDuration(run.durationMs) : null} mono />
                 <FactRow label="Engine status" value={run.engineStatus} />
-                <FactRow label="Foundry status" value={run.status} />
+                <FactRow label="Tether status" value={run.status} />
                 {run.replayOfId && <FactRow label="Replay of" value={run.replayOfId} mono />}
               </dl>
               {technical && (

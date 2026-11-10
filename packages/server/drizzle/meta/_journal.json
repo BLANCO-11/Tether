@@ -1030,6 +1030,20 @@
       "when": 1762330000000,
       "tag": "0146_edge_relay_requests",
       "breakpoints": true
+    },
+    {
+      "idx": 147,
+      "version": "7",
+      "when": 1797700000000,
+      "tag": "0147_allowed_users",
+      "breakpoints": true
+    },
+    {
+      "idx": 148,
+      "version": "7",
+      "when": 1797800000000,
+      "tag": "0148_model_connection_provider",
+      "breakpoints": true
     }
   ]
 }

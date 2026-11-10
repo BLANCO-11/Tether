@@ -96,7 +96,7 @@ export function setupSteps(creds: PluginCredentials | null, label: string): Setu
       blocked: !usable,
       because: usable
         ? null
-        : `No automation can call ${label} yet. Foundry writes every automation's ` +
+        : `No automation can call ${label} yet. Tether writes every automation's ` +
           `definition itself and emits a fixed set of step types, none of them from ` +
           `this plugin — so this step is not something this screen can do.`,
     },

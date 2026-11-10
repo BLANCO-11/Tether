@@ -382,7 +382,7 @@ describe("US1 — the requester default", () => {
     expect(sent.contentType).toBe("HTML");
     expect(sent.body).toContain("the script output");
     expect(sent.body).toContain("Q3 close summary");
-    expect(sent.body).toContain("Sent by Foundry");
+    expect(sent.body).toContain("Sent by Tether");
   });
 
   it("records the send against the execution and the workspace", async () => {
@@ -556,7 +556,7 @@ describe("US4 — the transport's own refusals travel through", () => {
       ok: false,
       status: 424,
       message: "email delivery is not configured on this deployment",
-      detail: { missing: ["MAIL_SENDER_UPN"] },
+      detail: { missing: ["MAIL_FROM"] },
     });
 
     const run = await makeRun({
@@ -568,7 +568,7 @@ describe("US4 — the transport's own refusals travel through", () => {
 
     expect(res.status).toBe(424);
     const json = await bodyOf(res);
-    expect(json.detail).toMatchObject({ missing: ["MAIL_SENDER_UPN"] });
+    expect(json.detail).toMatchObject({ missing: ["MAIL_FROM"] });
 
     const rows = await emailSendRepo.listByExecution(run.workspaceId, run.executionId);
     expect(rows[0].outcome).toBe("refused");

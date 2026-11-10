@@ -107,7 +107,7 @@ export function checkScopes(decl: OauthDecl, scopes: string[] | undefined): stri
 export function clientFor(app: PluginOauthApp | undefined): { clientId: string; clientSecret: string } {
   if (!app) throw new StepError("sign-in for this connector is not set up yet: an administrator enters its OAuth app first", 409);
   if (app.useSignInApp) {
-    if (!signInAppAvailable()) throw new StepError("this connector signs in with Foundry's sign-in app, which is not configured (AUTH_MICROSOFT_ENTRA_ID_*)", 503);
+    if (!signInAppAvailable()) throw new StepError("this connector signs in with Tether's sign-in app, which is not configured (AUTH_MICROSOFT_ENTRA_ID_*)", 503);
     return { clientId: config.plugins.signInApp.clientId, clientSecret: config.plugins.signInApp.clientSecret };
   }
   if (!app.clientId) throw new StepError("this connector's OAuth app has no client id", 409);

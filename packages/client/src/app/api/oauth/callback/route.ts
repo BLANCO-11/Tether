@@ -58,13 +58,13 @@ export async function GET(req: NextRequest): Promise<Response> {
     status = res.status;
     body = await res.json().catch(() => ({}));
   } catch (e) {
-    body = { message: `Foundry could not be reached to finish the sign-in (${(e as Error).message}).` };
+    body = { message: `Tether could not be reached to finish the sign-in (${(e as Error).message}).` };
   }
 
   const piece = body.piece && SHORT.test(body.piece) ? body.piece : null;
   if (status >= 200 && status < 300 && piece) {
     return back(req, `/apps/${piece}?connected=${encodeURIComponent(body.connection?.id ?? "")}`);
   }
-  const why = body.message ?? body.error ?? `Foundry answered ${status || "nothing"}.`;
+  const why = body.message ?? body.error ?? `Tether answered ${status || "nothing"}.`;
   return back(req, `${piece ? `/apps/${piece}` : "/apps"}?oauthError=${encodeURIComponent(why.slice(0, 400))}`);
 }

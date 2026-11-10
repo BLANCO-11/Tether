@@ -108,7 +108,7 @@ export function buildReportPdf(input: ReportPdfInput): Promise<Buffer> {
       Title: `Cost report, ${period}`,
       Author: safe(input.generatedBy),
       Subject: `Cost report for ${safe(input.workspaces.join(", "))}`,
-      Creator: "Foundry",
+      Creator: "Tether",
       CreationDate: now,
     },
   });
@@ -469,7 +469,7 @@ export function buildReportPdf(input: ReportPdfInput): Promise<Buffer> {
     doc.page.margins.bottom = 0;
     if (i > 0) text(`Cost report  ·  ${period}`, M, 24, { size: 8, color: MUTED });
     doc.lineWidth(0.5).moveTo(M, 806).lineTo(M + W, 806).strokeColor(GRID).stroke();
-    text("Foundry cost report", M, 814, { size: 8, color: MUTED });
+    text("Tether cost report", M, 814, { size: 8, color: MUTED });
     text(`Page ${i + 1} of ${range.count}`, M, 814, { size: 8, color: MUTED, width: W, align: "right" });
   }
 

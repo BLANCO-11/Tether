@@ -22,7 +22,7 @@ describe("S-42 · consumer shell — structure", () => {
         <ConsumerMePage />
       </ConsumerLayout>,
     );
-    expect(screen.getByText("Foundry")).toBeTruthy();
+    expect(screen.getByText("Tether")).toBeTruthy();
     const header = document.querySelector("header");
     expect(header?.className).toContain("h-[64px]");
     expect(screen.queryByPlaceholderText(/Search/)).toBeNull();

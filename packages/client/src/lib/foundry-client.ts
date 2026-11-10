@@ -1068,11 +1068,23 @@ export interface FAWorkspaceMember {
  * The client asks; it never decides. Hiding a nav row is presentation, and
  * `requireSuperAdmin` on the routes is the control.
  */
+/** One email on the sign-in allowlist (`/api/allowed-users`). */
+export interface FAAllowedUser {
+  id: string;
+  email: string;
+  role: "admin" | "user";
+  enabled: boolean;
+  createdAt: string;
+  createdBy: string | null;
+  lastLoginAt: string | null;
+}
 export interface FAMe {
   subject: string;
   email: string;
   name?: string;
   superAdmin: boolean;
+  /** May manage who can sign in. The server decides; the client only asks. */
+  userAdmin?: boolean;
   /**
    * Whether ANY super admin is configured on this deployment — never who.
    *
@@ -1342,12 +1354,14 @@ export interface FARunCall {
  * eight hex characters of a salted digest — enough to tell two keys apart, not
  * enough to reconstruct either. Same rule as `WorkspaceSecret.hasValue`.
  */
-export type FALlmProviderPresetId = "openai" | "openrouter" | "opencode" | "groq" | "custom";
+export type FALlmProviderPresetId = "opencode_go" | "opencode_zen" | "openai" | "openrouter" | "groq" | "custom";
 
 export interface FALlmProviderPreset {
   id: FALlmProviderPresetId;
   label: string;
   baseUrl: string;
+  /** Absolute models-list URL when it is not `${baseUrl}/models` (OpenCode). */
+  modelsUrl?: string;
   baseUrlEditable: boolean;
   keyHint: string;
   blurb: string;
@@ -3287,6 +3301,13 @@ export const foundryApi = {
   getAccessMatrix: () => req<FAAccessMatrix>("/platform/access"),
   /** People, invitations, and what the reader may do — admin simplify phase 3. */
   getPeople: () => req<FAPeopleView>("/platform/people"),
+  listAllowedUsers: () => req<{ users: FAAllowedUser[]; superAdmins: string[] }>("/allowed-users"),
+  addAllowedUser: (body: { email: string; role: "admin" | "user" }) =>
+    req<{ user: FAAllowedUser }>("/allowed-users", { method: "POST", body: JSON.stringify(body) }),
+  updateAllowedUser: (id: string, body: { role?: "admin" | "user"; enabled?: boolean }) =>
+    req<{ user: FAAllowedUser }>(`/allowed-users/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(body) }),
+  removeAllowedUser: (id: string) =>
+    req<{ user: FAAllowedUser }>(`/allowed-users/${encodeURIComponent(id)}`, { method: "DELETE" }),
   /** Add a person by email: applied at once if they have signed in, else kept as an invitation. */
   invite: (body: { email: string; workspaces: { workspaceId: string; role: FAWorkspaceRole }[]; platformRole?: string | null }) =>
     req<FAInviteResult>("/invitations", { method: "POST", body: JSON.stringify(body) }),

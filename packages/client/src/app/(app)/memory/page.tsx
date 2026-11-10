@@ -141,7 +141,7 @@ export default function MemoryPage() {
         <PageHeader eyebrow="Build" title="Memory" purpose="Project memory is part of the personal product." />
         <Zone name="content">
           <Notice tone="info" title="Not available">
-            This surface is for personal Foundry.
+            This surface is for personal Tether.
           </Notice>
         </Zone>
       </Page>

@@ -652,7 +652,7 @@ function ResourcesPageContent() {
         title={confirmDel ? `Remove ${confirmDel.name}?` : "Remove resource?"}
         body={
           confirmDel
-            ? `Foundry will forget ${confirmDel.name}'s credential and everything it discovered about it. ` +
+            ? `Tether will forget ${confirmDel.name}'s credential and everything it discovered about it. ` +
               `Any operation written against it, and any workflow step that calls one, stops working until ` +
               `it is registered again. The database itself is not touched.`
             : ""

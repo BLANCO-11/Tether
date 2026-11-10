@@ -19,12 +19,13 @@ export const edgeRouter = Router({ mergeParams: true });
 export const edgePublicRouter = Router();
 
 /**
- * Base URL agents can reach. Prefer PUBLIC_API_BASE_URL.
+ * Base URL agents can reach. Prefer PUBLIC_API_BASE_URL, then AUTH_URL (the public
+ * domain, which routes /api/edge/* to the server), then localhost.
  * Do not use the request Host: Devices mints via the Next proxy, so Host is often the
  * docker service name (`server:4000`) which an agent on the laptop cannot open.
  */
 function apiBase(): string {
-  return (config.publicApiBaseUrl || "http://localhost:4000").replace(/\/+$/, "");
+  return (config.publicApiBaseUrl || (process.env.AUTH_URL ?? "").trim() || "http://localhost:4000").replace(/\/+$/, "");
 }
 
 edgeRouter.get(
@@ -252,7 +253,7 @@ edgePublicRouter.post(
     const out = await edgeDeviceService.registerConnect(body.t, body.name, body.agent);
     res.status(201).json({
       ...out,
-      message: "Ask the Foundry user to Approve this connect in Devices (or Needs you). Then poll /api/edge/setup/wait.",
+      message: "Ask the Tether user to Approve this connect in Devices (or Needs you). Then poll /api/edge/setup/wait.",
     });
   }),
 );

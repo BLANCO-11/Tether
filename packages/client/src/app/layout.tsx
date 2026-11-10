@@ -21,7 +21,7 @@ import { ToastProvider } from "@/lib/toast";
 // travels into screenshots and links, and it cannot say WHICH parts are alpha.
 // The disclosure itself is on every page and did not move (D-86).
 export const metadata: Metadata = {
-  title: "Foundry — Automation Studio",
+  title: "Tether — Automation Studio",
   description: "Enterprise automation — onboard resources and build automations.",
 };
 

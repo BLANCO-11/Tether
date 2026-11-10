@@ -143,7 +143,7 @@ export async function buildReportWorkbook(input: WorkbookInput): Promise<Buffer>
   const colorOf = (id: string | null | undefined) => argb(wsColor.get(id ?? "") ?? AXIS);
 
   const wb = new ExcelJS.Workbook();
-  wb.creator = "Foundry";
+  wb.creator = "Tether";
   wb.created = now;
 
   // ── Summary ──

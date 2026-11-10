@@ -320,23 +320,18 @@ const CAVEATS: Record<ComponentName, string> = {
    * ⚠ **A CONFIG check, not a probe** — and the caveat has to say so, because this
    * is precisely the component where a reader would assume otherwise.
    *
-   * It reports whether the four `MAIL_GRAPH_*`/`MAIL_SENDER_UPN` variables are set.
-   * It does NOT contact Microsoft, and it deliberately does not: proving delivery
+   * It reports whether `SMTP_HOST` and `MAIL_FROM` are set.
+   * It does NOT contact the SMTP server, and it deliberately does not: proving delivery
    * means sending a message, and a health endpoint that emails somebody on every
    * poll is worse than an unproven `up`.
    *
-   * So `up` here means "configured", never "email works". The two failures it cannot
-   * see are the two most likely ones: no tenant admin consent on the `Mail.Send`
-   * APPLICATION permission (token succeeds, `sendMail` 403s), and no Exchange
-   * application access policy for `MAIL_SENDER_UPN`. The header of this file
-   * records the deleted runtime component as the documented example of exactly
-   * this mistake — reporting `up` from the mere presence of an endpoint.
+   * So `up` here means "configured", never "email works". It cannot see bad SMTP
+   * credentials, a blocked port, or a sender the provider refuses.
    */
   mail:
-    "Whether the Graph variables are SET. It does not contact Microsoft, so it cannot see a " +
-    "missing admin consent on the Mail.Send application permission or a missing Exchange " +
-    "application access policy — the two most likely reasons a fully configured deployment " +
-    "still cannot send. `up` here means configured, not working. One real send is what proves it.",
+    "Whether SMTP_HOST and MAIL_FROM are SET. It does not contact the SMTP server, so it cannot see " +
+    "wrong credentials, a blocked port or a sender the provider rejects. `up` here means configured, " +
+    "not working. One real send is what proves it.",
 };
 
 function component(

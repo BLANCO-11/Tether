@@ -25,7 +25,7 @@ import { PERSONAL_PRODUCT } from "@/lib/personal";
 import { useAsync } from "@/lib/hooks";
 import { usePermissions } from "@/lib/permissions";
 import { useActivityEpoch } from "@/lib/activity";
-import { Chat, Folder, Workflow, Wrench, Activity, CheckCheck, Close, Shield, Database, Key, Bolt, ChevronLeft, Home, Plus, Cube, Mail, LogOut, Apps, User, Sparkle } from "@/components/ui/icons";
+import { Chat, Folder, Workflow, Wrench, Activity, CheckCheck, Close, Shield, Building, Database, Key, Bolt, ChevronLeft, Home, Plus, Cube, Mail, LogOut, Apps, User, Sparkle } from "@/components/ui/icons";
 import { AlphaChip } from "@/components/shell/AlphaChip";
 
 // ── Pack nav: 04 § nav rail — the full product, not just the 5-row prototype ──
@@ -42,6 +42,8 @@ export type NavItem = {
   superAdminOnly?: boolean;
   /** The cost report is an Admin's: shown only when the server says this person may open it (`/api/me`). */
   needsReports?: boolean;
+  /** Shown only when the server says this person may manage who signs in (`userAdmin` on `/api/me`). */
+  userAdminOnly?: boolean;
   ownedPaths?: string[];
   children?: NavChild[];
 };
@@ -203,6 +205,7 @@ export const groups: NavGroup[] = [
         Icon: User,
         ownedPaths: ["/people"],
       },
+      { href: "/admin/users", label: "Users", Icon: Building, userAdminOnly: true, ownedPaths: ["/admin/users"] },
       {
         // Phase 6 edge agent: pair this computer, approve local commands.
         href: "/devices",
@@ -329,7 +332,9 @@ export function Sidebar({
     (!i.superAdminOnly || me.data?.superAdmin || adminHere === "allowed") &&
     // The cost report is an Admin's. Hidden while loading and when the check failed: "could not check" must not read
     // as "you may". The report routes refuse everybody else regardless, so this only decides whether the link shows.
-    (!i.needsReports || me.data?.canViewReports === true);
+    (!i.needsReports || me.data?.canViewReports === true) &&
+    // Same rule: hidden while loading and on failure. The server decides who may manage users.
+    (!i.userAdminOnly || me.data?.userAdmin === true);
 
   const initials =
     (user?.name ?? "")
@@ -382,7 +387,7 @@ export function Sidebar({
             <span className="btn-grad flex h-7 w-7 shrink-0 items-center justify-center rounded-lg" style={{ color: "var(--on-cta)" }}>
               <Cube s={16} />
             </span>
-            <span className={`text-sm font-semibold ${hideWhenNarrow}`}>Foundry</span>
+            <span className={`text-sm font-semibold ${hideWhenNarrow}`}>Tether</span>
           </Link>
           <span className={`ml-auto shrink-0 ${hideWhenNarrow}`}>
             <AlphaChip />

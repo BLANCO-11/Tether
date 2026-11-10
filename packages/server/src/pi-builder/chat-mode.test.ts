@@ -64,7 +64,7 @@ describe("what Forge is told each turn", () => {
     expect(agent).toContain("This chat is in Forge Agent mode");
     expect(agent).toContain("Never change workflow.json");
     expect(agent).not.toContain("put it back");
-    expect(buildPrompt("hi", "", undefined, "agent", true)).toContain("Foundry put it back as it was");
+    expect(buildPrompt("hi", "", undefined, "agent", true)).toContain("Tether put it back as it was");
   });
 });
 

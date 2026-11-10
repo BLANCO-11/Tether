@@ -324,7 +324,7 @@ export async function registerPlatformTools(
     workspaceId,
     MAIL_SECRET_ENV,
     mailServiceKey(),
-    "Derived from PARENT_API_KEY. Authenticates Foundry's own /api/mail/send endpoint. " +
+    "Derived from PARENT_API_KEY. Authenticates Tether's own /api/mail/send endpoint. " +
       "Re-run `mail:register` after rotating PARENT_API_KEY.",
   );
 
@@ -341,7 +341,7 @@ export async function registerPlatformTools(
     workspaceId,
     LLM_SECRET_ENV,
     llmServiceKey(),
-    "Derived from PARENT_API_KEY. Authenticates the llm_complete tool to Foundry's own /api/llm/complete endpoint.",
+    "Derived from PARENT_API_KEY. Authenticates the llm_complete tool to Tether's own /api/llm/complete endpoint.",
   );
 
   // The web_fetch tool's credential for Foundry's own /api/web/fetch, derived from PARENT_API_KEY like the mail key.
@@ -349,7 +349,7 @@ export async function registerPlatformTools(
     workspaceId,
     WEB_SECRET_ENV,
     webServiceKey(),
-    "Derived from PARENT_API_KEY. Authenticates the web_fetch tool to Foundry's own /api/web/fetch endpoint.",
+    "Derived from PARENT_API_KEY. Authenticates the web_fetch tool to Tether's own /api/web/fetch endpoint.",
   );
 
   let manifestVersion: number | null = null;

@@ -279,7 +279,7 @@ export function triage(input: TriageInput): TriageVerdict {
     route: "user",
     level: 3,
     message:
-      `\`${step}\` failed in a way Foundry could not classify` +
+      `\`${step}\` failed in a way Tether could not classify` +
       (err ? `: ${err.slice(0, 300)}` : ".") +
       ` The run's step detail has the full error.`,
     suspendsApproval: false,

@@ -172,7 +172,7 @@ export const edgeRelayService = {
         .catch(() => undefined);
       return {
         ...publicOf(row!, device.name, false),
-        message: ok ? "Read finished through Foundry." : `Read failed: ${text}`,
+        message: ok ? "Read finished through Tether." : `Read failed: ${text}`,
       };
     }
 
@@ -254,7 +254,7 @@ export const edgeRelayService = {
     return {
       ...publicOf({ ...row!, sessionId, chatId }, device.name, true),
       message: sessionId || chatId
-        ? "Proposed on a Foundry Approve card. Poll this relay id until done or declined."
+        ? "Proposed on a Tether Approve card. Poll this relay id until done or declined."
         : "Proposed. Open a Forge chat in this workspace to Approve (Needs your approval). Poll this relay id.",
     };
   },

@@ -110,7 +110,7 @@ const TITLE: Record<ToolProbeVerdict, string> = {
   upstream_error: "Endpoint failing",
   client_error: "Request rejected",
   unreachable: "Unreachable",
-  egress_refused: "Refused by Foundry",
+  egress_refused: "Refused by Tether",
   timeout: "Timed out",
 };
 

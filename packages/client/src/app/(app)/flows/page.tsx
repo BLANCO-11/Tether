@@ -367,7 +367,7 @@ function FlowsPageContent() {
                   canDelete ? (
                     <>
                       No workflows in this workspace yet.{" "}
-                      <Link href="/chats/new?mode=workflow" className="text-accent hover:underline">Describe one</Link> and Foundry will
+                      <Link href="/chats/new?mode=workflow" className="text-accent hover:underline">Describe one</Link> and Tether will
                       design the steps.
                     </>
                   ) : (
@@ -488,7 +488,7 @@ function FlowsPageContent() {
         title={confirmDel ? `Delete ${confirmDel.name}?` : "Delete flow?"}
         body={
           confirmDel
-            ? `Foundry will remove ${confirmDel.name} and its deployments from the engine. Its run ` +
+            ? `Tether will remove ${confirmDel.name} and its deployments from the engine. Its run ` +
               `history goes with it. This can't be undone.`
             : ""
         }
@@ -501,7 +501,7 @@ function FlowsPageContent() {
         open={confirmBulk}
         title={`Delete ${picked.length} ${picked.length === 1 ? "workflow" : "workflows"}?`}
         body={
-          `Foundry will remove ${picked.length === 1 ? "it and its deployments" : "them and their deployments"} from the engine, ` +
+          `Tether will remove ${picked.length === 1 ? "it and its deployments" : "them and their deployments"} from the engine, ` +
           `with their run history. This can't be undone.` +
           (pickedLive
             ? ` ${pickedLive === picked.length ? (pickedLive === 1 ? "It is" : "All of them are") : `${pickedLive} of them ${pickedLive === 1 ? "is" : "are"}`} live and will stop running.`

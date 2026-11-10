@@ -135,7 +135,7 @@ export function authFindings(d: ToolAuthDraft): AuthFinding[] {
         field: "tokenUrl",
         message:
           "Client credentials need somewhere to be exchanged. Give the token endpoint — the " +
-          "URL Foundry calls with the client id and secret to receive a token.",
+          "URL Tether calls with the client id and secret to receive a token.",
       });
     } else if (
       !/^https:\/\//i.test(tokenUrl) &&
@@ -146,7 +146,7 @@ export function authFindings(d: ToolAuthDraft): AuthFinding[] {
         message:
           "The token endpoint must be an https URL — the client credentials cross the wire " +
           "there, so a plain http endpoint is refused (a localhost one excepted, where a " +
-          "development server has no wire). That is the address Foundry will POST the client " +
+          "development server has no wire). That is the address Tether will POST the client " +
           "credentials to.",
       });
     }
@@ -154,7 +154,7 @@ export function authFindings(d: ToolAuthDraft): AuthFinding[] {
       out.push({
         field: "clientIdSecretRef",
         message:
-          "Name the workspace secret holding the client id. Without it Foundry has nothing to " +
+          "Name the workspace secret holding the client id. Without it Tether has nothing to " +
           "exchange at the token endpoint.",
       });
     } else if (!ENV_NAME_RE.test(clientId)) {
@@ -169,7 +169,7 @@ export function authFindings(d: ToolAuthDraft): AuthFinding[] {
       out.push({
         field: "clientSecretSecretRef",
         message:
-          "Name the workspace secret holding the client secret. Without it Foundry has nothing " +
+          "Name the workspace secret holding the client secret. Without it Tether has nothing " +
           "to exchange at the token endpoint.",
       });
     } else if (!ENV_NAME_RE.test(clientSecret)) {
@@ -380,7 +380,7 @@ export function suspensionWarning(moved: string[]): string | null {
     `by the next staleness sweep and its Kestra schedule removed; each one needs approving ` +
     `again. Putting the old value back afterwards does not restore the approval — it is ` +
     `already closed by then. ` +
-    `Foundry cannot list which automations those are: the answer depends on the manifest refs ` +
+    `Tether cannot list which automations those are: the answer depends on the manifest refs ` +
     `recorded on each armed revision, which no browser can read. A guessed list would be worse than this sentence.`
   );
 }

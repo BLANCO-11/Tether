@@ -101,4 +101,35 @@ describe("the local sign-in path", () => {
     // failure looks exactly like the account not existing.
     expect(SRC).toContain('email: { label: "Username or email", type: "text" }');
   });
+
+  it("has an email-otp provider with a rolling 7-day session and an allowlist re-check", () => {
+    expect(SRC).toContain('id: "email-otp"');
+    expect(SRC).toContain("maxAge: 60 * 60 * 24 * 7");
+    expect(SRC).toContain("updateAge: 60 * 60 * 24");
+    const at = SRC.indexOf("await checkEmailAllowed(");
+    expect(at, "CONTROL: the call is found").toBeGreaterThan(0);
+    expect(SRC.indexOf("return null", at)).toBeGreaterThan(at);
+  });
+});
+
+describe("the Google sign-in path", () => {
+  it("registers Google only when both env vars are set", () => {
+    expect(SRC).toContain('from "next-auth/providers/google"');
+    expect(SRC).toContain("googleId && googleSecret");
+    expect(SRC).toContain("Google({ clientId: googleId, clientSecret: googleSecret })");
+  });
+
+  it("refuses unverified or non-allowlisted emails", () => {
+    const at = SRC.indexOf('account?.provider === "google"');
+    expect(at, "CONTROL: the branch is found").toBeGreaterThan(0);
+    const branch = SRC.slice(at, at + 500);
+    expect(branch).toContain("email_verified !== true");
+    expect(branch).toContain("return false");
+    expect(branch).toContain("(await checkEmailAllowed(g.email.toLowerCase())) === true");
+  });
+
+  it("shares the email-otp identity and the allowlist re-check", () => {
+    expect(SRC).toContain("token.sub = `email:${email}`");
+    expect(SRC).toContain('token.authMethod === "google"');
+  });
 });

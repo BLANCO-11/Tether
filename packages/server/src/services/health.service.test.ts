@@ -80,18 +80,18 @@ describe("mail — a CONFIG check that must never read as a working sender", () 
         mail: async () => ({
           configured: false,
           enabled: true,
-          missing: ["MAIL_GRAPH_TENANT_ID", "MAIL_SENDER_UPN"],
+          missing: ["SMTP_HOST", "MAIL_FROM"],
         }),
       }),
     );
     expect(at(r, "mail").status).toBe("down");
-    expect(at(r, "mail").detail).toMatch(/MAIL_GRAPH_TENANT_ID/);
-    expect(at(r, "mail").detail).toMatch(/MAIL_SENDER_UPN/);
+    expect(at(r, "mail").detail).toMatch(/SMTP_HOST/);
+    expect(at(r, "mail").detail).toMatch(/MAIL_FROM/);
   });
 
   it("does not take the deployment down — email is not critical", async () => {
     const r = await buildReport(
-      deps({ mail: async () => ({ configured: false, enabled: true, missing: ["MAIL_SENDER_UPN"] }) }),
+      deps({ mail: async () => ({ configured: false, enabled: true, missing: ["MAIL_FROM"] }) }),
     );
     expect(r.status).toBe("degraded");
     expect(r.serves).toBe(true);
@@ -108,11 +108,11 @@ describe("mail — a CONFIG check that must never read as a working sender", () 
     expect(at(r, "mail").detail).toMatch(/MAIL_ENABLED/);
   });
 
-  it("its caveat says it does not contact Microsoft", async () => {
+  it("its caveat says it does not contact the SMTP server", async () => {
     // The caveat travels with the answer, never only in a doc.
     const r = await buildReport(healthy);
-    expect(at(r, "mail").caveat).toMatch(/does not contact Microsoft/i);
-    expect(at(r, "mail").caveat).toMatch(/admin consent/i);
+    expect(at(r, "mail").caveat).toMatch(/does not contact the SMTP server/i);
+    expect(at(r, "mail").caveat).toMatch(/wrong credentials/i);
     expect(at(r, "mail").caveat).toMatch(/configured, not working/i);
   });
 });
@@ -315,7 +315,7 @@ describe("every probe states its own bound, in the response", () => {
   it("a component whose `up` is weaker than it reads carries the warning beside it", async () => {
     const r = await buildReport(healthy);
     expect(at(r, "mail").status).toBe("up");
-    expect(at(r, "mail").caveat).toMatch(/does not contact Microsoft/i);
+    expect(at(r, "mail").caveat).toMatch(/does not contact the SMTP server/i);
   });
 
   it("Kestra's caveat refuses to be read as “a flow can execute”", async () => {

@@ -39,10 +39,11 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 const KEYS = ["LLM_BASE_URL", "LLM_API_KEY"] as const;
 const saved = new Map<string, string | undefined>();
 
-function blank(key: string) {
+function setEnv(key: string, value: string) {
   if (!saved.has(key)) saved.set(key, process.env[key]);
-  process.env[key] = "";
+  process.env[key] = value;
 }
+const blank = (key: string) => setEnv(key, "");
 
 afterEach(() => {
   for (const [k, v] of saved) {
@@ -61,9 +62,10 @@ async function loadConfig() {
 
 describe("the generation gateway is required config (1.8, D-116)", () => {
   for (const key of KEYS) {
-    it(`refuses to load with ${key} unset`, async () => {
+    it(`loads with ${key} blank (optional; the AI models page row is primary)`, async () => {
       blank(key);
-      await expect(loadConfig()).rejects.toThrow(`Missing required env var: ${key}`);
+      const { config } = await loadConfig();
+      expect(key === "LLM_BASE_URL" ? config.inference.baseUrl : config.inference.apiKey).toBe("");
     });
   }
 
@@ -77,6 +79,8 @@ describe("the generation gateway is required config (1.8, D-116)", () => {
    * this file would go green on a config that never loads at all.
    */
   it("loads cleanly when both are set, and reports them", async () => {
+    setEnv("LLM_BASE_URL", "https://gateway.example/v1/");
+    setEnv("LLM_API_KEY", "k");
     const { config } = await loadConfig();
     expect(config.inference.baseUrl.length).toBeGreaterThan(0);
     expect(config.inference.apiKey.length).toBeGreaterThan(0);

@@ -17,7 +17,7 @@ describe("a model error, in words a person acts on", () => {
   it("busy, down and unreachable are each said differently, and all worth trying again", () => {
     expect(explainModelError("429 Too Many Requests").title).toBe("The AI service is busy");
     expect(explainModelError("503 Service Unavailable").title).toBe("The AI service is having problems");
-    expect(explainModelError("fetch failed: ECONNREFUSED").title).toBe("Foundry could not reach the AI service");
+    expect(explainModelError("fetch failed: ECONNREFUSED").title).toBe("Tether could not reach the AI service");
   });
   it("⚠ a sign-in failure and a too-long conversation say Try again will NOT help", () => {
     expect(explainModelError("401 Unauthorized: invalid api key")).toMatchObject({ retryable: false });

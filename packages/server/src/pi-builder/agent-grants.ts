@@ -49,7 +49,7 @@ export type ActionState = "workspace" | "me" | "off";
 export function neverFromChat(a: PieceActionDescription): string | null {
   if (a.name === "custom_api_call") return "the raw API call can reach any address of the service, so it is never switched on from chat";
   if (a.destructive) return "it deletes or irreversibly changes data, so it is never switched on from chat";
-  if (a.unsupported.length) return `Foundry cannot offer it (${a.unsupported.join("; ")})`;
+  if (a.unsupported.length) return `Tether cannot offer it (${a.unsupported.join("; ")})`;
   return null;
 }
 

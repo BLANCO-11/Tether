@@ -418,7 +418,7 @@ export default function ConnectionDetailPage() {
                 <AssetTree nodes={metadata ?? []} onPreview={doInspect} />
               ) : conn.status === "error" ? (
                 <p className="p-3 text-sm text-muted">
-                  Foundry couldn&apos;t read this source&apos;s schema — fix the connection above, then
+                  Tether couldn&apos;t read this source&apos;s schema — fix the connection above, then
                   re-scan.
                 </p>
               ) : (
@@ -536,7 +536,7 @@ export default function ConnectionDetailPage() {
 
         <div className="flex flex-col gap-3 rounded-lg border border-line bg-surface px-4 py-3 text-sm sm:flex-row sm:items-center sm:justify-between">
           <span className="text-muted">
-            Removing this data source forgets its credential and everything Foundry discovered about
+            Removing this data source forgets its credential and everything Tether discovered about
             it. Any operation written against it, and any flow step that calls one, stops working
             until it is registered again. The database itself is not touched.
           </span>
@@ -570,11 +570,11 @@ export default function ConnectionDetailPage() {
               />
             )}
             <p className="text-xs text-muted">
-              Foundry does not read rows from your data source to show you here. A flow reads rows by
+              Tether does not read rows from your data source to show you here. A flow reads rows by
               running a query, and you can see exactly what it read on the run&apos;s page.
             </p>
             <p className="text-xs text-muted">
-              Declaring a column an email address is a statement Foundry keeps — it lets an automation send to the people in the
+              Declaring a column an email address is a statement Tether keeps — it lets an automation send to the people in the
               rows. Your database is not changed.
             </p>
           </div>
@@ -585,7 +585,7 @@ export default function ConnectionDetailPage() {
       <Confirm
         open={confirmDel}
         title="Remove data source?"
-        body={`Foundry will forget ${conn.name}'s credentials and discovered schema. Any flow whose steps read from it will fail until it is re-registered.`}
+        body={`Tether will forget ${conn.name}'s credentials and discovered schema. Any flow whose steps read from it will fail until it is re-registered.`}
         confirmLabel="Remove"
         danger
         onConfirm={remove}

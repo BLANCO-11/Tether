@@ -570,7 +570,7 @@ export function renderReport(input: {
   }
 
   const generatedAt = input.meta?.generatedAt ?? new Date();
-  const footerParts = [`Sent by Foundry · ${stamp(generatedAt)}`];
+  const footerParts = [`Sent by Tether · ${stamp(generatedAt)}`];
   if (input.meta?.flowExecutionId) footerParts.push(`run ${input.meta.flowExecutionId}`);
   if (input.meta?.stepId) footerParts.push(`step ${input.meta.stepId}`);
 

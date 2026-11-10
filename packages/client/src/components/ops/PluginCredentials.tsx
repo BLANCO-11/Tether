@@ -134,7 +134,7 @@ export function PluginCredentials({
           {!data.usableToday && (
             <div className="mt-3">
               <Notice tone="warn" title="You can prepare this, but you cannot finish it here">
-                Foundry writes every automation&rsquo;s definition itself and can only emit a fixed
+                Tether writes every automation&rsquo;s definition itself and can only emit a fixed
                 set of step types — none of them from this plugin. Steps 1 and 2 below are real and
                 worth doing; step 3 needs an administrator, and until it happens a stored credential
                 sits unused rather than starting to work.
@@ -196,7 +196,7 @@ export function PluginCredentials({
 
             <Step n={steps[1]!.n} title={steps[1]!.title} because={steps[1]!.because}>
               <p className="mt-1 text-xs text-muted">
-                Credentials in Foundry are <b className="font-medium">workspace secrets</b> — stored
+                Credentials in Tether are <b className="font-medium">workspace secrets</b> — stored
                 by name, encrypted per workspace, injected at execution, and never returned by any
                 endpoint. They are added on{" "}
                 <Link href="/keys" className="text-accent hover:underline">

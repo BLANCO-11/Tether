@@ -23,6 +23,8 @@ import { permissionsRouter } from "./routes/permissions.js";
 import { memberCapabilitiesRouter } from "./routes/member-capabilities.js";
 import { budgetsRouter } from "./routes/budgets.js";
 import { localUsersRouter, localAuthRouter } from "./routes/local-users.js";
+import { emailOtpRouter } from "./routes/email-otp.js";
+import { allowedUsersRouter } from "./routes/allowed-users.js";
 import { platformRouter } from "./routes/platform.js";
 import { meRouter } from "./routes/me.js";
 import { reportsRouter } from "./routes/reports.js";
@@ -334,6 +336,12 @@ export function createApp() {
    */
   app.use("/api/local-users", requireApiKey, localUsersRouter);
   app.use("/api/local-auth", requireApiKey, localAuthRouter);
+  /**
+   * `/api/email-otp` is the pre-session email sign-in check: API key only, with its own throttles.
+   * `/api/allowed-users` is the admin surface for it, gated by `requireUserAdmin` inside its router.
+   */
+  app.use("/api/email-otp", requireApiKey, emailOtpRouter);
+  app.use("/api/allowed-users", requireApiKey, allowedUsersRouter);
   app.use("/api/workspaces/:workspaceId/members", requireApiKey, membersRouter);
   /**
    * Custom workspace roles. ⚠ The per-route permission guards are SPLICED from

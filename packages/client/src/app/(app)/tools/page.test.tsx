@@ -225,7 +225,7 @@ describe("a platform-managed tool offers no action the API would refuse — emai
     expect(screen.queryByText("Edit")).toBeNull();
     expect(screen.queryByText("Remove")).toBeNull();
     // And it says why, so fewer buttons than the neighbouring rows is legible.
-    expect(screen.getByText("Managed by Foundry")).toBeTruthy();
+    expect(screen.getByText("Managed by Tether")).toBeTruthy();
   });
 
   it("leaves an ordinary tool's actions exactly as they were", async () => {
@@ -250,7 +250,7 @@ describe("a platform-managed tool offers no action the API would refuse — emai
     expect(screen.getByText("Edit")).toBeTruthy();
     expect(screen.getByText("Remove")).toBeTruthy();
     expect(screen.getByText("Platform")).toBeTruthy();
-    expect(screen.getByText("Managed by Foundry")).toBeTruthy();
+    expect(screen.getByText("Managed by Tether")).toBeTruthy();
   });
 });
 
@@ -550,7 +550,7 @@ describe("⚠ adding auth to an EXISTING tool warns before it unarms anything", 
 describe("paste a curl command", () => {
   it("fills in the URL, the method, the parameters and the auth style", async () => {
     await openCreateForm();
-    fireEvent.click(screen.getByRole("button", { name: /Paste it and Foundry fills in/i }));
+    fireEvent.click(screen.getByRole("button", { name: /Paste it and Tether fills in/i }));
     fireEvent.change(screen.getByLabelText("curl command"), {
       target: {
         value:
@@ -581,7 +581,7 @@ describe("paste a curl command", () => {
     // The whole of D-118's last paragraph. A parser that guesses is
     // `assembleConnectionString` emitting `s3://host:5432/bucket`.
     await openCreateForm();
-    fireEvent.click(screen.getByRole("button", { name: /Paste it and Foundry fills in/i }));
+    fireEvent.click(screen.getByRole("button", { name: /Paste it and Tether fills in/i }));
     fireEvent.change(screen.getByLabelText("curl command"), {
       target: { value: `curl -X TRACE --negotiate -d '<xml/>'` },
     });
@@ -598,7 +598,7 @@ describe("paste a curl command", () => {
 
   it("offers to store the credential, and stores it as a workspace secret", async () => {
     await openCreateForm();
-    fireEvent.click(screen.getByRole("button", { name: /Paste it and Foundry fills in/i }));
+    fireEvent.click(screen.getByRole("button", { name: /Paste it and Tether fills in/i }));
     fireEvent.change(screen.getByLabelText("curl command"), {
       target: { value: `curl https://api.tickets.example/x -H 'X-API-Key: tok-1'` },
     });

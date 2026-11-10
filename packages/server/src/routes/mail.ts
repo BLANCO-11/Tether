@@ -461,7 +461,7 @@ mailRouter.post(
         status: "captured",
         message:
           "captured, not delivered — this is a draft (test) run, so the message was rendered " +
-          "and held in Foundry's Email box instead of being sent. Approving and arming this " +
+          "and held in Tether's Email box instead of being sent. Approving and arming this " +
           "automation is what makes it deliver." +
           (recipients.reservedAllowed?.length
             ? ` ⚠ ${recipients.reservedAllowed.length} recipient(s) are on reserved test domains ` +

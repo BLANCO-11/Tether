@@ -267,7 +267,7 @@ export default function DataSourcesPage() {
         title={confirmDel ? `Remove ${confirmDel.name}?` : "Remove data source?"}
         body={
           confirmDel
-            ? `Foundry will forget ${confirmDel.name}'s credential and the tables it discovered. ` +
+            ? `Tether will forget ${confirmDel.name}'s credential and the tables it discovered. ` +
               `Any DB operation written against it, and any flow step that calls one, will stop ` +
               `working until it is registered again. The database itself is not touched.`
             : ""

@@ -2,11 +2,14 @@
 // Two ways in, both env-driven (read at request time from .env.local):
 //   • Microsoft Entra ID SSO — your work account, shown when the Entra app is set.
 //   • Local credentials — the env admin (LOCAL_ADMIN_*) and created accounts; the form is shown unless LOCAL_LOGIN=off.
+//   • Email code — a 6-digit code mailed to an allowlisted address (the "email-otp" provider); the primary
+//     sign-in. Its session lasts 7 days and rolls forward, and the allowlist is re-checked while it lives.
 // The auth env (Entra IDs, admin creds, secret) is shared with the Action Gateway
 // stack, so a work account that signs in there signs in here too.
 import NextAuth from "next-auth";
 import MicrosoftEntraID from "next-auth/providers/microsoft-entra-id";
 import Credentials from "next-auth/providers/credentials";
+import Google from "next-auth/providers/google";
 import { SignJWT, decodeJwt } from "jose";
 
 /**
@@ -84,6 +87,76 @@ declare module "next-auth" {
   }
 }
 
+type VerifiedEmailUser = { subject: string; email: string; name: string | null };
+
+function apiHeaders(key: string) {
+  return { "content-type": "application/json", "x-api-key": key };
+}
+
+/**
+ * Ask the API server to verify an emailed sign-in code. Every failure is `null`
+ * and none says which; the code is never logged.
+ */
+async function verifyEmailOtp(
+  email: string,
+  code: string,
+  clientIp: string | undefined,
+): Promise<VerifiedEmailUser | null> {
+  const base = process.env.PARENT_API_URL ?? "http://localhost:4000";
+  const key = process.env.PARENT_API_KEY ?? "";
+  if (!key) {
+    console.warn("[auth] PARENT_API_KEY is unset; email codes cannot be verified");
+    return null;
+  }
+  try {
+    const r = await fetch(`${base}/api/email-otp/verify`, {
+      method: "POST",
+      headers: apiHeaders(key),
+      body: JSON.stringify({ email, code, clientIp }),
+      signal: AbortSignal.timeout(10_000),
+    });
+    if (!r.ok) {
+      if (r.status !== 401) console.warn(`[auth] email code verify answered ${r.status}`);
+      return null;
+    }
+    const body = (await r.json()) as { user?: VerifiedEmailUser };
+    return body.user?.subject ? body.user : null;
+  } catch (e) {
+    console.warn("[auth] email code verify failed", (e as Error).message);
+    return null;
+  }
+}
+
+/**
+ * Is this email still on the sign-in allowlist? `true`/`false` from the server,
+ * `null` when it cannot be reached or errors (the caller must not sign anyone out for that).
+ */
+async function checkEmailAllowed(email: string): Promise<boolean | null> {
+  const base = process.env.PARENT_API_URL ?? "http://localhost:4000";
+  const key = process.env.PARENT_API_KEY ?? "";
+  if (!key) {
+    console.warn("[auth] PARENT_API_KEY is unset; the email allowlist cannot be checked");
+    return null;
+  }
+  try {
+    const r = await fetch(`${base}/api/email-otp/status`, {
+      method: "POST",
+      headers: apiHeaders(key),
+      body: JSON.stringify({ email }),
+      signal: AbortSignal.timeout(10_000),
+    });
+    if (!r.ok) {
+      console.warn(`[auth] email allowlist check answered ${r.status}`);
+      return null;
+    }
+    const body = (await r.json()) as { allowed?: boolean };
+    return typeof body.allowed === "boolean" ? body.allowed : null;
+  } catch (e) {
+    console.warn("[auth] email allowlist check failed", (e as Error).message);
+    return null;
+  }
+}
+
 // Only emit Secure / __Secure- cookies when actually served over HTTPS. On
 // http://localhost (dev) the browser would silently drop a Secure cookie and
 // break the session — so key this off the deployment URL, not just NODE_ENV.
@@ -130,6 +203,9 @@ const _backendSecret = new TextEncoder().encode(
 const entraId = process.env.AUTH_MICROSOFT_ENTRA_ID_ID;
 const entraSecret = process.env.AUTH_MICROSOFT_ENTRA_ID_SECRET;
 
+const googleId = process.env.AUTH_GOOGLE_ID;
+const googleSecret = process.env.AUTH_GOOGLE_SECRET;
+
 export const { handlers, auth, signIn, signOut } = NextAuth({
   // Behind proxies/containers there's no host inference, so trust the host and
   // read the signing secret explicitly.
@@ -147,6 +223,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             issuer: process.env.AUTH_MICROSOFT_ENTRA_ID_ISSUER,
           }),
         ]
+      : []),
+    // Google sign-in, registered only when both env vars are set. Gated by the email allowlist in signIn.
+    ...(googleId && googleSecret
+      ? [Google({ clientId: googleId, clientSecret: googleSecret })]
       : []),
     Credentials({
       id: "local",
@@ -216,11 +296,31 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         };
       },
     }),
+    Credentials({
+      id: "email-otp",
+      name: "Email code",
+      credentials: {
+        email: { label: "Email", type: "email" },
+        code: { label: "Code", type: "text" },
+      },
+      // Roles are always [] — rights are decided on the server, never here.
+      async authorize(credentials, request) {
+        const email = typeof credentials?.email === "string" ? credentials.email.trim() : "";
+        const code = typeof credentials?.code === "string" ? credentials.code.trim() : "";
+        if (!email || !code) return null;
+        const fwd = request?.headers?.get("x-forwarded-for")?.split(",")[0]?.trim();
+        const clientIp = fwd || request?.headers?.get("x-real-ip") || undefined;
+        const verified = await verifyEmailOtp(email, code, clientIp);
+        if (!verified) return null;
+        return { id: verified.subject, email: verified.email, name: verified.email, roles: [] };
+      },
+    }),
   ],
   session: {
     strategy: "jwt",
-    maxAge: 60 * 60 * 8, // 8h session lifetime
-    updateAge: 60 * 60, // refresh the token at most once per hour
+    // An active user's session rolls forward (refreshed at most daily); more than 7 days of inactivity ends it.
+    maxAge: 60 * 60 * 24 * 7,
+    updateAge: 60 * 60 * 24,
   },
   cookies: {
     sessionToken: {
@@ -238,7 +338,13 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     // Local-admin sign-ins bypass the tenant check — they're already validated
     // in authorize() above.
     async signIn({ profile, account }) {
-      if (account?.provider === "local") return true;
+      if (account?.provider === "google") {
+        const g = profile as { email?: string; email_verified?: boolean } | undefined;
+        if (g?.email_verified !== true || !g.email) return false;
+        // Only an allowlisted email gets in; unreachable server (null) refuses too.
+        return (await checkEmailAllowed(g.email.toLowerCase())) === true;
+      }
+      if (account?.provider === "local" || account?.provider === "email-otp") return true;
       if (!ALLOWED_TENANT_ID) return true;
       const tid = (profile as { tid?: string } | undefined)?.tid;
       return tid === ALLOWED_TENANT_ID;
@@ -254,6 +360,26 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       if (user) {
         const roles = (user as { roles?: string[] }).roles;
         if (Array.isArray(roles)) token.roles = roles;
+      }
+      if (account) {
+        token.authMethod = account.provider;
+        token.allowCheckedAt = Date.now();
+        if (account.provider === "google") {
+          // Same identity as an email-otp sign-in for this address (server issues `email:<lowercased email>`).
+          const email = (token.email ?? "").toLowerCase();
+          token.email = email;
+          token.name = email;
+          token.sub = `email:${email}`;
+          token.oid = token.sub;
+          token.roles = [];
+        }
+      }
+      // Email-code and Google sessions re-check the allowlist every 5 minutes; others are untouched.
+      if ((token.authMethod === "email-otp" || token.authMethod === "google") && Date.now() - ((token.allowCheckedAt as number | undefined) ?? 0) > 5 * 60 * 1000) {
+        const allowed = await checkEmailAllowed(token.email ?? "");
+        if (allowed === false) return null; // Auth.js clears the session cookie
+        if (allowed === true) token.allowCheckedAt = Date.now();
+        // null: server unreachable; leave the token as is so the check retries next request.
       }
       // Mint/refresh the HS256 backendToken the backend can validate.
       const tok = token as typeof token & { backendToken?: string };

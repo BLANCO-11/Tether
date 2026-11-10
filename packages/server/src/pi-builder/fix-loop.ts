@@ -6,7 +6,7 @@
 /** The prompt for an automatic fix turn: the failure verbatim (I-57: never paraphrase a finding). */
 export function fixPrompt(detail: string): string {
   return [
-    "Foundry checked and test-ran the workflow, and it did not pass. The result, verbatim:",
+    "Tether checked and test-ran the workflow, and it did not pass. The result, verbatim:",
     "",
     detail,
     "",

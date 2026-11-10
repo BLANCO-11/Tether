@@ -374,7 +374,7 @@ async function assertWorkspace(workspaceId: string) {
 function assertNotPlatformManaged(name: string | null | undefined, action: string) {
   if (!isPlatformToolName(name)) return;
   const err = new Error(
-    `"${name}" is a platform-managed tool and cannot be ${action}. Foundry registers and ` +
+    `"${name}" is a platform-managed tool and cannot be ${action}. Tether registers and ` +
       "maintains it; run `pnpm --filter @foundry/server platform:tools` to restore or refresh it. " +
       `Platform-managed names: ${PLATFORM_TOOL_NAMES.join(", ")}.`,
   ) as Error & { statusCode?: number };

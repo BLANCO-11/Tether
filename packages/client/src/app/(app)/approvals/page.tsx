@@ -242,7 +242,7 @@ function ApprovalsPageContent() {
                         onClick={() =>
                           void decideEdgeRelay(r.id, "run")
                             .then(() => {
-                              toast.success("Approved — Foundry will run it with your connection.");
+                              toast.success("Approved — Tether will run it with your connection.");
                               edgePending.reload();
                             })
                             .catch((e) => toast.error(e instanceof Error ? e.message : String(e)))

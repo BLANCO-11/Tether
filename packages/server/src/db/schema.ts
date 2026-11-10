@@ -1680,6 +1680,7 @@ export const projectMembers = pgTable(
 export const runtimeModelProvider = pgTable("runtime_model_provider", {
   id: integer("id").primaryKey(),
   baseUrl: text("base_url").notNull(),
+  provider: varchar("provider", { length: 32 }).notNull().default("custom"),
   apiKeyEnc: text("api_key_enc"),
   defaultModel: text("default_model").notNull().default(""),
   allowedModels: jsonb("allowed_models").$type<string[]>().notNull().default([]),
@@ -4052,4 +4053,24 @@ export const pluginOauthStates = pgTable(
     expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
   },
   (t) => ({ hash: uniqueIndex("idx_plugin_oauth_states_hash").on(t.stateHash) }),
+);
+
+/**
+ * Who may sign in by email code, and as what. The email is stored lower-cased by
+ * `allowedUserService`; the migration also enforces it with a CHECK.
+ */
+export const allowedUsers = pgTable(
+  "allowed_users",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    email: varchar("email", { length: 320 }).notNull(),
+    role: varchar("role", { length: 16 }).notNull().default("user"),
+    enabled: boolean("enabled").notNull().default(true),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    createdBy: text("created_by"),
+    lastLoginAt: timestamp("last_login_at", { withTimezone: true }),
+  },
+  (t) => ({
+    email: uniqueIndex("uq_allowed_users_email").on(t.email),
+  }),
 );

@@ -535,26 +535,10 @@ export const config = {
    * refusals produced, 0 seen. That runtime is gone; the seam it forced is not,
    * and must not be merged back into anything. See `GatewayInference`.
    *
-   * ── ⚠ BOTH ARE REQUIRED, AND THAT IS THE CONTROL (1.8, D-116) ──────────────
+   * ── LLM_BASE_URL / LLM_API_KEY are OPTIONAL ──────────────────────────────────
    *
-   * This block used to say *"unset falls back to the agent runtime, which still
-   * works for satisfiable contracts"* — and that sentence is the defect. The fallback was
-   * I-24, it failed **asymmetrically** (satisfiable contracts kept working, so
-   * nothing looked broken until the one case the refusal channel exists for),
-   * and it was guarded by a single `console.warn` at boot. **A warning is not a
-   * control.** Unsetting either variable silently reinstated a measured defect.
-   *
-   * So there is **no fallback and no default.** A default would be worse than
-   * the warning: it type-checks, it autocompletes, and a deployment pointed at a
-   * placeholder gateway looks configured — Redis's lesson (GAPS §6.4) applied to
-   * a credential.
-   *
-   * ⚠ **Required in `config`, not asserted at the server entry point.** Every
-   * `kestra:*` harness and every `demo:*`/`finance:*` provisioner imports these
-   * services directly and never runs `index.ts`, so an entry-point check would
-   * leave all of them calling a gateway with an empty base URL — a `fetch` error
-   * naming nothing, in exactly the processes that measure whether generation
-   * works. Here, every importer pays the check.
+   * The `runtime_model_provider` DB row (AI models page) is the primary source; these env values are only a
+   * fallback and may be empty, in which case a call with no saved row errors at call time.
    */
   /**
    * The RUNTIME model — what `llm_complete` calls inside a workflow. Since 2026-11-04 one model connection serves
@@ -572,10 +556,21 @@ export const config = {
     timeoutMs: Number(process.env.LLM_COMPLETE_TIMEOUT_MS ?? process.env.OPS_LLM_TIMEOUT_MS ?? 120_000),
   },
   inference: {
-    baseUrl: required("LLM_BASE_URL").replace(/\/+$/, ""),
-    apiKey: required("LLM_API_KEY"),
+    // Optional: the runtime_model_provider row (AI models page) is primary; env is only a fallback and may be empty.
+    // An empty LLM_BASE_URL takes the OpenCode preset's address when LLM_PROVIDER names one (llm-provider-presets.ts).
+    baseUrl: ((process.env.LLM_BASE_URL ?? "").trim() ||
+      ({ opencode_go: "https://opencode.ai/inference/go/openai/v1", opencode_zen: "https://opencode.ai/inference/openai/v1" } as Record<string, string>)[
+        (process.env.LLM_PROVIDER ?? "").trim().toLowerCase()
+      ] ||
+      "").replace(/\/+$/, ""),
+    apiKey: process.env.LLM_API_KEY ?? "",
     /** The fallback model (LLM_MODEL, then the older LLM_REASONING_MODEL / LLM_FAST_MODEL). */
     model: fallbackModel,
+    /** LLM_PROVIDER: which gateway the env fallback is — `opencode_go` | `opencode_zen` | `custom` (default). Decides the extra headers and the models-list URL. */
+    provider: ((): "opencode_go" | "opencode_zen" | "custom" => {
+      const v = (process.env.LLM_PROVIDER ?? "").trim().toLowerCase();
+      return v === "opencode_go" || v === "opencode_zen" ? v : "custom";
+    })(),
   },
   /**
    * Strategy B Intent IR path (2026-10-07). Default ON after ship gate —
@@ -729,8 +724,7 @@ export const config = {
   },
 
   /**
-   * REAL email delivery via Microsoft Graph `sendMail`.
-   * email-send-tool · plan.md Decision 4
+   * REAL email delivery via plain SMTP (nodemailer).
    *
    * ⚠ **This is the only capability in Foundry that leaves the building.** Every
    * other tool in the catalogue talks to `packages/ops-api`, a simulation. A
@@ -739,44 +733,42 @@ export const config = {
    * lives in `services/mail-recipients.ts` as pure, exhaustively-tested policy
    * rather than anywhere near this block.
    *
-   * ⚠ **The Graph client secret is read from `.env`, NOT from Key Vault, and that
-   * is a deliberate deviation from `FOUNDRY_SECRET_SOURCE`** — asked for
-   * explicitly, "keep all the secrets in the .env file only for now". Production
-   * should move it to the vault path the rest of the credentials use; nothing here
-   * assumes `.env` forever, because `clientSecret` is read in exactly one module
-   * (`services/mail.service.ts`, enforced by `mail-secret-single-reader.test.ts`)
-   * and that is the only place a vault lookup would go.
+   * Variables: `SMTP_HOST`, `SMTP_PORT` (default 587), `SMTP_SECURE` (`true` =
+   * implicit TLS; defaults to true on port 465, else STARTTLS when offered),
+   * `SMTP_USER` / `SMTP_PASS` (optional, for an unauthenticated relay), and
+   * `MAIL_FROM` (e.g. `Tether <me@example.com>`). Only host and from are required.
    *
-   * ⚠ **`MAIL_GRAPH_CLIENT_SECRET_VALUE` keeps its `_VALUE` suffix.** It matches
-   * `AZURE_VAULT_CLIENT_SECRET_VALUE`, it is what the operator actually wrote in
-   * `.env`, and renaming it here would present a fully-configured deployment as
-   * an unconfigured one — a refusal naming a variable nobody was told to add.
+   * ⚠ `pass` is read from `.env` and from exactly one module
+   * (`services/mail.service.ts`, enforced by `mail-secret-single-reader.test.ts`).
    *
    * ⚠ **Do not confuse these with `MAIL_API_KEY`**, which is the *simulated* mail
-   * service's workspace secret. Two mail credentials, one real and one fake; the
-   * `MAIL_GRAPH_` prefix is what keeps them apart.
+   * service's workspace secret.
    */
   mail: (() => {
-    const tenantId = process.env.MAIL_GRAPH_TENANT_ID ?? "";
-    const clientId = process.env.MAIL_GRAPH_CLIENT_ID ?? "";
-    const clientSecret = process.env.MAIL_GRAPH_CLIENT_SECRET_VALUE ?? "";
-    const senderUpn = process.env.MAIL_SENDER_UPN ?? "";
+    const host = (process.env.SMTP_HOST ?? "").trim();
+    const parsedPort = Number(process.env.SMTP_PORT ?? 587);
+    const port = Number.isFinite(parsedPort) && parsedPort > 0 ? parsedPort : 587;
+    const secureEnv = (process.env.SMTP_SECURE ?? "").trim().toLowerCase();
+    const secure = secureEnv === "" ? port === 465 : secureEnv === "true";
+    const user = process.env.SMTP_USER ?? "";
+    const pass = process.env.SMTP_PASS ?? "";
+    const from = (process.env.MAIL_FROM ?? "").trim();
 
     /**
      * Every absent variable, so FR-008 can name them all in ONE refusal. Naming
      * the first missing one sends an operator round the loop once per variable.
      */
     const missing: string[] = [];
-    if (!tenantId) missing.push("MAIL_GRAPH_TENANT_ID");
-    if (!clientId) missing.push("MAIL_GRAPH_CLIENT_ID");
-    if (!clientSecret) missing.push("MAIL_GRAPH_CLIENT_SECRET_VALUE");
-    if (!senderUpn) missing.push("MAIL_SENDER_UPN");
+    if (!host) missing.push("SMTP_HOST");
+    if (!from) missing.push("MAIL_FROM");
 
     return {
-      tenantId,
-      clientId,
-      clientSecret,
-      senderUpn,
+      host,
+      port,
+      secure,
+      user,
+      pass,
+      from,
       /**
        * Domains an explicitly-named recipient may be on. **Empty means the person
        * who started the run and nobody else** — there is no wildcard value, because
@@ -789,7 +781,7 @@ export const config = {
       /**
        * ⚠ **Absent means ON**, and only the literal string `false` disables.
        * Inverted from the original off-by-default draft on purpose: the operator
-       * configured all four Graph variables and was never told to add this one, so
+       * configured the SMTP variables and was never told to add this one, so
        * defaulting it off would refuse every send citing a variable that is not in
        * their `.env`. A kill switch has to be switched to kill.
        */
@@ -816,7 +808,7 @@ export const config = {
        * resolve for the *executor's* network, not for a browser.
        */
       selfBase: process.env.MAIL_SELF_BASE ?? "http://localhost:4000",
-      /** True only when Graph could actually be called. Never a promise that it will succeed. */
+      /** True only when SMTP could actually be called. Never a promise that it will succeed. */
       configured: missing.length === 0,
       missing,
     };

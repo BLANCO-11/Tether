@@ -195,7 +195,7 @@ reportsRouter.get(
     const d = await load(req, res, q, { previous: true });
     if (!d) return;
     if (!d.runs.length) return void res.status(422).json({ error: "empty", message: "There is no usage in this selection." });
-    const who = req.user?.name || req.user?.email || req.user?.subject || "Foundry";
+    const who = req.user?.name || req.user?.email || req.user?.subject || "Tether";
     const names = d.selected.map((w) => w.name);
     if (q.format === "both") {
       const pdf = await buildReportPdf({ runs: d.runs, previous: d.previous, window: d.window, workspaces: names, filters: d.filterWords, generatedBy: who });

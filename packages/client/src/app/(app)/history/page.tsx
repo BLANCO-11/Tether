@@ -200,7 +200,7 @@ export default function HistoryPage() {
                       table is actually read. */}
                   <span className="block text-xs text-muted">
                     Every run is recorded. What it did and what it touched, readable by anyone.
-                    Foundry keeps the record of each run; the engine keeps each step&apos;s inputs
+                    Tether keeps the record of each run; the engine keeps each step&apos;s inputs
                     and outputs for 30 days, which is also how far back a run can be replayed.
                   </span>
                 </span>

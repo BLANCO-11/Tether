@@ -9,4 +9,4 @@ export const PERSONAL_PRODUCT = true;
 
 export const PERSONAL_HOME_NAME = "Personal";
 export const PERSONAL_HOME_PURPOSE =
-  "Your personal Foundry space — chats, projects, and workflows.";
+  "Your personal Tether space — chats, projects, and workflows.";

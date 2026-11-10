@@ -512,14 +512,14 @@ function NewTriggerModal({ open, initialKind, onClose, onCreated }: { open: bool
 
         {k.type === "webhook" && (
           <p className="text-xs text-muted">
-            Foundry generates the address when the trigger is created, and shows it on the card.
+            Tether generates the address when the trigger is created, and shows it on the card.
             There is nothing to type here.
           </p>
         )}
 
         {k.type === "api" && (
           <p className="text-xs text-muted">
-            Foundry generates the token and address when the trigger is created, and shows them on
+            Tether generates the token and address when the trigger is created, and shows them on
             the card exactly like a webhook&apos;s. There is nothing to type here.
           </p>
         )}
@@ -593,15 +593,15 @@ function EditTriggerModal({ trigger, onClose, onSaved }: { trigger: Trigger; onC
 function howItWorks(t: Trigger): string {
   switch (t.icon) {
     case "manual":
-      return "Someone starts this automation from Foundry. Nothing fires it on its own.";
+      return "Someone starts this automation from Tether. Nothing fires it on its own.";
     case "webhook":
-      return "When another system posts to the address below, Foundry starts the automation's approved revision.";
+      return "When another system posts to the address below, Tether starts the automation's approved revision.";
     case "api":
-      return "When another system POSTs to the address below, Foundry starts the automation's approved revision. The address carries the trigger's token — the same mechanism as a webhook, for programmatic callers.";
+      return "When another system POSTs to the address below, Tether starts the automation's approved revision. The address carries the trigger's token — the same mechanism as a webhook, for programmatic callers.";
     case "poll":
-      return "Foundry fetches the address below on a timer and starts the automation when what it returns changes.";
+      return "Tether fetches the address below on a timer and starts the automation when what it returns changes.";
     case "schedule":
-      return "This trigger predates Foundry refusing flow-bound schedules. A schedule now lives on the automation itself and is deployed by approving a revision.";
+      return "This trigger predates Tether refusing flow-bound schedules. A schedule now lives on the automation itself and is deployed by approving a revision.";
   }
   return "";
 }

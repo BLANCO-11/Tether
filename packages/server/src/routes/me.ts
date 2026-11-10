@@ -6,6 +6,7 @@ import { effectivePermissionsService } from "../services/effective-permissions.s
 import { asyncHandler } from "../middleware/error.middleware.js";
 import { platformUserService } from "../services/platform-user.service.js";
 import { reportService } from "../services/report.service.js";
+import { allowedUserService } from "../services/allowed-user.service.js";
 import { z } from "zod";
 export const meRouter = Router();
 
@@ -100,6 +101,7 @@ meRouter.get(
     platformPermissions: platform.permissions,
     forgeDefaultMode,
     canViewReports,
+    userAdmin: await allowedUserService.isUserAdmin(req.user).catch(() => false),
   });
 }),
 );
