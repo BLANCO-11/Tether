@@ -142,7 +142,8 @@ describe("the exemptions, each for its own stated reason", () => {
     // 37–39: Forge edge devices / enqueue / job (personal thin; per-conversation tool key).
     // 41–42: edge plugin relay POST/GET (device Bearer).
     // 43–45: email sign-in code request/verify/status (pre-session, API key + throttles).
-    expect(EXEMPT.size).toBe(45);
+    // 46: Forge emailing the chat's owner (personal thin; per-conversation tool key; recipient resolved in the service).
+    expect(EXEMPT.size).toBe(46);
     expect(EXEMPT.get("POST /api/llm/complete")?.reason).toBe("requireLlmKey");
     expect(EXEMPT.get("POST /api/web/fetch")?.reason).toBe("requireWebKey");
     for (const path of [
@@ -156,6 +157,7 @@ describe("the exemptions, each for its own stated reason", () => {
       "/api/forge/edge/devices",
       "/api/forge/edge/enqueue",
       "/api/forge/edge/job",
+      "/api/forge/mail",
     ]) {
       const req = requirementFor("POST", path);
       expect(req?.kind).toBe("exempt");

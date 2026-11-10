@@ -23,7 +23,7 @@ for key, perm in sorted(m["W"].items()):
     method, tail = key.split(" ", 1)
     full = WS + tail
     if perm.startswith("—"):
-        ident_entries.append((method, full, perm.split("(", 1)[1].rstrip(")") if "(" in perm else "own data"))
+        ident_entries.append((method, full, perm.split("(", 1)[1].removesuffix(")") if "(" in perm else "own data"))
     else:
         ws_entries.append((method, full, perm, "workspaceId"))
 
@@ -31,7 +31,7 @@ for key, perm in sorted(m["D"].items()):
     method, full = key.split(" ", 1)
     if perm.startswith("—"):
         # Identity-only with its own reason, written "— (reason)" — the same form a workspace entry uses.
-        ident_entries.append((method, full, perm.split("(", 1)[1].rstrip(")") if "(" in perm else "own data"))
+        ident_entries.append((method, full, perm.split("(", 1)[1].removesuffix(")") if "(" in perm else "own data"))
     elif perm in IDENTITY_ONLY:
         ident_entries.append((method, full, "signed in; no further permission"))
     elif perm == FILTERED:

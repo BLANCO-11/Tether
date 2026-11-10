@@ -73,7 +73,7 @@ export function platformToolCatalogue(): ToolSpec[] {
        */
       description:
         "REAL DELIVERY to a live mailbox — this is not the demo mail service. Sends one email, " +
-        "formatted BY FOUNDRY as a report: pass the upstream step's output in `body` and rows are " +
+        "formatted by Tether as a report: pass the upstream step's output in `body` and rows are " +
         "rendered as proper tables. Do NOT write HTML, markup or column padding yourself. Leave " +
         "`to` unset to send to the person who started the run; that is the normal case for 'email " +
         "me the result'. Any address you DO name must be on the workspace's allowed recipient list " +
@@ -87,7 +87,7 @@ export function platformToolCatalogue(): ToolSpec[] {
         "(`[{name: \"report.csv\", content: <the file's TEXT>}]`, text files only: .csv, .tsv, .txt, " +
         ".json) or structured ROWS to generate one (`[{name: \"headcount.xlsx\", format: \"xlsx\", " +
         "rows: <this step's records>}]` — format `csv` or `xlsx`; the name must end in the matching " +
-        "extension). Generated files are built BY FOUNDRY from the rows, so attaching a step's " +
+        "extension). Generated files are built by Tether from the rows, so attaching a step's " +
         "output needs no hand-written CSV. For a LARGE report (more than a few thousand rows) build the file in the " +
         "step and attach it by path — `[{name: \"report.xlsx\", path: \"report.xlsx\"}]` — never thousands of rows " +
         "as data: one call carries at most 5 MB, a file up to 50 MB. A saved file may be .xlsx, .csv, .pdf, .docx, " +

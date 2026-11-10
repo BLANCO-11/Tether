@@ -228,6 +228,26 @@ W = {
  # own data
  ('GET','me/attendance'):'—  (own data; subject from the token)',
  ('GET','me/exceptions'):'—  (own data; subject from the token)',
+# Entries below were hand-added to route-permissions.ts by earlier commits; carried here so regeneration reproduces it.
+ ('DELETE','edge/devices/:deviceId'):'flows.write',
+ ('DELETE','flow-executions/:id/shares/:subject'):'runs.read',
+ ('GET','edge/connects/pending'):'flows.read',
+ ('GET','edge/devices'):'flows.read',
+ ('GET','edge/devices/:deviceId/jobs'):'flows.read',
+ ('GET','edge/pending'):'flows.read',
+ ('GET','flow-executions/:id/shares'):'runs.read',
+ ('GET','pi-builder/sessions/:sessionId/background'):'flows.read',
+ ('POST','edge/devices/:deviceId/approve-connect'):'flows.write',
+ ('POST','edge/devices/:deviceId/deny-connect'):'flows.write',
+ ('POST','edge/devices/:deviceId/jobs'):'flows.write',
+ ('POST','edge/devices/pair'):'flows.write',
+ ('POST','edge/jobs/:jobId/approve'):'flows.write',
+ ('POST','edge/jobs/:jobId/reject'):'flows.write',
+ ('POST','edge/relay/:id/decide'):'flows.write',
+ ('POST','edge/setup-link'):'flows.write',
+ ('POST','flow-executions/:id/cancel'):'flows.write',
+ ('POST','flow-executions/:id/shares'):'runs.read',
+ ('POST','pi-builder/sessions/:sessionId/background/:jobId/cancel'):'flows.write',
 }
 
 D = {
@@ -280,11 +300,11 @@ D = {
  ('GET','/api/observability'):'platform.signals.read',
 # 2026-11-04: the builder-model routes are gone; /api/runtime-model/* is the one model connection.
  # The runtime model (AI models → Runtime), served by Foundry since 2026-10-30 (was /api/ops/llm/* through ops-api).
- ('GET','/api/runtime-model/provider'):'platform.toolmodel.read',
- ('POST','/api/runtime-model/models'):'platform.toolmodel.read',
- ('POST','/api/runtime-model/test'):'platform.toolmodel.read',
- ('PUT','/api/runtime-model/provider'):'platform.toolmodel.write',
- ('DELETE','/api/runtime-model/provider'):'platform.toolmodel.write',
+ ('GET','/api/runtime-model/provider'):'— (personal BYOK: each signed-in subject owns their own AI connection)',
+ ('POST','/api/runtime-model/models'):'— (personal BYOK: each signed-in subject owns their own AI connection)',
+ ('POST','/api/runtime-model/test'):'— (personal BYOK: each signed-in subject owns their own AI connection)',
+ ('PUT','/api/runtime-model/provider'):'— (personal BYOK: each signed-in subject owns their own AI connection)',
+ ('DELETE','/api/runtime-model/provider'):'— (personal BYOK: each signed-in subject owns their own AI connection)',
  ('GET','/api/local-users'):'platform.localusers.write',
  ('POST','/api/local-users'):'platform.localusers.write',
  ('PATCH','/api/local-users/:id'):'platform.localusers.write',
@@ -294,6 +314,11 @@ D = {
  ('GET','/api/local-users/:id/access'):'platform.users.read',
  ('PUT','/api/local-users/:id/access/:workspaceId'):'platform.members.grant',
  ('DELETE','/api/local-users/:id/access/:workspaceId'):'platform.members.grant',
+# Entries below were hand-added to route-permissions.ts by earlier commits; carried here so regeneration reproduces it.
+ ('DELETE','/api/allowed-users/:id'):'— (allowlist admin: requireUserAdmin inside the router (allowed_users admin or SUPER_ADMIN_EMAILS))',
+ ('GET','/api/allowed-users'):'— (allowlist admin: requireUserAdmin inside the router (allowed_users admin or SUPER_ADMIN_EMAILS))',
+ ('PATCH','/api/allowed-users/:id'):'— (allowlist admin: requireUserAdmin inside the router (allowed_users admin or SUPER_ADMIN_EMAILS))',
+ ('POST','/api/allowed-users'):'— (allowlist admin: requireUserAdmin inside the router (allowed_users admin or SUPER_ADMIN_EMAILS))',
 }
 
 # ⚠ rbac-observability (2026-10-15) added these five to the GENERATED file by hand and not here, so the first
@@ -380,10 +405,28 @@ EX = {
  ('POST','/api/forge/data'):"Forge's per-conversation tool key (assistant mode, checked in the service)",
  ('POST','/api/forge/file'):"Forge's per-conversation tool key (a workspace File opened while building)",
  ('POST','/api/forge/fetch'):"Forge's per-conversation tool key (a public web address read while building; web access checked in the service)",
+ ('POST','/api/forge/mail'):"Forge's per-conversation tool key (Forge Agent; emails the chat's owner only, recipient resolved in the service, no `to` accepted)",
  ('POST','/api/forge/plugin'):"Forge's per-conversation tool key (assistant mode; a connector READ — a write is refused in the service)",
  ('POST','/api/forge/propose'):"Forge's per-conversation tool key (Forge Agent; PROPOSES a change, performs nothing — the person's click does)",
  ('POST','/api/forge/actions'):"Forge's per-conversation tool key (Forge Agent; lists the connected services' actions, changes nothing)",
  ('POST','/api/forge/propose-setting'):"Forge's per-conversation tool key (Forge Agent; PROPOSES switching an action on or off, applies nothing — the person's click does)",
+# Entries below were hand-added to route-permissions.ts by earlier commits; carried here so regeneration reproduces it.
+ ('GET','/api/edge/agent.mjs'):'public edge bootstrap script (no secrets; used by setup fmt=sh)',
+ ('GET','/api/edge/relay/:id'):'edge device Bearer token (plugin relay status)',
+ ('GET','/api/edge/setup'):'public edge setup instructions / bootstrap (setup token in query)',
+ ('POST','/api/edge/jobs/:jobId/complete'):'edge device Bearer token',
+ ('POST','/api/edge/jobs/claim'):'edge device Bearer token',
+ ('POST','/api/edge/pair'):'public edge OTP pairing (6-digit code)',
+ ('POST','/api/edge/relay'):'edge device Bearer token (plugin relay)',
+ ('POST','/api/edge/setup/register'):'public edge setup register (setup token in body)',
+ ('POST','/api/edge/setup/wait'):'public edge setup wait (deviceId + waitSecret)',
+ ('POST','/api/email-otp/request'):'answers before anybody has a session (email sign-in code; API key + own throttles)',
+ ('POST','/api/email-otp/status'):'answers before anybody has a session (email sign-in code; API key + own throttles)',
+ ('POST','/api/email-otp/verify'):'answers before anybody has a session (email sign-in code; API key + own throttles)',
+ ('POST','/api/forge/card'):"Forge's per-conversation tool key (Forge Agent; shows a structured info/ask card in chat, performs nothing)",
+ ('POST','/api/forge/edge/devices'):"Forge's per-conversation tool key (personal thin; lists the person's paired edge devices)",
+ ('POST','/api/forge/edge/enqueue'):"Forge's per-conversation tool key (personal thin; queues a job on a paired edge device)",
+ ('POST','/api/forge/edge/job'):"Forge's per-conversation tool key (personal thin; polls an edge job)",
 }
 
 ws=[r for r in rows if r[1].startswith(WS)]

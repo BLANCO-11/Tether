@@ -1,6 +1,7 @@
 import express, { Router } from "express";
 import { z } from "zod";
 import { asyncHandler } from "../middleware/error.middleware.js";
+import { forgeMailBodySchema } from "../pi-builder/forge-mail.js";
 import { listActions, piBuilderService, proposeChange, proposeSetting, showCard, usePlugin } from "../pi-builder/service.js";
 
 /**
@@ -44,6 +45,17 @@ forgeToolsRouter.post(
     const token = req.header("x-forge-token") ?? "";
     const body = z.object({ url: z.string().min(1).max(4000), raw: z.boolean().optional() }).strict().parse(req.body);
     res.json(await piBuilderService.fetchWeb(token, body.url, { raw: body.raw }));
+  }),
+);
+
+/** Forge Agent emails the chat's owner only (tools/send-email.mjs); the recipient is resolved in the service and no `to` is accepted. */
+forgeToolsRouter.post(
+  "/mail",
+  express.json({ limit: "64kb" }),
+  asyncHandler(async (req, res) => {
+    const token = req.header("x-forge-token") ?? "";
+    const body = forgeMailBodySchema.parse(req.body);
+    res.json(await piBuilderService.sendOwnerMail(token, body));
   }),
 );
 

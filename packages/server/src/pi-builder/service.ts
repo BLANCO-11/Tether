@@ -89,6 +89,10 @@ import { parseCron } from "../services/cron.js";
 import { flowApprovalService } from "../services/flow-approval.service.js";
 import { stepBatchSchema, stepExecutionService } from "../services/step-execution.service.js";
 import { auditService } from "../services/audit.service.js";
+import type { z } from "zod";
+import { mailService } from "../services/mail.service.js";
+import { emailSendRepo } from "../repositories/email-send.repo.js";
+import { ForgeMailError, sendForgeMail, type forgeMailBodySchema } from "./forge-mail.js";
 import { toolRepo, type Tool } from "../repositories/tool.repo.js";
 import { isPersonalTool, mayRunThrough, ownConnections, personalTools } from "../services/personal-actions.js";
 import { pluginRepo } from "../repositories/plugin.repo.js";
@@ -3027,6 +3031,50 @@ export const piBuilderService = {
       return await webFetch(s.workspaceId, url, { sessionId: s.id, actor: s.requester.actor }, { raw: opts.raw });
     } catch (e) {
       if (e instanceof WebFetchError) throw httpErr(e.message, e.statusCode);
+      throw e;
+    }
+  },
+
+  /** Forge Agent emails the chat's owner (tools/send-email.mjs). The recipient is the owner, resolved in `sendForgeMail`; no address is taken from the caller. */
+  async sendOwnerMail(token: string, input: z.infer<typeof forgeMailBodySchema>): Promise<{ sentTo: string; attachments: { name: string; bytes: number }[] }> {
+    const sid = toolTokens.get(token);
+    const s = sid ? sessions.get(sid) : undefined;
+    if (!s) throw httpErr("This key does not belong to an open conversation.", 401);
+    if (!s.abort) throw httpErr("Email can only be sent while Forge is answering a message.", 409);
+    try {
+      return await sendForgeMail(
+        { workspaceId: s.workspaceId, sessionId: s.id, chatId: s.chatId, mode: s.mode, ownerSubject: s.ownerSubject, actor: s.requester.actor },
+        input,
+        {
+          lookupEmail: (subject) => platformUserService.emailOf(subject),
+          send: (m) => mailService.send(m),
+          record: (row) => emailSendRepo.record(row),
+          finish: (id, patch) => emailSendRepo.finish(id, patch),
+          audit: async ({ workspaceId, actor, chatId, description, raw }) => {
+            await auditService.record({
+              workspaceId,
+              actor,
+              operation: "access",
+              entity: "chat",
+              description,
+              whereText: chatId ? "Chats" : "Forge",
+              whereEntityType: chatId ? "chat" : null,
+              whereEntityId: chatId,
+              raw,
+            });
+          },
+          now: Date.now,
+          caps: {
+            maxCount: config.mail.maxAttachments,
+            maxTotalBytes: config.mail.maxAttachmentBytes,
+            maxBodyBytes: config.mail.maxBodyBytes,
+            maxRecipients: config.mail.maxRecipients,
+            perHour: 10,
+          },
+        },
+      );
+    } catch (e) {
+      if (e instanceof ForgeMailError) throw httpErr(e.message, e.statusCode);
       throw e;
     }
   },

@@ -121,6 +121,16 @@ export const platformUserService = {
     return row?.mode === "agent" ? "agent" : "workflow";
   },
 
+  /** The email address held for a person's subject, or null. */
+  async emailOf(subject: string): Promise<string | null> {
+    const [row] = await db
+      .select({ email: platformUsers.email })
+      .from(platformUsers)
+      .where(eq(platformUsers.subject, subject.trim()))
+      .limit(1);
+    return row?.email ?? null;
+  },
+
   /** A person's own choice of default, from their verified identity. Writes the row if this is its first appearance. */
   async setForgeDefaultMode(
     identity: { subject: string; email?: string | null; name?: string | null },
