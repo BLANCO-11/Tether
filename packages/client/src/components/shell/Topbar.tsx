@@ -228,7 +228,7 @@ function WorkspaceSwitcher() {
   );
 }
 
-export function Topbar({ onOpenNav }: { onOpenNav?: () => void }) {
+export function Topbar({ onOpenNav, navExpanded = false }: { onOpenNav?: () => void; navExpanded?: boolean }) {
   const pathname = usePathname();
   const router = useRouter();
   const crumbs = crumbsFor(pathname);
@@ -302,7 +302,12 @@ export function Topbar({ onOpenNav }: { onOpenNav?: () => void }) {
             <ChevronLeft s={18} />
           </IconButton>
         )}
-        <IconButton label="Open menu" onClick={onOpenNav} className="lg:hidden">
+        <IconButton
+          label={navExpanded ? "Collapse the navigation" : "Expand the navigation"}
+          aria-expanded={navExpanded}
+          onClick={onOpenNav}
+          className="lg:hidden"
+        >
           <Menu s={18} />
         </IconButton>
 

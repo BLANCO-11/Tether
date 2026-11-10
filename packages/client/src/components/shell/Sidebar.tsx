@@ -1,6 +1,7 @@
 // src/components/shell/Sidebar.tsx — Foundry's left rail: logo lockup, primary action, nav
 // grouped per pack's information architecture (04), and the user at the foot.
-// Static on large screens; an off-canvas drawer (with backdrop) on small screens.
+// Always on the side as a rail: 240px expanded, 57px icon rail collapsed, at every width. Below `lg` it
+// starts collapsed and expands OVER the page (with a fading scrim); from `lg` up it pushes the content.
 //
 // ⚠ **The design handoff pack defined the app shell** (pack record removed 2026-09-11;
 // the rail below is the surviving implementation). Every child href
@@ -25,7 +26,7 @@ import { PERSONAL_PRODUCT } from "@/lib/personal";
 import { useAsync } from "@/lib/hooks";
 import { usePermissions } from "@/lib/permissions";
 import { useActivityEpoch } from "@/lib/activity";
-import { Chat, Folder, Workflow, Wrench, Activity, CheckCheck, Close, Shield, Building, Database, Key, Bolt, ChevronLeft, Home, Plus, Cube, Mail, LogOut, Apps, User, Sparkle } from "@/components/ui/icons";
+import { Chat, Folder, Workflow, Wrench, Activity, CheckCheck, Shield, Building, Database, Key, Bolt, ChevronLeft, Home, Plus, Cube, Mail, LogOut, Apps, User, Sparkle } from "@/components/ui/icons";
 import { AlphaChip } from "@/components/shell/AlphaChip";
 
 // ── Pack nav: 04 § nav rail — the full product, not just the 5-row prototype ──
@@ -283,25 +284,26 @@ export function isChildActive(childHref: string, pathname: string, search: strin
 /**
  * The persistent left navigation rail.
  *
- * `open`/`onClose` drive the MOBILE drawer; `collapsed`/`onToggleCollapsed`
- * drive the DESKTOP width. They are separate on purpose — on a phone the rail is
- * off-canvas and a 68px version of it would be a drawer you cannot read, so
- * every collapsed style below is `lg:`-scoped and the drawer is unaffected.
+ * `collapsed`/`onToggleCollapsed` drive the width at EVERY size (the shell decides what "collapsed"
+ * means: stored preference from `lg` up, default-collapsed below it). `onNavigate` fires when a link is
+ * tapped so the shell can fold an overlaid rail back to icons on a small screen.
+ *
+ * ⚠ The `<aside>` is absolutely positioned inside a wrapper that owns the flex-row space. Below `lg` the
+ * wrapper stays 57px, so the expanded 240px rail OVERLAYS the page instead of pushing it; from `lg` the
+ * wrapper follows the rail's width (same 280ms curve) and the content is pushed.
  *
  * ⚠ The rail's HEIGHT is the shell's, not this file's: `app/(app)/layout.tsx`
  * is `h-screen overflow-hidden`, which is what stops the rail growing with the
  * page. Reintroducing `min-h-screen` there brings the scrolling rail back.
  */
 export function Sidebar({
-  open = false,
-  onClose,
   collapsed = false,
   onToggleCollapsed,
+  onNavigate,
 }: {
-  open?: boolean;
-  onClose?: () => void;
   collapsed?: boolean;
   onToggleCollapsed?: () => void;
+  onNavigate?: () => void;
 }) {
   const pathname = usePathname();
   const searchParams = typeof window !== "undefined" ? window.location.search : "";
@@ -370,20 +372,32 @@ export function Sidebar({
   const railLabel =
     "min-w-0 whitespace-nowrap transition-[opacity,visibility,transform] ease-out motion-reduce:transition-none";
   const hideWhenNarrow = collapsed
-    ? `${railLabel} duration-150 lg:invisible lg:opacity-0 lg:-translate-x-1`
-    : `${railLabel} duration-200 lg:delay-100 motion-reduce:lg:delay-0`;
+    ? `${railLabel} duration-150 invisible opacity-0 -translate-x-1`
+    : `${railLabel} duration-200 delay-100 motion-reduce:delay-0`;
 
   return (
     <>
-      {open && <div className="fixed inset-0 z-40 bg-scrim lg:hidden" onClick={onClose} aria-hidden />}
+      <div
+        className={`relative h-full w-[var(--sidebar-collapsed-w)] shrink-0 transition-[width] duration-[280ms] ease-[cubic-bezier(.2,.8,.2,1)] motion-reduce:transition-none ${
+          collapsed ? "lg:w-[var(--sidebar-collapsed-w)]" : "lg:w-[var(--sidebar-w)]"
+        }`}
+      >
+      {/* Below lg an expanded rail floats over the page: this scrim fades in behind it and collapses it on tap. */}
+      <div
+        onClick={onToggleCollapsed}
+        aria-hidden
+        className={`fixed inset-0 z-40 bg-scrim transition-opacity duration-[280ms] ease-out motion-reduce:transition-none lg:hidden ${
+          collapsed ? "pointer-events-none opacity-0" : "opacity-100"
+        }`}
+      />
 
       <aside
-        className={`fixed inset-y-0 left-0 z-50 flex w-[var(--sidebar-w)] shrink-0 flex-col overflow-hidden border-r border-line bg-surface transition-[width] duration-[280ms] ease-[cubic-bezier(.2,.8,.2,1)] motion-reduce:transition-none lg:static lg:h-full lg:translate-x-0 lg:rail-surface ${
-          collapsed ? "lg:w-[var(--sidebar-collapsed-w)]" : "lg:w-[var(--sidebar-w)]"
-        } ${open ? "translate-x-0" : "-translate-x-full"}`}
+        className={`rail-surface absolute inset-y-0 left-0 z-50 flex h-full shrink-0 flex-col overflow-hidden border-r border-line bg-surface transition-[width] duration-[280ms] ease-[cubic-bezier(.2,.8,.2,1)] motion-reduce:transition-none ${
+          collapsed ? "w-[var(--sidebar-collapsed-w)]" : "w-[var(--sidebar-w)]"
+        }`}
       >
         <div className="flex h-topbar shrink-0 items-center gap-2 overflow-hidden border-b border-line px-3.5">
-          <Link href="/dashboard" onClick={onClose} className="flex min-w-0 items-center gap-2.5">
+          <Link href="/dashboard" onClick={onNavigate} className="flex min-w-0 items-center gap-2.5">
             <span className="btn-grad flex h-7 w-7 shrink-0 items-center justify-center rounded-lg" style={{ color: "var(--on-cta)" }}>
               <Cube s={16} />
             </span>
@@ -392,19 +406,12 @@ export function Sidebar({
           <span className={`ml-auto shrink-0 ${hideWhenNarrow}`}>
             <AlphaChip />
           </span>
-          <button
-            onClick={onClose}
-            aria-label="Close menu"
-            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted hover:bg-surface-2 hover:text-text lg:hidden"
-          >
-            <Close s={16} />
-          </button>
         </div>
 
         {mayBuild && <div className="px-2 py-3">
           <Link
             href="/chats/new"
-            onClick={onClose}
+            onClick={onNavigate}
             title={collapsed ? "New chat" : undefined}
             aria-label="New chat"
             className="btn-cta flex h-9 w-full items-center gap-2.5 overflow-hidden rounded-lg pl-3 pr-3 text-body font-medium transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
@@ -440,7 +447,7 @@ export function Sidebar({
               {group.label && (
                 <div
                   data-rail-group-label
-                  className={`rail-group-label flex h-[38px] items-end overflow-hidden whitespace-nowrap px-3 pb-1.5 transition-[height,padding] duration-[280ms] ease-[cubic-bezier(.2,.8,.2,1)] motion-reduce:transition-none ${collapsed ? "lg:is-collapsed lg:h-[13px] lg:pb-0" : ""}`}
+                  className={`rail-group-label flex h-[38px] items-end overflow-hidden whitespace-nowrap px-3 pb-1.5 transition-[height,padding] duration-[280ms] ease-[cubic-bezier(.2,.8,.2,1)] motion-reduce:transition-none ${collapsed ? "is-collapsed h-[13px] pb-0" : ""}`}
                 >
                   {group.label}
                 </div>
@@ -454,7 +461,7 @@ export function Sidebar({
                   <div key={item.href} className="mb-0.5">
                     <Link
                       href={item.href}
-                      onClick={onClose}
+                      onClick={onNavigate}
                       title={collapsed ? tip : undefined}
                       aria-label={collapsed ? item.label : undefined}
                       aria-current={active ? "page" : undefined}
@@ -462,7 +469,7 @@ export function Sidebar({
                     >
                       <span className="rail-icon relative flex shrink-0 items-center justify-center">
                         <item.Icon s={16} />
-                        {hasPending && collapsed && <span className="rail-dot hidden lg:block" aria-hidden />}
+                        {hasPending && collapsed && <span className="rail-dot" aria-hidden />}
                       </span>
                       <span className={hideWhenNarrow}>{item.label}</span>
                       {item.tag && (
@@ -484,7 +491,7 @@ export function Sidebar({
                          rather than jump on the first frame of the collapse. */
                       <div
                         className={`grid grid-rows-[1fr] transition-[grid-template-rows,opacity,visibility] duration-[280ms] ease-[cubic-bezier(.2,.8,.2,1)] motion-reduce:transition-none ${
-                          collapsed ? "lg:invisible lg:grid-rows-[0fr] lg:opacity-0" : ""
+                          collapsed ? "invisible grid-rows-[0fr] opacity-0" : ""
                         }`}
                       >
                       <div className="min-h-0 overflow-hidden">
@@ -495,7 +502,7 @@ export function Sidebar({
                             <Link
                               key={ch.href}
                               href={ch.href}
-                              onClick={onClose}
+                              onClick={onNavigate}
                               aria-current={childActive ? "page" : undefined}
                               className="rail-sub block truncate px-2 py-1.5 text-[12.5px] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
                             >
@@ -544,7 +551,7 @@ export function Sidebar({
             aria-label={collapsed ? "Expand the navigation" : "Collapse the navigation"}
             aria-expanded={!collapsed}
             title={collapsed ? "Expand the navigation" : "Collapse the navigation"}
-            className="hidden h-9 w-full shrink-0 items-center gap-2.5 overflow-hidden whitespace-nowrap rounded-lg pl-3 pr-2 text-body text-muted transition-[background-color,color] duration-150 ease-out hover:bg-surface-raised hover:text-text focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent lg:flex"
+            className="flex h-9 w-full shrink-0 items-center gap-2.5 overflow-hidden whitespace-nowrap rounded-lg pl-3 pr-2 text-body text-muted transition-[background-color,color] duration-150 ease-out hover:bg-surface-raised hover:text-text focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
           >
             <span className={`flex shrink-0 items-center justify-center transition-transform duration-200 ease-[var(--ease)] ${collapsed ? "rotate-180" : ""}`}>
               <ChevronLeft s={16} />
@@ -553,6 +560,7 @@ export function Sidebar({
           </button>
         </div>
       </aside>
+      </div>
     </>
   );
 }

@@ -1904,10 +1904,8 @@ body.wb .page-enter {
    A frosted rail: a faint tone that fades into the page's ground, rows in near-full text colour, and the page you
    are on as a FROSTED pill — translucent top-level surface, blurred, a hairline and a 1px top-edge highlight.
    Layout and the collapse animation stay in Tailwind in the component; this block owns tone and row states. */
-@media (min-width: 1024px) {
-  .lg\:rail-surface {
-    background: linear-gradient(180deg, color-mix(in srgb, var(--elev-2) 70%, var(--bg)) 0%, var(--bg) 100%);
-  }
+.rail-surface {
+  background: linear-gradient(180deg, color-mix(in srgb, var(--elev-2) 70%, var(--bg)) 0%, var(--bg) 100%);
 }
 .rail-item {
   border: 1px solid transparent;
@@ -1942,10 +1940,8 @@ body.wb .page-enter {
   content: ""; position: absolute; left: 12px; right: 12px; top: 50%;
   border-top: 1px solid var(--line); opacity: 0; transition: opacity 200ms ease;
 }
-@media (min-width: 1024px) {
-  .lg\:is-collapsed.rail-group-label { color: transparent; }
-  .lg\:is-collapsed.rail-group-label::after { opacity: 1; transition-delay: 100ms; }
-}
+.is-collapsed.rail-group-label { color: transparent; }
+.is-collapsed.rail-group-label::after { opacity: 1; transition-delay: 100ms; }
 .rail-sub { color: var(--muted); border-radius: 6px; transition: background-color 150ms ease, color 150ms ease; }
 .rail-sub:hover { background: color-mix(in srgb, var(--text) 5%, transparent); color: var(--text); }
 .rail-sub[aria-current="page"] { background: color-mix(in srgb, var(--text) 7%, transparent); color: var(--text); font-weight: 500; }
@@ -2021,7 +2017,7 @@ body.chat-resizing .pi-wide { transition: none; }
 .rail-nav::-webkit-scrollbar { display: none; }
 @media (max-height: 760px) {
   .rail-nav .rail-item { height: 32px; }
-  .rail-nav .rail-group-label:not(.lg\:is-collapsed) { height: 30px; }
+  .rail-nav .rail-group-label:not(.is-collapsed) { height: 30px; }
 }
 
 /* Forge Agent's confirm cards (ProposalCard, 2026-10-28): one calm card — the eyebrow, the line, the exact values in a

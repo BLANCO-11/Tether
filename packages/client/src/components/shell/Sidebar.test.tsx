@@ -149,3 +149,35 @@ describe("the collapsed rail is legible", () => {
     expect(collisions, `shared glyphs: ${collisions.map(([n, l]) => `${n}→${l.join("|")}`).join("; ")}`).toEqual([]);
   });
 });
+
+describe("Sidebar — rail at every width (no drawer)", () => {
+  it("is never off-canvas and its toggle flips between icon rail and expanded rail", async () => {
+    vi.mocked(api.getMe).mockResolvedValue(me(false));
+    const onToggle = vi.fn();
+    const { rerender } = render(<Sidebar collapsed onToggleCollapsed={onToggle} />);
+    const aside = document.querySelector("aside")!;
+    expect(aside.className).not.toContain("-translate-x-full");
+    expect(aside.className).toContain("w-[var(--sidebar-collapsed-w)]");
+    expect(aside.className).not.toContain("lg:static");
+
+    const toggle = screen.getByRole("button", { name: "Expand the navigation" });
+    expect(toggle.getAttribute("aria-expanded")).toBe("false");
+    toggle.click();
+    expect(onToggle).toHaveBeenCalledTimes(1);
+
+    rerender(<Sidebar collapsed={false} onToggleCollapsed={onToggle} />);
+    expect(document.querySelector("aside")!.className).toContain("w-[var(--sidebar-w)]");
+    const open = screen.getByRole("button", { name: "Collapse the navigation" });
+    expect(open.getAttribute("aria-expanded")).toBe("true");
+    expect(screen.queryByRole("button", { name: "Close menu" })).toBeNull();
+  });
+
+  it("taps on a nav item report back so a small screen can fold the rail", async () => {
+    vi.mocked(api.getMe).mockResolvedValue(me(false));
+    const onNavigate = vi.fn();
+    render(<Sidebar collapsed={false} onNavigate={onNavigate} />);
+    await waitFor(() => expect(screen.getByText("Chats")).toBeTruthy());
+    screen.getByText("Chats").click();
+    expect(onNavigate).toHaveBeenCalled();
+  });
+});

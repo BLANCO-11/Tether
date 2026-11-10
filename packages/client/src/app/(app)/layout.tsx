@@ -1,6 +1,7 @@
 // src/app/(app)/layout.tsx — the authenticated shell. Guards every page inside it:
 // if there is no session, it sends the user to /login. Otherwise it renders the
-// rail + topbar + alpha notice + the page content, with a drawer on small screens.
+// rail + topbar + alpha notice + the page content. The rail is always on the side; below lg it
+// is an icon rail that expands over the page.
 //
 // ⚠ **Three jobs moved OUT of the page bodies in Phase 3 of ui-upgrade**:
 // where you are (the breadcrumb), which workspace you are in (the switcher, up
@@ -63,7 +64,20 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     if (visibleWorkspaces.loading || visibleWorkspaces.error) return;
     if ((visibleWorkspaces.data?.length ?? 0) === 0) router.replace("/no-access");
   }, [visibleWorkspaces.loading, visibleWorkspaces.error, visibleWorkspaces.data, pathname, router]);
-  const [navOpen, setNavOpen] = useState(false);
+  /** Below `lg` the rail is an icon rail that expands OVER the page; `smallExpanded` is that transient state. */
+  const [isLg, setIsLg] = useState(() => typeof window === "undefined" || window.matchMedia("(min-width: 1024px)").matches);
+  const [smallExpanded, setSmallExpanded] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia("(min-width: 1024px)");
+    const on = () => {
+      setIsLg(mq.matches);
+      setSmallExpanded(false);
+    };
+    on();
+    mq.addEventListener("change", on);
+    return () => mq.removeEventListener("change", on);
+  }, []);
+  useEffect(() => setSmallExpanded(false), [pathname]);
   /**
    * ⚠ Starts `false` and is corrected in an effect, NEVER read from storage
    * during render. This layout renders on the server first, where `window` does
@@ -91,6 +105,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       return !v;
     });
   };
+
+  // Stored preference from `lg` up; default-collapsed below it, whatever was stored.
+  const effectiveCollapsed = isLg ? railCollapsed : !smallExpanded;
+  const toggleNav = () => (isLg ? toggleRail() : setSmallExpanded((v) => !v));
 
   // Once the session check is done, bounce out if nobody is signed in.
   useEffect(() => {
@@ -135,17 +153,16 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     <PageHeaderProvider>
     <div className="flex h-screen overflow-hidden">
       <Sidebar
-        open={navOpen}
-        onClose={() => setNavOpen(false)}
-        collapsed={railCollapsed}
-        onToggleCollapsed={toggleRail}
+        collapsed={effectiveCollapsed}
+        onToggleCollapsed={toggleNav}
+        onNavigate={() => setSmallExpanded(false)}
       />
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
-        {/* The bar carries the drawer toggle on small screens, so it replaces
+        {/* The bar carries the rail toggle on small screens, so it replaces
             the old mobile-only header rather than sitting beside it. It is now
             outside the scroll region, so it is genuinely fixed rather than
             `sticky` — which it also still declares, harmlessly. */}
-        <Topbar onOpenNav={() => setNavOpen(true)} />
+        <Topbar onOpenNav={toggleNav} navExpanded={!effectiveCollapsed} />
         <div className="shell-scroll flex-1 overflow-y-auto">
           {/* Keyed on the workspace: switching remounts every page, so each one
               refetches its (workspace-scoped) data — no per-page wiring needed.
