@@ -1,3 +1,4 @@
+import type { ForgeEmailDraft } from "./forge-mail.js";
 export type PiStep = {
   id: string;
   /** One plain sentence: what this step does, for a person reading it (2026-10-11). Required on code steps. */
@@ -194,7 +195,7 @@ export type PiProposal = {
    * `setting`: not a call to the service but switching one of its actions on or off (agent-grants.ts). `params` is then
    * empty and `setting` says everything the card shows; the person picks WHERE (`scope`) by the button they press.
    */
-  kind?: "action" | "setting" | "account" | "edge" | "surface";
+  kind?: "action" | "setting" | "account" | "edge" | "surface" | "email";
   setting?: PiSettingChange;
   /** `account`: which connection this chat should use for a service — the person picks one of `options`. */
   choice?: PiAccountQuestion;
@@ -205,6 +206,8 @@ export type PiProposal = {
    * Same Do it / Cancel as a Forge propose-change card; settle writes back to edge_relay_requests.
    */
   relay?: { requestId: string; deviceId: string; deviceName: string };
+  /** `email`: an email Forge drafted to someone other than the owner; only the chat owner's click sends it (forge-mail.ts). */
+  email?: ForgeEmailDraft;
   /** `surface`: Forge-authored info/ask card (list or choice) — see surface-card.ts. */
   surface?: PiSurface;
   /** Where the person applied a setting change. */

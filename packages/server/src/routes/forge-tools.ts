@@ -48,7 +48,7 @@ forgeToolsRouter.post(
   }),
 );
 
-/** Forge Agent emails the chat's owner only (tools/send-email.mjs); the recipient is resolved in the service and no `to` is accepted. */
+/** Forge Agent emails from the chat (tools/send-email.mjs). It may name To/CC: mail to the owner alone is sent at once; anything else becomes a card that only the person's click (a different, user-authenticated route) sends. */
 forgeToolsRouter.post(
   "/mail",
   express.json({ limit: "64kb" }),

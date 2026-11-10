@@ -93,7 +93,16 @@ import { auditService } from "../services/audit.service.js";
 import type { z } from "zod";
 import { mailService } from "../services/mail.service.js";
 import { emailSendRepo } from "../repositories/email-send.repo.js";
-import { ForgeMailError, sendForgeMail, type forgeMailBodySchema } from "./forge-mail.js";
+import {
+  ForgeMailError,
+  assertChatOwner,
+  cancelForgeMail,
+  confirmForgeMail,
+  expireForgeMail,
+  sendForgeMail,
+  type ForgeMailDeps,
+  type forgeMailBodySchema,
+} from "./forge-mail.js";
 import { toolRepo, type Tool } from "../repositories/tool.repo.js";
 import { isPersonalTool, mayRunThrough, ownConnections, personalTools } from "../services/personal-actions.js";
 import { pluginRepo } from "../repositories/plugin.repo.js";
@@ -2023,6 +2032,7 @@ export type CreatePiSessionOpts = {
 
 export const piBuilderService = {
   decideProposal,
+  decideEmail,
   decideRelayInbox,
   clearAccount,
   async create(workspaceId: string, opts: CreatePiSessionOpts | string = {}): Promise<PiSessionPublic> {
@@ -3036,44 +3046,55 @@ export const piBuilderService = {
     }
   },
 
-  /** Forge Agent emails the chat's owner (tools/send-email.mjs). The recipient is the owner, resolved in `sendForgeMail`; no address is taken from the caller. */
-  async sendOwnerMail(token: string, input: z.infer<typeof forgeMailBodySchema>): Promise<{ sentTo: string; attachments: { name: string; bytes: number }[] }> {
+  /**
+   * Forge Agent emails from the chat (tools/send-email.mjs). Mail to the owner alone is sent at once; anything else
+   * becomes an email card, and only the owner's click (`decideEmail`, a user-authenticated route) sends it.
+   */
+  async sendOwnerMail(
+    token: string,
+    input: z.infer<typeof forgeMailBodySchema>,
+  ): Promise<
+    | { status: "sent"; sentTo: string; to: string[]; cc: string[]; attachments: { name: string; bytes: number }[] }
+    | { status: "pending"; to: string[]; cc: string[]; attachments: { name: string; bytes: number }[]; message: string }
+  > {
     const sid = toolTokens.get(token);
     const s = sid ? sessions.get(sid) : undefined;
     if (!s) throw httpErr("This key does not belong to an open conversation.", 401);
     if (!s.abort) throw httpErr("Email can only be sent while Forge is answering a message.", 409);
     try {
-      return await sendForgeMail(
+      const r = await sendForgeMail(
         { workspaceId: s.workspaceId, sessionId: s.id, chatId: s.chatId, mode: s.mode, ownerSubject: s.ownerSubject, actor: s.requester.actor },
         input,
-        {
-          lookupEmail: (subject) => platformUserService.emailOf(subject),
-          send: (m) => mailService.send(m),
-          record: (row) => emailSendRepo.record(row),
-          finish: (id, patch) => emailSendRepo.finish(id, patch),
-          audit: async ({ workspaceId, actor, chatId, description, raw }) => {
-            await auditService.record({
-              workspaceId,
-              actor,
-              operation: "access",
-              entity: "chat",
-              description,
-              whereText: chatId ? "Chats" : "Forge",
-              whereEntityType: chatId ? "chat" : null,
-              whereEntityId: chatId,
-              raw,
-            });
-          },
-          now: Date.now,
-          caps: {
-            maxCount: config.mail.maxAttachments,
-            maxTotalBytes: config.mail.maxAttachmentBytes,
-            maxBodyBytes: config.mail.maxBodyBytes,
-            maxRecipients: config.mail.maxRecipients,
-            perHour: 10,
-          },
-        },
+        forgeMailDeps(),
       );
+      if (r.status === "sent") return { status: "sent", sentTo: r.sentTo, to: r.to, cc: r.cc, attachments: r.attachments };
+      const { draft } = r;
+      if (s.proposals.length >= MAX_PROPOSALS_PER_TURN) {
+        throw httpErr(`At most ${MAX_PROPOSALS_PER_TURN} changes can be proposed in one reply. Nothing was sent. Let the person decide these first.`, 409);
+      }
+      const p: PiProposal = {
+        id: randomUUID(),
+        tool: "send-email",
+        connector: "Email",
+        action: "Send email",
+        summary: `Email “${draft.subject}” to ${draft.to.length + draft.cc.length} recipient(s)`.slice(0, 300),
+        params: {},
+        status: "pending",
+        at: new Date().toISOString(),
+        kind: "email",
+        email: draft,
+      };
+      s.proposals.push(p);
+      const t = setTimeout(() => void expireEmailCard(s, p), Date.parse(draft.expiresAt) - Date.now() + 1000);
+      t.unref?.();
+      return {
+        status: "pending",
+        to: draft.to,
+        cc: draft.cc,
+        attachments: draft.attachments.map(({ name, bytes }) => ({ name, bytes })),
+        message:
+          "Not sent yet. The person sees a card under your reply listing To, CC, the subject, the message and the attachments, with Send and Cancel; only their click sends it, within 30 minutes. Say in your reply who it is addressed to and that it goes out only when they click Send. Do not run send-email again for this message, and do not say it was sent.",
+      };
     } catch (e) {
       if (e instanceof ForgeMailError) throw httpErr(e.message, e.statusCode);
       throw e;
@@ -3991,12 +4012,62 @@ function writeMyCatalogue(workspaceId: string, sessionId: string, tools: Tool[])
  * change is refused by the connector, not by Forge's good behaviour: "Nothing leaves this chat" (SYSTEM.md) is
  * enforced here, and a workflow is how a change happens, after a person approves it.
  */
-/** Email is not a connected service: point Forge at the one way it can email the person (tools/send-email.mjs). */
+function forgeMailDeps(): ForgeMailDeps {
+  return {
+    lookupEmail: (subject) => platformUserService.emailOf(subject),
+    send: (m) => mailService.send(m),
+    record: (row) => emailSendRepo.record(row),
+    finish: (id, patch) => emailSendRepo.finish(id, patch),
+    audit: async ({ workspaceId, actor, chatId, description, raw }) => {
+      await auditService.record({
+        workspaceId,
+        actor,
+        operation: "access",
+        entity: "chat",
+        description,
+        whereText: chatId ? "Chats" : "Forge",
+        whereEntityType: chatId ? "chat" : null,
+        whereEntityId: chatId,
+        raw,
+      });
+    },
+    now: Date.now,
+    caps: {
+      maxCount: config.mail.maxAttachments,
+      maxTotalBytes: config.mail.maxAttachmentBytes,
+      maxBodyBytes: config.mail.maxBodyBytes,
+      maxRecipients: config.mail.maxRecipients,
+      perHour: 10,
+    },
+  };
+}
+
+/** An email card nobody confirmed in time: mark it failed, record it, and tell Forge on its next turn. */
+async function expireEmailCard(s: Session, p: PiProposal): Promise<void> {
+  if (p.status !== "pending" || !p.email) return;
+  p.status = "failed";
+  p.result = "Expired: not confirmed within 30 minutes; nothing was sent.";
+  p.decidedAt = new Date().toISOString();
+  try {
+    await expireForgeMail(
+      { workspaceId: s.workspaceId, sessionId: s.id, chatId: s.chatId, mode: s.mode, ownerSubject: s.ownerSubject, actor: s.requester?.actor ?? "Forge" },
+      p.email,
+      forgeMailDeps(),
+    );
+  } catch (e) {
+    console.warn(`[forge-mail] could not record the expiry: ${(e as Error).message}`);
+  }
+  s.proposalOutcomes.push(outcomeLine(p));
+  emit(s, { type: "messages", messages: s.messages });
+  persistChat(s);
+}
+
+/** Email is not a connected service: point Forge at tools/send-email.mjs, the one way it emails (to the person, or to others via a card). */
 function refuseEmailAsService(toolName: string): void {
   if (toolName !== EMAIL_TOOL_NAME && toolName !== LEGACY_EMAIL_TOOL_NAME) return;
   throw httpErr(
     `"${toolName}" is the workflow email step, not a connected service, so it cannot be used or proposed from chat. ` +
-      `To email the person you are talking with (only them), run: node tools/send-email.mjs --subject "<one line>" --body-file scratch/mail.md --attach out/<file>`,
+      `To email from this chat, run: node tools/send-email.mjs --subject "<one line>" --body-file scratch/mail.md [--to <address> ...] [--cc <address> ...] [--attach out/<file>]. Without --to it goes to the person you are talking with; mail to anyone else waits for their click on a card.`,
     400,
   );
 }
@@ -4331,6 +4402,59 @@ async function approvePendingEdgeUnderFolder(
   persistChat(s);
 }
 
+/** The chat owner's click on an email card: only this (user-authenticated) path sends or cancels a drafted email. */
+async function decideEmail(
+  workspaceId: string,
+  sessionId: string,
+  proposalId: string,
+  decision: "send" | "cancel",
+  person: { subject: string; email?: string | null; name?: string | null },
+): Promise<PiProposal> {
+  const s = getOrThrow(workspaceId, sessionId);
+  const p =
+    s.messages.flatMap((m) => m.proposals ?? []).find((x) => x.id === proposalId && x.kind === "email") ??
+    s.proposals.find((x) => x.id === proposalId && x.kind === "email");
+  if (!p || !p.email) throw httpErr("There is no such email in this chat.", 404);
+  try {
+    assertChatOwner(s.ownerSubject, person.subject);
+  } catch (e) {
+    if (e instanceof ForgeMailError) throw httpErr(e.message, e.statusCode);
+    throw e;
+  }
+  if (p.status !== "pending") {
+    throw httpErr(`This email was already ${p.status === "declined" ? "cancelled" : p.status === "done" ? "sent" : "decided"}.`, 409);
+  }
+  const label = person.email || person.name || person.subject;
+  const ctx = { workspaceId: s.workspaceId, sessionId: s.id, chatId: s.chatId, mode: s.mode, ownerSubject: s.ownerSubject, actor: label };
+  const update = (patch: Partial<PiProposal>) => {
+    Object.assign(p, patch);
+    emit(s, { type: "messages", messages: s.messages });
+    persistChat(s);
+  };
+  if (decision === "cancel") {
+    update({ status: "declined", decidedBy: label, decidedAt: new Date().toISOString(), result: "Cancelled; nothing was sent." });
+    await cancelForgeMail(ctx, p.email, { label }, forgeMailDeps()).catch((e) =>
+      console.warn(`[forge-mail] could not record the cancel: ${(e as Error).message}`),
+    );
+    s.proposalOutcomes.push(outcomeLine(p));
+    return p;
+  }
+  // Synchronously, before any await: a second click finds it no longer pending and gets 409.
+  update({ status: "running", decidedBy: label, decidedAt: new Date().toISOString() });
+  try {
+    const r = await confirmForgeMail(ctx, p.email, { label }, forgeMailDeps());
+    update({ status: r.outcome === "sent" ? "done" : "failed", result: r.message });
+  } catch (e) {
+    if (e instanceof ForgeMailError && e.statusCode === 429) {
+      update({ status: "pending", decidedBy: null, decidedAt: null });
+      throw httpErr(e.message, 429);
+    }
+    update({ status: "failed", result: (e as Error).message });
+  }
+  s.proposalOutcomes.push(outcomeLine(p));
+  return p;
+}
+
 async function decideProposal(
   workspaceId: string,
   sessionId: string,
@@ -4351,6 +4475,7 @@ async function decideProposal(
   const at = s.messages.findIndex((m) => m.proposals?.some((p) => p.id === proposalId));
   if (at < 0) throw httpErr("There is no such proposed change in this chat.", 404);
   const p = s.messages[at]!.proposals!.find((x) => x.id === proposalId)!;
+  if (p.kind === "email") throw httpErr("Use Send or Cancel on the email card.", 400);
   if (p.status !== "pending") throw httpErr(`This change was already ${p.status === "running" ? "started" : p.status}.`, 409);
   // Edge / plugin-relay cards: device or relay owner is the audience. Do NOT use the "asker" rule —
   // a Foundry auto-continue lands as a user row with `by.subject: null` and used to 403 the real person ("bruh").

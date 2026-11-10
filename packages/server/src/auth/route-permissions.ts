@@ -33,8 +33,8 @@ import type { PlatformPermission, WorkspacePermission } from "./permissions.js";
  * `:workspaceId`. Inferring scope from "does this path contain :workspaceId" gets one of
  * those wrong in each direction, so every workspace entry names its parameter.
  *
- * Counts at generation time: **396 mounted routes** —
- * 274 workspace-scoped, 37 platform, 31 identity-only,
+ * Counts at generation time: **398 mounted routes** —
+ * 276 workspace-scoped, 37 platform, 31 identity-only,
  * 46 exempt. ⚠ Read these from the exported arrays, never from this comment.
  */
 
@@ -298,6 +298,8 @@ export const ROUTE_PERMISSIONS: ReadonlyMap<string, RouteRequirement> = Object.f
     ["POST /api/workspaces/:workspaceId/pi-builder/sessions/:sessionId/background/:jobId/cancel", { kind: "workspace", permission: "flows.write", param: "workspaceId" }],
     ["POST /api/workspaces/:workspaceId/pi-builder/sessions/:sessionId/bind-flow", { kind: "workspace", permission: "flows.write", param: "workspaceId" }],
     ["POST /api/workspaces/:workspaceId/pi-builder/sessions/:sessionId/compact", { kind: "workspace", permission: "flows.write", param: "workspaceId" }],
+    ["POST /api/workspaces/:workspaceId/pi-builder/sessions/:sessionId/mail/:proposalId/cancel", { kind: "workspace", permission: "flows.write", param: "workspaceId" }],
+    ["POST /api/workspaces/:workspaceId/pi-builder/sessions/:sessionId/mail/:proposalId/send", { kind: "workspace", permission: "flows.write", param: "workspaceId" }],
     ["POST /api/workspaces/:workspaceId/pi-builder/sessions/:sessionId/messages", { kind: "workspace", permission: "flows.write", param: "workspaceId" }],
     ["POST /api/workspaces/:workspaceId/pi-builder/sessions/:sessionId/mode", { kind: "workspace", permission: "flows.write", param: "workspaceId" }],
     ["POST /api/workspaces/:workspaceId/pi-builder/sessions/:sessionId/model", { kind: "workspace", permission: "flows.write", param: "workspaceId" }],

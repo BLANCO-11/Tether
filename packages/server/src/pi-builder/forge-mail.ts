@@ -1,9 +1,13 @@
 /**
- * Forge Agent emails the chat's OWNER, and only them, with files it made in the chat (tools/send-email.mjs →
- * POST /api/forge/mail). The recipient is resolved here from the conversation's owner; no address is ever taken from
- * the caller. No DB or config imports: everything is injected so it can be tested.
+ * Forge Agent emails with files it made in the chat (tools/send-email.mjs → POST /api/forge/mail). Mail to the chat's
+ * owner alone is sent directly. Mail to anyone else becomes a draft: nothing is sent until the person's own click on a
+ * user-authenticated route (Forge holds no key for it) confirms it. The attachments are re-read and verified by sha256
+ * at that point, and the draft expires after 30 minutes. MAIL_ALLOWED_RECIPIENT_DOMAINS deliberately does not apply
+ * here, because the person's confirmation is the control. No DB or config imports: everything is injected so it can be
+ * tested.
  */
 import { closeSync, constants, fstatSync, lstatSync, openSync, readFileSync } from "node:fs";
+import { createHash } from "node:crypto";
 import { join, posix } from "node:path";
 import { z } from "zod";
 import { confined, sandboxDir } from "./sandbox-fs.js";
@@ -13,9 +17,21 @@ import type { MailMessage, MailSendResult } from "../services/mail.service.js";
 import type { NewEmailSend } from "../repositories/email-send.repo.js";
 import type { ChatMode } from "./instructions.js";
 
-/** Strict: a body carrying `to`, `cc` or anything else is refused. */
+export const MAX_CHAT_RECIPIENTS = 20;
+export const EMAIL_CONFIRM_TTL_MS = 30 * 60_000;
+
+const address = z
+  .string()
+  .trim()
+  .toLowerCase()
+  .max(320)
+  .refine((a) => EMAIL_RE.test(a), { message: "is not an email address" });
+
+/** Strict: `to` and `cc` are allowed; anything else (such as `bcc`) is refused. */
 export const forgeMailBodySchema = z
   .object({
+    to: z.array(address).max(MAX_CHAT_RECIPIENTS).optional(),
+    cc: z.array(address).max(MAX_CHAT_RECIPIENTS).optional(),
     subject: z.string().min(1).max(250),
     body: z.string().min(1).max(200_000),
     attachments: z.array(z.string().min(1).max(500)).max(20).optional(),
@@ -169,11 +185,52 @@ export function resetForgeMailRateLimit(): void {
   sent.clear();
 }
 
+export type ForgeEmailDraft = {
+  to: string[];
+  cc: string[];
+  subject: string;
+  body: string;
+  attachments: Array<{ path: string; name: string; bytes: number; sha256: string }>;
+  expiresAt: string;
+};
+
+const NO_OWNER_MESSAGE =
+  "Your account has no email address here, so I cannot email you. You can download the file from this chat instead.";
+
+export function chatRecipients(
+  input: { to?: string[]; cc?: string[] },
+  owner: string | null,
+): { to: string[]; cc: string[]; ownerOnly: boolean } {
+  const to = [...new Set(input.to ?? [])];
+  const cc = [...new Set(input.cc ?? [])].filter((a) => !to.includes(a));
+  if (to.length === 0 && cc.length === 0) {
+    if (!owner) throw new ForgeMailError(NO_OWNER_MESSAGE, 422);
+    return { to: [owner], cc: [], ownerOnly: true };
+  }
+  if (to.length === 0) throw new ForgeMailError("Put at least one address in --to.", 422);
+  if (to.length + cc.length > MAX_CHAT_RECIPIENTS) {
+    throw new ForgeMailError(
+      `That is ${to.length + cc.length} recipients; an email from a chat can have at most ${MAX_CHAT_RECIPIENTS}.`,
+      422,
+    );
+  }
+  return { to, cc, ownerOnly: owner !== null && cc.length === 0 && to.length === 1 && to[0] === owner };
+}
+
+export function assertChatOwner(ownerSubject: string | null, personSubject: string | null | undefined): void {
+  if (!ownerSubject || !personSubject || ownerSubject !== personSubject) {
+    throw new ForgeMailError("Only the person this chat belongs to can send or cancel this email.", 403);
+  }
+}
+
 export async function sendForgeMail(
   ctx: ForgeMailContext,
   input: z.infer<typeof forgeMailBodySchema>,
   deps: ForgeMailDeps,
-): Promise<{ sentTo: string; attachments: { name: string; bytes: number }[] }> {
+): Promise<
+  | { status: "sent"; sentTo: string; to: string[]; cc: string[]; attachments: { name: string; bytes: number }[] }
+  | { status: "pending"; draft: ForgeEmailDraft }
+> {
   if (ctx.mode !== "agent") {
     throw new ForgeMailError(
       "Emailing from a chat is for Forge Agent. In Workflow Builder a workflow sends email with the tether_email_send tool.",
@@ -196,11 +253,12 @@ export async function sendForgeMail(
   };
 
   const owner = await resolveOwnerAddress(ctx.ownerSubject, deps.lookupEmail);
-  if (!owner) {
-    return refused(
-      "Your account has no email address here, so I cannot email you. You can download the file from this chat instead.",
-      422,
-    );
+  let rcpt: ReturnType<typeof chatRecipients>;
+  try {
+    rcpt = chatRecipients(input, owner);
+  } catch (e) {
+    if (e instanceof ForgeMailError) return refused(e.message, e.statusCode);
+    throw e;
   }
   const capsCheck = checkMessageCaps({
     subject,
@@ -218,15 +276,36 @@ export async function sendForgeMail(
   }
   const meta = attachments.map((a) => ({ name: a.name, bytes: a.bytes }));
 
+  if (!rcpt.ownerOnly) {
+    const paths = input.attachments ?? [];
+    return {
+      status: "pending",
+      draft: {
+        to: rcpt.to,
+        cc: rcpt.cc,
+        subject,
+        body,
+        attachments: attachments.map((a, i) => ({
+          path: paths[i],
+          name: a.name,
+          bytes: a.bytes,
+          sha256: createHash("sha256").update(a.data).digest("hex"),
+        })),
+        expiresAt: new Date(deps.now() + EMAIL_CONFIRM_TTL_MS).toISOString(),
+      },
+    };
+  }
+  const ownerAddr = rcpt.to[0];
+
   const intent = await deps.record({
     ...base,
-    recipients: [owner],
+    recipients: [ownerAddr],
     resolvedFrom: "requester",
     attachments: meta,
     outcome: "failed",
     failureReason: "no provider answer yet",
   });
-  const r = await deps.send({ subject, body, contentType: "Text", to: [owner], attachments });
+  const r = await deps.send({ subject, body, contentType: "Text", to: [ownerAddr], attachments });
   if (!r.ok) {
     await deps.finish(intent.id, {
       outcome: "failed",
@@ -242,11 +321,140 @@ export async function sendForgeMail(
       workspaceId: ctx.workspaceId,
       actor: ctx.actor,
       chatId: ctx.chatId,
-      description: `Forge emailed the chat's owner (${owner}): "${subject.slice(0, 200)}" with ${attachments.length} attachment(s)`,
+      description: `Forge emailed the chat's owner (${ownerAddr}): "${subject.slice(0, 200)}" with ${attachments.length} attachment(s)`,
       raw: { chatId: ctx.chatId, sessionId: ctx.sessionId, attachments: meta },
     });
   } catch (e) {
     console.warn(`[forge-mail] could not record the audit entry: ${(e as Error).message}`);
   }
-  return { sentTo: owner, attachments: meta };
+  return { status: "sent", sentTo: ownerAddr, to: [ownerAddr], cc: [], attachments: meta };
+}
+
+function draftRow(ctx: ForgeMailContext, draft: ForgeEmailDraft) {
+  return {
+    workspaceId: ctx.workspaceId,
+    flowExecutionId: null,
+    stepId: ctx.chatId ? `chat:${ctx.chatId}` : `forge:${ctx.sessionId}`,
+    subject: draft.subject.slice(0, 500),
+    recipients: draft.to,
+    cc: draft.cc,
+    resolvedFrom: "explicit" as const,
+    attachments: draft.attachments.map(({ name, bytes }) => ({ name, bytes })),
+  };
+}
+
+async function auditSafely(deps: ForgeMailDeps, entry: Parameters<ForgeMailDeps["audit"]>[0]): Promise<void> {
+  try {
+    await deps.audit(entry);
+  } catch (e) {
+    console.warn(`[forge-mail] could not record the audit entry: ${(e as Error).message}`);
+  }
+}
+
+export async function expireForgeMail(
+  ctx: ForgeMailContext,
+  draft: ForgeEmailDraft,
+  deps: ForgeMailDeps,
+): Promise<{ outcome: "expired"; message: string }> {
+  await deps.record({
+    ...draftRow(ctx, draft),
+    outcome: "refused",
+    failureReason: "expired: not confirmed within 30 minutes; nothing was sent",
+  });
+  await auditSafely(deps, {
+    workspaceId: ctx.workspaceId,
+    actor: ctx.actor,
+    chatId: ctx.chatId,
+    description: `An email Forge drafted to ${draft.to.join(", ")} expired unconfirmed: "${draft.subject.slice(0, 200)}"`,
+    raw: { chatId: ctx.chatId, sessionId: ctx.sessionId, to: draft.to, cc: draft.cc },
+  });
+  return {
+    outcome: "expired",
+    message: "This email expired before it was confirmed (30 minutes), so nothing was sent. Ask Forge again.",
+  };
+}
+
+export async function cancelForgeMail(
+  ctx: ForgeMailContext,
+  draft: ForgeEmailDraft,
+  by: { label: string },
+  deps: ForgeMailDeps,
+): Promise<void> {
+  await deps.record({
+    ...draftRow(ctx, draft),
+    outcome: "refused",
+    failureReason: `cancelled: ${by.label} pressed Cancel on the card; nothing was sent`,
+  });
+  await auditSafely(deps, {
+    workspaceId: ctx.workspaceId,
+    actor: by.label,
+    chatId: ctx.chatId,
+    description: `${by.label} cancelled an email Forge drafted to ${draft.to.join(", ")}: "${draft.subject.slice(0, 200)}"`,
+    raw: { chatId: ctx.chatId, sessionId: ctx.sessionId, to: draft.to, cc: draft.cc },
+  });
+}
+
+export async function confirmForgeMail(
+  ctx: ForgeMailContext,
+  draft: ForgeEmailDraft,
+  by: { label: string },
+  deps: ForgeMailDeps,
+): Promise<{ outcome: "sent" | "failed" | "expired"; message: string }> {
+  if (deps.now() > Date.parse(draft.expiresAt)) return expireForgeMail(ctx, draft, deps);
+
+  const key = ctx.chatId ?? ctx.sessionId;
+  const recent = (sent.get(key) ?? []).filter((t) => t > deps.now() - 3_600_000);
+  sent.set(key, recent);
+  if (recent.length >= deps.caps.perHour) {
+    throw new ForgeMailError(`This chat has sent ${recent.length} emails in the last hour. Try again later.`, 429);
+  }
+
+  const row = draftRow(ctx, draft);
+  let files: ReturnType<typeof readChatAttachments>;
+  try {
+    files = readChatAttachments(ctx.workspaceId, ctx.sessionId, draft.attachments.map((a) => a.path), deps.caps);
+  } catch (e) {
+    if (!(e instanceof ForgeMailError)) throw e;
+    await deps.record({ ...row, outcome: "refused", failureReason: e.message.slice(0, 2000) });
+    return { outcome: "failed", message: `${e.message} Nothing was sent.` };
+  }
+  for (let i = 0; i < draft.attachments.length; i++) {
+    const want = draft.attachments[i];
+    const got = files[i];
+    if (!got || got.name !== want.name || createHash("sha256").update(got.data).digest("hex") !== want.sha256) {
+      const message = `${want.path} changed after the card was shown, so nothing was sent. Ask Forge to propose it again.`;
+      await deps.record({ ...row, outcome: "refused", failureReason: message });
+      return { outcome: "failed", message };
+    }
+  }
+
+  const intent = await deps.record({ ...row, outcome: "failed", failureReason: "no provider answer yet" });
+  const r = await deps.send({
+    subject: draft.subject,
+    body: draft.body,
+    contentType: "Text",
+    to: draft.to,
+    ...(draft.cc.length ? { cc: draft.cc } : {}),
+    attachments: files,
+  });
+  if (!r.ok) {
+    await deps.finish(intent.id, {
+      outcome: "failed",
+      graphMessageId: null,
+      failureReason: `${r.message} ${JSON.stringify(r.detail)}`.slice(0, 2000),
+    });
+    return { outcome: "failed", message: r.message };
+  }
+  await deps.finish(intent.id, { outcome: "sent", graphMessageId: r.messageId, failureReason: null });
+  recent.push(deps.now());
+  const to = draft.to.join(", ");
+  const cc = draft.cc.join(", ");
+  await auditSafely(deps, {
+    workspaceId: ctx.workspaceId,
+    actor: by.label,
+    chatId: ctx.chatId,
+    description: `${by.label} confirmed an email Forge drafted, sent to ${to}${cc ? `; cc ${cc}` : ""}: "${draft.subject.slice(0, 200)}" with ${files.length} attachment(s)`,
+    raw: { chatId: ctx.chatId, sessionId: ctx.sessionId, to: draft.to, cc: draft.cc, attachments: row.attachments },
+  });
+  return { outcome: "sent", message: `Sent to ${to}${cc ? `; cc ${cc}` : ""}` };
 }

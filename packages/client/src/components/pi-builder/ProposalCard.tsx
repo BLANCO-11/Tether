@@ -6,7 +6,7 @@
 // own request to the server, which re-checks the rules and runs exactly the values shown here, once. The values are
 // shown in full, as they will be sent — what the person reads is what runs.
 import { useState } from "react";
-import type { EdgeAlways, GrantScope, PiAccount, PiAccountQuestion, PiEdgeJob, PiProposal, PiSettingChange } from "@/lib/pi-builder";
+import type { EdgeAlways, GrantScope, PiAccount, PiEmailDraft, PiAccountQuestion, PiEdgeJob, PiProposal, PiSettingChange } from "@/lib/pi-builder";
 import { commandFamily, edgeActionLine, edgeFolderHint } from "@/lib/edge-folder-hint";
 import { SurfaceCard } from "./SurfaceCard";
 import { Button } from "@/components/ui/Button";
@@ -129,12 +129,104 @@ export function accountName(a: PiAccount): string {
   return `${a.personal ? "your own" : "the workspace's"} “${a.label}”`;
 }
 
-export function ProposalCard({ p, onDecide }: { p: PiProposal; onDecide: Decide | null }) {
+export function ProposalCard({ p, onDecide, onEmail }: { p: PiProposal; onDecide: Decide | null; onEmail?: ((id: string, decision: "send" | "cancel") => Promise<void>) | null }) {
   if (p.kind === "setting" && p.setting) return <SettingCard p={p} s={p.setting} onDecide={onDecide} />;
   if (p.kind === "account" && p.choice) return <AccountCard p={p} q={p.choice} onDecide={onDecide} />;
   if (p.kind === "edge" && p.edge) return <EdgeCard p={p} e={p.edge} onDecide={onDecide} />;
   if (p.kind === "surface" && p.surface) return <SurfaceCard p={p} onDecide={onDecide} />;
+  if (p.kind === "email" && p.email) return <EmailCard p={p} m={p.email} onEmail={onEmail ?? null} />;
   return <ActionCard p={p} onDecide={onDecide} />;
+}
+
+const EMAIL_STATE: Record<PiProposal["status"], { label: string; tone: "ok" | "warn" | "danger" | "neutral" }> = {
+  pending: { label: "Waiting for you", tone: "warn" },
+  running: { label: "Sending…", tone: "neutral" },
+  done: { label: "Sent", tone: "ok" },
+  failed: { label: "Not sent", tone: "danger" },
+  declined: { label: "Cancelled", tone: "neutral" },
+  partial: { label: "Not sent", tone: "danger" },
+};
+
+function fileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+/**
+ * Forge drafted this email. Only this click (the person's own request, to a route Forge has no key for) sends exactly
+ * what is shown here, and the server re-checks that the attachments are unchanged.
+ */
+function EmailCard({ p, m, onEmail }: { p: PiProposal; m: PiEmailDraft; onEmail: ((id: string, decision: "send" | "cancel") => Promise<void>) | null }) {
+  const [busy, setBusy] = useState<"send" | "cancel" | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const expired = p.status === "pending" && Date.now() > Date.parse(m.expiresAt);
+  const state = expired ? { label: "Expired", tone: "neutral" as const } : EMAIL_STATE[p.status];
+  const decide = async (d: "send" | "cancel") => {
+    if (!onEmail) return;
+    setBusy(d);
+    setError(null);
+    try {
+      await onEmail(p.id, d);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(null);
+    }
+  };
+  const count = m.to.length + m.cc.length;
+  return (
+    <section aria-label={`Email to send: ${m.subject}`} className="pc-card">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="pc-eyebrow">Email · from this chat</span>
+        <span className="ml-auto">
+          <StatusPill status={state.tone}>{state.label}</StatusPill>
+        </span>
+      </div>
+      <p className="text-body font-medium leading-snug text-text">{p.summary}</p>
+      <dl className="pc-values" aria-label="What will be sent">
+        <Fact k="To">{m.to.join(", ")}</Fact>
+        {m.cc.length > 0 ? <Fact k="CC">{m.cc.join(", ")}</Fact> : null}
+        <Fact k="Subject">{m.subject}</Fact>
+        <Fact k="Message">
+          <Value v={m.body} />
+        </Fact>
+        {m.attachments.length > 0 ? (
+          <Fact k="Attachments">
+            {m.attachments.map((a) => (
+              <div key={a.path}>{`${a.name} (${fileSize(a.bytes)})`}</div>
+            ))}
+          </Fact>
+        ) : null}
+      </dl>
+      {p.status === "pending" && !expired && (
+        <div className="flex flex-wrap items-center gap-2 pt-0.5">
+          <Button size="sm" disabled={!!busy || !onEmail} onClick={() => decide("send")}>
+            {busy === "send" ? "Sending…" : "Send"}
+          </Button>
+          <Button size="sm" variant="ghost" disabled={!!busy || !onEmail} onClick={() => decide("cancel")}>
+            Cancel
+          </Button>
+          <span className="text-caption text-dim">
+            {`Nothing is sent until you click Send. It goes to ${count} ${count === 1 ? "address" : "addresses"} exactly as shown, from Tether's mail service, and is recorded.`}
+          </span>
+        </div>
+      )}
+      {expired ? <p className="text-caption text-dim">This card expired, so nothing was sent. Ask Forge again.</p> : null}
+      {(p.status === "done" || p.status === "failed") && p.result ? (
+        <div className={`pc-outcome ${p.status === "done" ? "ok" : "danger"}`}>
+          <span className="min-w-0 whitespace-pre-wrap break-words">{p.result}</span>
+        </div>
+      ) : null}
+      {p.decidedBy && p.status !== "pending" && (
+        <p className="text-caption text-dim">
+          {p.status === "declined" ? "Cancelled" : p.status === "done" ? "Sent" : "Tried"} by {p.decidedBy}
+          {p.decidedAt ? ` · ${new Date(p.decidedAt).toLocaleString()}` : ""}
+        </p>
+      )}
+      {error && <p className="text-xs text-danger">{error}</p>}
+    </section>
+  );
 }
 
 /**

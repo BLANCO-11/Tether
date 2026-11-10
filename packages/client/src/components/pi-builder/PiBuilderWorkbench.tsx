@@ -71,7 +71,7 @@ import { Check, ChevronDown, ChevronLeft, ChevronRight, PanelRight, Paperclip, S
 import { AttachmentTray, DropOverlay, FileCards, SentAttachments, useChatAttachments } from "./ChatAttachments";
 import { ReferenceChips, ReferencePicker, useWorkflowReferences } from "./WorkflowReferences";
 import { mentionAt, setPiModel, withoutMention } from "@/lib/pi-builder";
-import { ATTACH_ACCEPT, clearPiAccount, decidePiProposal, type GrantScope, type PiAccountChoice, type PiAttachment, type PiProposal } from "@/lib/pi-builder";
+import { ATTACH_ACCEPT, clearPiAccount, decidePiEmail, decidePiProposal, type GrantScope, type PiAccountChoice, type PiAttachment, type PiProposal } from "@/lib/pi-builder";
 import { ChatConnections } from "./ChatConnections";
 import { ProposalCard } from "./ProposalCard";
 import { commonEdgeFolder, edgeFolderHint } from "@/lib/edge-folder-hint";
@@ -1161,6 +1161,10 @@ function Workbench_({
         : null,
     [sessionIdForDecide, workspaceId],
   );
+  const decideEmail = useMemo(
+    () => (sessionIdForDecide ? async (id: string, decision: "send" | "cancel") => void (await decidePiEmail(workspaceId, sessionIdForDecide, id, decision)) : null),
+    [sessionIdForDecide, workspaceId],
+  );
   /** Pending edge Approves — pinned above the composer so scrolling the transcript cannot hide them. */
   const pendingEdgeApprovals = useMemo(() => {
     const out: PiProposal[] = [];
@@ -1265,6 +1269,7 @@ function Workbench_({
       }
     >
     <DecideProposal.Provider value={decideProposal}>
+    <DecideEmail.Provider value={decideEmail}>
     <div className="relative flex h-full min-h-0 flex-col">
       {/* Same 48px draft strip the manual builder uses, with Tether actions */}
 
@@ -1824,6 +1829,7 @@ function Workbench_({
         }
       />
     </div>
+    </DecideEmail.Provider>
     </DecideProposal.Provider>
     {memoryPromo && projectId && memoryEnabled ? (
       <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/30 p-4 sm:items-center" role="dialog" aria-label="Remember for this project">
@@ -2226,12 +2232,13 @@ export function ReadOnlyConversation({ messages }: { messages: PiChatMessage[] }
 /** The changes Forge Agent proposed in a reply: each a card the person decides. Pending edge Approves live in the dock. */
 function Proposals({ proposals }: { proposals: PiProposal[] }) {
   const decide = useContext(DecideProposal);
+  const decideEmail = useContext(DecideEmail);
   const shown = proposals.filter((p) => !(p.kind === "edge" && p.status === "pending"));
   if (!shown.length) return null;
   return (
     <div className="space-y-2">
       {shown.map((p) => (
-        <ProposalCard key={p.id} p={p} onDecide={decide} />
+        <ProposalCard key={p.id} p={p} onDecide={decide} onEmail={decideEmail} />
       ))}
     </div>
   );
@@ -2324,6 +2331,8 @@ const ChatFileHref = createContext<((name: string) => string) | null>(null);
 const DecideProposal = createContext<
   ((id: string, decision: "run" | "decline", scope?: GrantScope, choice?: string, surfaceAct?: { actionId?: string; selected?: string[] }, always?: EdgeAlways | null, folder?: string | null) => Promise<void>) | null
 >(null);
+/** Send or cancel an email Forge drafted in this chat (null until the session exists). */
+const DecideEmail = createContext<((id: string, decision: "send" | "cancel") => Promise<void>) | null>(null);
 /** Opens a chat file's preview in the Files pane. */
 const OpenChatFile = createContext<((name: string) => void) | null>(null);
 /** Project memory (Phase 4): Remember on a message when the chat lives in a project. */

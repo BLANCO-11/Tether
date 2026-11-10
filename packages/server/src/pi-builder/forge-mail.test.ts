@@ -1,14 +1,21 @@
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { createHash } from "node:crypto";
 import { mkdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { SANDBOXES_ROOT } from "./paths.js";
 import { sandboxDir } from "./sandbox-fs.js";
 import {
+  EMAIL_CONFIRM_TTL_MS,
   ForgeMailError,
+  assertChatOwner,
+  cancelForgeMail,
+  chatRecipients,
+  confirmForgeMail,
   forgeMailBodySchema,
   resetForgeMailRateLimit,
   sendForgeMail,
+  type ForgeEmailDraft,
   type ForgeMailContext,
   type ForgeMailDeps,
 } from "./forge-mail.js";
@@ -56,6 +63,13 @@ function mkDeps(over: Partial<ForgeMailDeps["caps"]> = {}) {
   };
   return { deps, send, record, finish, lookupEmail };
 }
+const audit = (d: { deps: ForgeMailDeps }) => d.deps.audit as unknown as ReturnType<typeof vi.fn>;
+const sentOf = <T extends { status: string }>(r: T) => r as Extract<T, { status: "sent" }>;
+const draftOf = async (d: ReturnType<typeof mkDeps>, over: Record<string, unknown> = {}, paths = ["out/report.pdf"]) => {
+  const r = await sendForgeMail(ctx(), forgeMailBodySchema.parse({ ...input(paths), to: ["x@other.com"], ...over }), d.deps);
+  if (r.status !== "pending") throw new Error("expected a draft");
+  return r.draft;
+};
 const status = async (p: Promise<unknown>) => {
   try {
     await p;
@@ -82,7 +96,7 @@ describe("sendForgeMail", () => {
   it("sends to the owner's own address as plain text", async () => {
     const d = mkDeps();
     const r = await sendForgeMail(ctx({ ownerSubject: "email:Me@Example.org" }), input(), d.deps);
-    expect(r.sentTo).toBe("me@example.org");
+    expect(sentOf(r).sentTo).toBe("me@example.org");
     expect(d.send).toHaveBeenCalledWith(expect.objectContaining({ to: ["me@example.org"], contentType: "Text" }));
   });
 
@@ -90,7 +104,7 @@ describe("sendForgeMail", () => {
     const d = mkDeps();
     const r = await sendForgeMail(ctx({ ownerSubject: "sub-123" }), input(), d.deps);
     expect(d.lookupEmail).toHaveBeenCalledWith("sub-123");
-    expect(r.sentTo).toBe("found@example.org");
+    expect(sentOf(r).sentTo).toBe("found@example.org");
   });
 
   it("refuses when the owner has no address", async () => {
@@ -103,10 +117,16 @@ describe("sendForgeMail", () => {
     }
   });
 
-  it("accepts no recipient field", () => {
-    expect(forgeMailBodySchema.safeParse({ subject: "s", body: "b", to: ["x@y.com"] }).success).toBe(false);
-    expect(forgeMailBodySchema.safeParse({ subject: "s", body: "b", cc: ["x@y.com"] }).success).toBe(false);
-    expect(forgeMailBodySchema.safeParse({ subject: "s", body: "b" }).success).toBe(true);
+  it("accepts to and cc but nothing else", () => {
+    const p = (extra: object) => forgeMailBodySchema.safeParse({ subject: "s", body: "b", ...extra });
+    expect(p({ to: ["x@y.com"] }).success).toBe(true);
+    expect(p({ cc: ["x@y.com"] }).success).toBe(true);
+    expect(p({}).success).toBe(true);
+    const parsed = p({ to: [" A@B.com "] });
+    expect(parsed.success && parsed.data.to).toEqual(["a@b.com"]);
+    expect(p({ to: ["not-an-email"] }).success).toBe(false);
+    expect(p({ to: Array.from({ length: 21 }, (_, i) => `u${i}@x.com`) }).success).toBe(false);
+    expect(p({ bcc: ["x@y.com"] }).success).toBe(false);
   });
 
   it.each([
@@ -134,7 +154,7 @@ describe("sendForgeMail", () => {
       ["report.pdf", "application/pdf", "PDFDATA"],
       ["data.csv", "text/csv", "a,b\n1,2\n"],
     ]);
-    expect(r.attachments).toEqual([
+    expect(sentOf(r).attachments).toEqual([
       { name: "report.pdf", bytes: 7 },
       { name: "data.csv", bytes: 8 },
     ]);
@@ -147,7 +167,7 @@ describe("sendForgeMail", () => {
     expect(await status(sendForgeMail(ctx(), input(), d.deps))).toBe(429);
     expect(d.record).not.toHaveBeenCalled();
     clock += 3_600_001;
-    await expect(sendForgeMail(ctx(), input(), d.deps)).resolves.toMatchObject({ sentTo: "me@example.org" });
+    await expect(sendForgeMail(ctx(), input(), d.deps)).resolves.toMatchObject({ status: "sent", sentTo: "me@example.org" });
   });
 
   it("passes on a provider failure", async () => {
@@ -155,5 +175,139 @@ describe("sendForgeMail", () => {
     d.send.mockResolvedValue({ ok: false, status: 424, message: "email delivery is not configured", detail: {} } as never);
     await expect(sendForgeMail(ctx(), input(), d.deps)).rejects.toMatchObject({ statusCode: 424 });
     expect(d.finish).toHaveBeenCalledWith("r1", expect.objectContaining({ outcome: "failed" }));
+  });
+});
+
+describe("chatRecipients", () => {
+  const owner = "me@example.org";
+  it("dedupes to and drops a cc already in to", () => {
+    expect(chatRecipients({ to: ["a@x.com", "b@x.com", "a@x.com"], cc: ["b@x.com", "c@x.com", "c@x.com"] }, owner)).toEqual({
+      to: ["a@x.com", "b@x.com"],
+      cc: ["c@x.com"],
+      ownerOnly: false,
+    });
+  });
+  it("defaults to the owner", () => {
+    expect(chatRecipients({}, owner)).toEqual({ to: [owner], cc: [], ownerOnly: true });
+    expect(chatRecipients({ to: [owner] }, owner).ownerOnly).toBe(true);
+    expect(chatRecipients({ to: [owner], cc: ["o@x.com"] }, owner).ownerOnly).toBe(false);
+  });
+  it("refuses without an owner, with only cc, and with too many", () => {
+    expect(() => chatRecipients({}, null)).toThrow(/no email address/);
+    expect(() => chatRecipients({ cc: ["a@x.com"] }, owner)).toThrow(/at least one address in --to/);
+    const many = (n: number, t: string) => Array.from({ length: n }, (_, i) => `${t}${i}@x.com`);
+    try {
+      chatRecipients({ to: many(15, "t"), cc: many(6, "c") }, owner);
+      expect.unreachable();
+    } catch (e) {
+      expect((e as ForgeMailError).statusCode).toBe(422);
+      expect((e as ForgeMailError).message).toMatch(/21.*20/);
+    }
+  });
+});
+
+describe("assertChatOwner", () => {
+  it("only lets the owner through", () => {
+    expect(() => assertChatOwner("s1", "s1")).not.toThrow();
+    expect(() => assertChatOwner("s1", "s2")).toThrow(expect.objectContaining({ statusCode: 403 }));
+    expect(() => assertChatOwner(null, "s1")).toThrow(expect.objectContaining({ statusCode: 403 }));
+    expect(() => assertChatOwner("s1", null)).toThrow(expect.objectContaining({ statusCode: 403 }));
+  });
+});
+
+describe("drafts", () => {
+  it("sends at once with no recipients or only the owner", async () => {
+    for (const extra of [{}, { to: ["me@example.org"] }]) {
+      const d = mkDeps();
+      const r = await sendForgeMail(ctx(), { ...input(), ...extra }, d.deps);
+      expect(r).toMatchObject({ status: "sent", to: ["me@example.org"], cc: [] });
+      expect(d.send).toHaveBeenCalledWith(expect.objectContaining({ to: ["me@example.org"] }));
+    }
+  });
+
+  it.each([
+    ["another to", { to: ["X@Other.com"] }, ["x@other.com"], []],
+    ["a cc next to the owner", { to: ["me@example.org"], cc: ["Other@x.com"] }, ["me@example.org"], ["other@x.com"]],
+  ])("holds %s as a draft", async (_n, extra, to, cc) => {
+    const d = mkDeps();
+    const r = await sendForgeMail(ctx(), forgeMailBodySchema.parse({ ...input(["out/report.pdf"]), ...extra }), d.deps);
+    expect(r.status).toBe("pending");
+    expect(d.send).not.toHaveBeenCalled();
+    expect(d.record).not.toHaveBeenCalled();
+    expect(audit(d)).not.toHaveBeenCalled();
+    if (r.status !== "pending") return;
+    expect(r.draft).toEqual({
+      to,
+      cc,
+      subject: "Hi",
+      body: "Hello",
+      attachments: [
+        { path: "out/report.pdf", name: "report.pdf", bytes: 7, sha256: createHash("sha256").update("PDFDATA").digest("hex") },
+      ],
+      expiresAt: new Date(clock + EMAIL_CONFIRM_TTL_MS).toISOString(),
+    });
+  });
+
+  it("confirm sends exactly the draft", async () => {
+    const d = mkDeps();
+    const draft = await draftOf(d, { cc: ["o@x.com"] });
+    const r = await confirmForgeMail(ctx({ mode: "workflow" }), draft, { label: "Me" }, d.deps);
+    expect(r.outcome).toBe("sent");
+    expect(d.send).toHaveBeenCalledTimes(1);
+    const m = (d.send.mock.calls[0] as unknown as [Record<string, unknown> & { attachments: { data: Buffer }[] }])[0];
+    expect(m).toMatchObject({ to: draft.to, cc: draft.cc, subject: "Hi", body: "Hello", contentType: "Text" });
+    expect(m.attachments.map((a) => a.data)).toEqual([Buffer.from("PDFDATA")]);
+    expect(d.record).toHaveBeenCalledWith(
+      expect.objectContaining({ recipients: draft.to, cc: draft.cc, resolvedFrom: "explicit" }),
+    );
+    expect(d.finish).toHaveBeenCalledWith("r1", expect.objectContaining({ outcome: "sent" }));
+    expect(audit(d)).toHaveBeenCalledWith(expect.objectContaining({ actor: "Me" }));
+  });
+
+  it("confirm refuses a file that changed", async () => {
+    const d = mkDeps();
+    const draft = await draftOf(d);
+    const f = join(sbx, "out", "report.pdf");
+    writeFileSync(f, "OTHER!!");
+    try {
+      const r = await confirmForgeMail(ctx(), draft, { label: "Me" }, d.deps);
+      expect(r.outcome).toBe("failed");
+      expect(d.send).not.toHaveBeenCalled();
+      expect(d.record).toHaveBeenCalledWith(expect.objectContaining({ outcome: "refused" }));
+    } finally {
+      writeFileSync(f, "PDFDATA");
+    }
+  });
+
+  it("confirm after expiry sends nothing", async () => {
+    const d = mkDeps();
+    const draft = await draftOf(d);
+    clock += EMAIL_CONFIRM_TTL_MS + 1;
+    const r = await confirmForgeMail(ctx(), draft, { label: "Me" }, d.deps);
+    expect(r.outcome).toBe("expired");
+    expect(d.send).not.toHaveBeenCalled();
+    expect(d.record).toHaveBeenCalledWith(
+      expect.objectContaining({ outcome: "refused", failureReason: expect.stringMatching(/^expired:/) }),
+    );
+  });
+
+  it("cancel sends nothing", async () => {
+    const d = mkDeps();
+    const draft: ForgeEmailDraft = await draftOf(d);
+    await cancelForgeMail(ctx(), draft, { label: "Me" }, d.deps);
+    expect(d.send).not.toHaveBeenCalled();
+    expect(d.record).toHaveBeenCalledWith(
+      expect.objectContaining({ outcome: "refused", failureReason: expect.stringMatching(/^cancelled:/) }),
+    );
+  });
+
+  it("rate limits confirms and new drafts", async () => {
+    const d = mkDeps({ perHour: 2 });
+    const draft = await draftOf(d);
+    for (let i = 0; i < 2; i++) await confirmForgeMail(ctx(), draft, { label: "Me" }, d.deps);
+    d.record.mockClear();
+    expect(await status(confirmForgeMail(ctx(), draft, { label: "Me" }, d.deps))).toBe(429);
+    expect(await status(sendForgeMail(ctx(), { ...input(), to: ["x@other.com"] }, d.deps))).toBe(429);
+    expect(d.record).not.toHaveBeenCalled();
   });
 });

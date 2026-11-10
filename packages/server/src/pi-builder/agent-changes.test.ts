@@ -120,6 +120,12 @@ describe("a confirmed change", () => {
     expect(outcomeLine({ ...p, status: "failed", result: "HTTP 401" })).toMatch(/FAILED: HTTP 401/);
     expect(outcomeLine({ ...p, status: "declined" })).toMatch(/DECLINED.*nothing was done/);
   });
+  it("an email card reports sent, cancelled and not-sent", () => {
+    const e = { ...p, kind: "email" as const, email: { to: ["a@x.com"], cc: ["b@x.com"], subject: "Hi", body: "b", attachments: [], expiresAt: "2030-01-01T00:00:00Z" } };
+    expect(outcomeLine({ ...e, status: "done" })).toMatch(/confirmed the email “Hi” to a@x.com \(cc b@x.com\) and it was SENT/);
+    expect(outcomeLine({ ...e, status: "declined" })).toMatch(/CANCELLED the email “Hi”.*nothing was sent/);
+    expect(outcomeLine({ ...e, status: "failed", result: "boom" })).toMatch(/was NOT sent: boom/);
+  });
 });
 
 describe("a batch: one action, many items, one card, one click", () => {

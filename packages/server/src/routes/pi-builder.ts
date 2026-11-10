@@ -630,6 +630,36 @@ piBuilderRouter.post(
   }),
 );
 
+/** The chat owner's click on Forge's email card: only this request, under the person's identity, sends a drafted email; Forge's tool key cannot reach it. */
+piBuilderRouter.post(
+  "/sessions/:sessionId/mail/:proposalId/send",
+  asyncHandler(async (req, res) => {
+    z.object({}).strict().parse(req.body ?? {});
+    if (!req.user?.subject) throw Object.assign(new Error("confirming an email needs a signed-in person"), { statusCode: 401 });
+    const proposal = await piBuilderService.decideEmail(req.params.workspaceId!, req.params.sessionId!, req.params.proposalId!, "send", {
+      subject: req.user.subject,
+      email: req.user.email ?? null,
+      name: req.user.name ?? null,
+    });
+    res.json({ proposal });
+  }),
+);
+
+/** The chat owner's click on Forge's email card: only this request, under the person's identity, sends a drafted email; Forge's tool key cannot reach it. */
+piBuilderRouter.post(
+  "/sessions/:sessionId/mail/:proposalId/cancel",
+  asyncHandler(async (req, res) => {
+    z.object({}).strict().parse(req.body ?? {});
+    if (!req.user?.subject) throw Object.assign(new Error("confirming an email needs a signed-in person"), { statusCode: 401 });
+    const proposal = await piBuilderService.decideEmail(req.params.workspaceId!, req.params.sessionId!, req.params.proposalId!, "cancel", {
+      subject: req.user.subject,
+      email: req.user.email ?? null,
+      name: req.user.name ?? null,
+    });
+    res.json({ proposal });
+  }),
+);
+
 /** "Change" on the chat's accounts: forget the connection chosen for a service; the next call asks again (8.5). */
 piBuilderRouter.post(
   "/sessions/:sessionId/accounts/clear",

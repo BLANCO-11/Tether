@@ -214,6 +214,13 @@ export async function performConfirmed(
 
 /** The line Forge reads at the start of the next turn about what became of its proposals. */
 export function outcomeLine(p: PiProposal): string {
+  if (p.kind === "email" && p.email) {
+    const who = p.email.to.join(", ") + (p.email.cc.length ? ` (cc ${p.email.cc.join(", ")})` : "");
+    const subject = p.email.subject;
+    if (p.status === "declined") return `The person CANCELLED the email “${subject}” to ${who}; nothing was sent. Do not send it again unless they ask.`;
+    if (p.status === "done") return `The person confirmed the email “${subject}” to ${who} and it was SENT.`;
+    return `The email “${subject}” to ${who} was NOT sent: ${p.result ?? ""}`;
+  }
   if (p.kind === "account" && p.choice) {
     const o = p.choice.options.find((x) => x.connectionId === p.choice!.chosen);
     if (p.status === "declined" || !o) return `The person did not choose a ${p.choice.service} connection; do not use ${p.choice.service} until they do.`;

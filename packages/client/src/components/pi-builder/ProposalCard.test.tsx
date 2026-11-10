@@ -265,3 +265,42 @@ describe("edge jobs (remote computer)", () => {
     expect(screen.getByText("mac · $ npm install")).toBeTruthy();
   });
 });
+
+describe("an email card", () => {
+  const email = (over: Partial<NonNullable<PiProposal["email"]>> = {}) => ({
+    to: ["a@x.com", "b@y.com"],
+    cc: ["c@z.com"],
+    subject: "Q3 report",
+    body: "Hello team",
+    attachments: [{ path: "out/r.pdf", name: "r.pdf", bytes: 2048, sha256: "x" }],
+    expiresAt: new Date(Date.now() + 3600_000).toISOString(),
+    ...over,
+  });
+  const card = (over: Partial<PiProposal> = {}, m = email()) => p({ kind: "email", summary: "Send the Q3 report", params: {}, email: m, ...over });
+  it("shows everything that goes out; Send and Cancel call onEmail, never onDecide", async () => {
+    const onEmail = vi.fn().mockResolvedValue(undefined);
+    const onDecide = vi.fn();
+    render(<ProposalCard p={card()} onDecide={onDecide} onEmail={onEmail} />);
+    expect(screen.getByText("a@x.com, b@y.com")).toBeTruthy();
+    expect(screen.getByText("c@z.com")).toBeTruthy();
+    expect(screen.getByText("Q3 report")).toBeTruthy();
+    expect(screen.getByText("Hello team")).toBeTruthy();
+    expect(screen.getByText("r.pdf (2.0 KB)")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+    await waitFor(() => expect(onEmail).toHaveBeenCalledWith("p1", "send"));
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    await waitFor(() => expect(onEmail).toHaveBeenCalledWith("p1", "cancel"));
+    expect(onDecide).not.toHaveBeenCalled();
+  });
+  it("an expired card says so and offers no Send", () => {
+    render(<ProposalCard p={card({}, email({ expiresAt: new Date(Date.now() - 1000).toISOString() }))} onDecide={null} onEmail={vi.fn()} />);
+    expect(screen.getByText("Expired")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Send" })).toBeNull();
+  });
+  it("a sent card shows the result and no buttons", () => {
+    render(<ProposalCard p={card({ status: "done", result: "Sent to a@x.com", decidedBy: "me" })} onDecide={null} onEmail={vi.fn()} />);
+    expect(screen.getByText("Sent")).toBeTruthy();
+    expect(screen.getByText("Sent to a@x.com")).toBeTruthy();
+    expect(screen.queryByRole("button")).toBeNull();
+  });
+});

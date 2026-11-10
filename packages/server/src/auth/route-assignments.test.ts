@@ -19,6 +19,15 @@ function permOf(method: string, path: string): string | undefined {
 const WS = "/api/workspaces/:workspaceId";
 
 describe("the assignments a reasonable person would get wrong", () => {
+  it("an email Forge drafted is sent or cancelled only by a signed-in person, never by Forge's key", () => {
+    for (const verb of ["send", "cancel"]) {
+      const p = `${WS}/pi-builder/sessions/:sessionId/mail/:proposalId/${verb}`;
+      expect(permOf("POST", p)).toBe("flows.write");
+      expect(requirementFor("POST", p)?.kind).toBe("workspace");
+    }
+    expect([...EXEMPT.keys()].filter((k) => k.startsWith("POST /api/forge") && k.includes("mail"))).toEqual(["POST /api/forge/mail"]);
+  });
+
   it("a WRITE that looks like a read: testing a datasource dials the tenant's database", () => {
     // It connects with the stored credential. That is not a read of Foundry's own data.
     expect(permOf("POST", `${WS}/datasources/:dsId/test`)).toBe("datasources.write");

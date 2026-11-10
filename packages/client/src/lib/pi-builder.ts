@@ -199,8 +199,9 @@ export type PiProposal = {
    * `setting`: switching a service's action on or off; the person picks where by the button they press.
    * `account`: which connection this chat uses for a service; the person picks one of `choice.options`.
    * `edge`: a job on a paired computer that needs Approve before it runs.
+   * `email`: a mail Forge drafted to people other than the chat's owner; nothing is sent until the person clicks Send.
    */
-  kind?: "action" | "setting" | "account" | "edge" | "surface";
+  kind?: "action" | "setting" | "account" | "edge" | "surface" | "email";
   setting?: PiSettingChange;
   /** `chat` is only on cards decided before actions were kept per person (0117). */
   scope?: GrantScope | "chat" | null;
@@ -209,6 +210,18 @@ export type PiProposal = {
   /** Device asked Foundry to run this connector action (plugin relay). */
   relay?: { requestId: string; deviceId: string; deviceName: string };
   surface?: PiSurface;
+  /** The mail itself, for `kind: "email"`: everything that will go out. */
+  email?: PiEmailDraft;
+};
+
+/** An email Forge drafted, as it will be sent. `expiresAt`: after this the card can no longer be sent. */
+export type PiEmailDraft = {
+  to: string[];
+  cc: string[];
+  subject: string;
+  body: string;
+  attachments: Array<{ path: string; name: string; bytes: number; sha256: string }>;
+  expiresAt: string;
 };
 
 export type PiSurfaceItem = {
@@ -760,6 +773,14 @@ export function steerPiMessage(wsId: string, sessionId: string, text: string) {
     method: "POST",
     body: JSON.stringify({ text }),
   }).then((r) => r.session);
+}
+
+/** Send (or cancel) an email Forge drafted. Only the person Forge was answering may; the server re-checks the attachments. */
+export function decidePiEmail(wsId: string, sessionId: string, proposalId: string, decision: "send" | "cancel") {
+  return req<{ proposal: PiProposal }>(`/workspaces/${wsId}/pi-builder/sessions/${sessionId}/mail/${proposalId}/${decision}`, {
+    method: "POST",
+    body: JSON.stringify({}),
+  });
 }
 
 /** Do (or cancel) a change Forge Agent proposed. Only the person Forge was answering may; the server checks. */

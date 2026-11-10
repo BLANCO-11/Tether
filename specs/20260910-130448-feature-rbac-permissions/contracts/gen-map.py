@@ -42,6 +42,8 @@ W = {
  ('POST','pi-builder/sessions/:sessionId/mode'):'flows.write',
  ('POST','pi-builder/sessions/:sessionId/thinking'):'flows.write',
  ('POST','pi-builder/sessions/:sessionId/model'):'flows.write',
+ ('POST','pi-builder/sessions/:sessionId/mail/:proposalId/send'):'flows.write',
+ ('POST','pi-builder/sessions/:sessionId/mail/:proposalId/cancel'):'flows.write',
  ('POST','pi-builder/sessions/:sessionId/steer'):'flows.write',
  # Workflow references (2026-10-17): listing what can be referenced and the chat's references is reading; adding,
  # moving a pin and removing one change what the build learns from. Same-workspace and per-chat rules are in the service.
