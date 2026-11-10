@@ -11,7 +11,7 @@ import type { BuilderCatalogue } from "./goal-spec.js";
 
 const CAT: BuilderCatalogue = { items: [
   { ref: "ds.items", kind: "reader", about: "items", fields: [{ name: "amount", ty: "number" }, { name: "due", ty: "date" }, { name: "level", ty: "text", values: ["high", "low"] }] },
-  { ref: "foundry_email_send", kind: "tool", about: "email", params: [{ name: "to", about: "" }] },
+  { ref: "tether_email_send", kind: "tool", about: "email", params: [{ name: "to", about: "" }] },
   { ref: "chat_post_message", kind: "tool", about: "post", params: [{ name: "text", about: "" }] },
   { ref: "chat_list_channels", kind: "tool", about: "list", lookup: true },
 ] };
@@ -19,7 +19,7 @@ const GOAL = "for each overdue item: if the amount is over 100 email a@b.example
 const CS = clauses(GOAL);
 
 const email = (on: Plan["actions"][number]["on"], extra: Partial<Plan["actions"][number]> = {}): Plan["actions"][number] =>
-  ({ ref: "foundry_email_send", clauses: ["C2"], on, per_item: true, approve_first: null, heading: "", message: "", recipient: { from: "goal", words: "a@b.example" }, ...extra });
+  ({ ref: "tether_email_send", clauses: ["C2"], on, per_item: true, approve_first: null, heading: "", message: "", recipient: { from: "goal", words: "a@b.example" }, ...extra });
 const post = (on: Plan["actions"][number]["on"]): Plan["actions"][number] =>
   ({ ref: "chat_post_message", clauses: ["C3"], on, per_item: true, approve_first: null, recipient: { from: "not_a_message", words: "" } });
 const base = (p: Partial<Plan>): Plan => ({ sources: [{ ref: "ds.items", clauses: ["C1"], also: [] }], each: { over: 0, clauses: ["C1"] }, rows: [], schedule: null, conditions: [], actions: [], values: [], missing: "", joining: [], ...p });
@@ -52,7 +52,7 @@ describe("the plan's schema", () => {
     expect(schemaProblem({ type: "object", properties: { f: { $ref: "#/$defs/x", description: "d" } }, required: ["f"], additionalProperties: false, $defs: { x: { type: "string" } } })).toMatch(/cannot carry other keywords/);
   });
   it("a recipient applies only to a tool whose declaration has an address port", () => {
-    expect(addressed(CAT, "foundry_email_send")).toBe(true);
+    expect(addressed(CAT, "tether_email_send")).toBe(true);
     expect(addressed(CAT, "chat_post_message")).toBe(false);
   });
 });
@@ -78,7 +78,7 @@ describe("the causes of F05's and S02's variance (2026-10-02)", () => {
   it("an EDIT: rows the automation already reads are its existing list — filtered, never read again; an action may run on an existing path", () => {
     const edit = { current: ["reads ds.items"], existing: { lists: [{ key: "step:read_1" as const, words: "the items", ref: "ds.items" }], producers: [], paths: [{ key: "in:check_1" as const, words: "when any is late" }] } };
     const cs = clauses("only the ones over 100, and when any is late also email a@b.example");
-    const p = base({ sources: [{ ref: "ds.items", clauses: ["C1"], list: "step:read_1" }], each: null, rows: [{ ...t("amount", "above", "100"), field: "ds.items.amount", clauses: ["C1"] }], actions: [{ ref: "foundry_email_send", quote: "email a@b.example", clauses: ["C2"], on: "in:check_1", per_item: false, approve_first: null, heading: "Late items", message: "", recipient: { from: "goal", words: "a@b.example" } }] });
+    const p = base({ sources: [{ ref: "ds.items", clauses: ["C1"], list: "step:read_1" }], each: null, rows: [{ ...t("amount", "above", "100"), field: "ds.items.amount", clauses: ["C1"] }], actions: [{ ref: "tether_email_send", quote: "email a@b.example", clauses: ["C2"], on: "in:check_1", per_item: false, approve_first: null, heading: "Late items", message: "", recipient: { from: "goal", words: "a@b.example" } }] });
     const { spec } = planToSpec(p, cs, CAT, "only the ones over 100, and when any is late also email a@b.example", edit);
     expect(spec.sources).toEqual([]); // CONTROL of the edit: the existing step is not read a second time
     expect(spec.shapes?.[0]).toMatchObject({ over: "ds.items", stages: [{ field: "ds.items.amount", test: "above", value: "100" }] });
@@ -86,17 +86,17 @@ describe("the causes of F05's and S02's variance (2026-10-02)", () => {
     expect(spec.wiring?.actions[0]).toMatchObject({ path: 0 });
     expect(JSON.stringify(planSchema(CAT, cs))).not.toMatch(/step:read_1|changes_existing/); // a new goal's schema is unchanged
     // An action on a NEW condition over an existing list acts on the condition's rows, never the whole list it names.
-    const onCond = base({ sources: [{ ref: "ds.items", clauses: ["C1"], list: "step:read_1" }], each: null, conditions: [{ quote: "", clauses: ["C1"], over: "any_row", where: [{ ...t("amount", "above", "100"), field: "ds.items.amount" }], count: null }], actions: [{ ref: "foundry_email_send", quote: "email a@b.example", clauses: ["C2"], on: "if:0", takes: "step:read_1", per_item: false, approve_first: null, heading: "x", message: "", recipient: { from: "goal", words: "a@b.example" } }] });
+    const onCond = base({ sources: [{ ref: "ds.items", clauses: ["C1"], list: "step:read_1" }], each: null, conditions: [{ quote: "", clauses: ["C1"], over: "any_row", where: [{ ...t("amount", "above", "100"), field: "ds.items.amount" }], count: null }], actions: [{ ref: "tether_email_send", quote: "email a@b.example", clauses: ["C2"], on: "if:0", takes: "step:read_1", per_item: false, approve_first: null, heading: "x", message: "", recipient: { from: "goal", words: "a@b.example" } }] });
     const lowered = planToSpec(onCond, cs, CAT, "only the ones over 100, and when any is late also email a@b.example", edit).spec;
     expect(lowered.wiring?.actions[0]!.takes).toBe(lowered.wiring?.paths[0]!.subject);
     expect(lowered.wiring?.paths[0]!.subject).not.toBe("step:read_1");
     expect(JSON.stringify(planSchema(CAT, cs, edit))).toMatch(/step:read_1.*in:check_1|in:check_1.*step:read_1/);
   });
   it("a value never fills who receives, nor a port only a step's output fills — by declaration", () => {
-    const cat: BuilderCatalogue = { items: [...CAT.items.map((i) => (i.ref === "foundry_email_send" ? { ...i, params: [{ name: "to", about: "" }, { name: "subject", about: "" }, { name: "attach_rows", about: "", fromStep: true }] } : i))] };
+    const cat: BuilderCatalogue = { items: [...CAT.items.map((i) => (i.ref === "tether_email_send" ? { ...i, params: [{ name: "to", about: "" }, { name: "subject", about: "" }, { name: "attach_rows", about: "", fromStep: true }] } : i))] };
     const fills = JSON.stringify(planSchema(cat, clauses(GOAL)));
-    expect(fills).not.toMatch(/"foundry_email_send\.to"|"foundry_email_send\.attach_rows"/);
-    expect(fills).toMatch(/"foundry_email_send\.subject"/); // CONTROL: an ordinary input is still offered
+    expect(fills).not.toMatch(/"tether_email_send\.to"|"tether_email_send\.attach_rows"/);
+    expect(fills).toMatch(/"tether_email_send\.subject"/); // CONTROL: an ordinary input is still offered
   });
   it("each action's recipient belongs to THAT action, whatever words its quote holds (F05)", () => {
     const cs = clauses(GOAL);
@@ -138,8 +138,8 @@ describe("planToSpec: the plan as the spec and wiring the solver builds from", (
     rows: [{ clauses: ["C1"], ...t("due", "date_passed") }],
     conditions: [{ quote: "if the amount is over 100", clauses: ["C2"], over: "each_item", where: [t("amount", "above", "100")], count: null }],
     actions: [
-      { ref: "foundry_email_send", quote: "emailing the customer", clauses: ["C3"], on: "if:0", per_item: true, approve_first: { quote: "ask me to approve", clauses: ["C2"] }, recipient: { from: "rows", words: "the customer" } },
-      { ref: "foundry_email_send", quote: "email them straight away", clauses: ["C4"], on: "otherwise", per_item: true, approve_first: null, recipient: { from: "rows", words: "the customer" } },
+      { ref: "tether_email_send", quote: "emailing the customer", clauses: ["C3"], on: "if:0", per_item: true, approve_first: { quote: "ask me to approve", clauses: ["C2"] }, recipient: { from: "rows", words: "the customer" } },
+      { ref: "tether_email_send", quote: "email them straight away", clauses: ["C4"], on: "otherwise", per_item: true, approve_first: null, recipient: { from: "rows", words: "the customer" } },
     ],
   });
   const { spec } = planToSpec(plan, cs, CAT, goal);
@@ -153,7 +153,7 @@ describe("planToSpec: the plan as the spec and wiring the solver builds from", (
       { takes: "item", path: 0, approve: "ask me to approve", per: "item" },
       { takes: "item", path: "otherwise", approve: null, per: "item" },
     ]);
-    expect(spec.values.filter((v) => v.role === "recipient").map((v) => [v.quote, v.fills])).toEqual([["the customer", "foundry_email_send.to"], ["the customer", "foundry_email_send.to"]]);
+    expect(spec.values.filter((v) => v.role === "recipient").map((v) => [v.quote, v.fills])).toEqual([["the customer", "tether_email_send.to"], ["the customer", "tether_email_send.to"]]);
     expect(spec.sinks.map((x) => x.quote)).toEqual(["emailing the customer", "email them straight away"]);
   });
   it("a part's quote that is not the person's words falls back to its clause's own text", () => {

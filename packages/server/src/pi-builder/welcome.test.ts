@@ -5,7 +5,7 @@ const first = () => 0;
 const cat = {
   entries: [
     { ref: "Attendance_DB.employee_hours", kind: "operation" },
-    { ref: "foundry_email_send", kind: "tool" },
+    { ref: "tether_email_send", kind: "tool" },
     { ref: "ticket_create", kind: "tool" },
   ],
   datasources: [{ name: "Attendance_DB", tables: [{ name: "attendance_day" }, { name: "employee" }, { name: "leave_applied" }, { name: "report_parameters" }] }],

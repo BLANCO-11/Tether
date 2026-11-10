@@ -96,7 +96,7 @@ describe("US3 — resolving the requester from the execution row", () => {
     );
   });
 
-  it.each(["trigger", "system", "schedule", "unknown"] as const)(
+  it.each(["trigger", "system", "unknown"] as const)(
     "refuses to invent a person for a `%s` run",
     (kind) => {
       // Even when the column happens to hold something address-shaped. A
@@ -107,6 +107,38 @@ describe("US3 — resolving the requester from the execution row", () => {
       );
     },
   );
+
+  it("accepts a per-person schedule: subject present and requested_by is the person's email", () => {
+    expect(
+      resolveRequester({ requestedBy: "Her@Example.com", requestedByKind: "schedule", requestedBySubject: "sub-1" }),
+    ).toBe("her@example.com");
+  });
+
+  it("sends a subject-less schedule to the workflow owner", () => {
+    expect(
+      resolveRequester({
+        requestedBy: "schedule",
+        requestedByKind: "schedule",
+        requestedBySubject: null,
+        ownerEmail: "Owner@Example.com",
+      }),
+    ).toBe("owner@example.com");
+  });
+
+  it("refuses a schedule with neither a subject nor an owner address", () => {
+    expect(resolveRequester({ requestedBy: "schedule", requestedByKind: "schedule" })).toBe(null);
+    expect(resolveRequester({ requestedBy: "schedule", requestedByKind: "schedule", ownerEmail: "not-an-email" })).toBe(null);
+  });
+
+  it("refuses a schedule whose requested_by is not an email, even with a subject", () => {
+    expect(
+      resolveRequester({ requestedBy: "schedule", requestedByKind: "schedule", requestedBySubject: "sub-1" }),
+    ).toBe(null);
+  });
+
+  it("does not use the owner address for a non-schedule run", () => {
+    expect(resolveRequester({ requestedBy: "system", requestedByKind: "trigger", ownerEmail: "o@example.com" })).toBe(null);
+  });
 
   it("refuses a `user` run whose requester is not an address", () => {
     // `requestedBy` is `user.email ?? user.subject` — so an identity with no

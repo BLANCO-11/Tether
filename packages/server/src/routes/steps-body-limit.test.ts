@@ -219,9 +219,9 @@ describe("⚠ a Forge run's callback is held to what its workflow declares (forg
     const before = get.getMockImplementation();
     get.mockImplementation(async () => ({ kestraExecutionId: "fr-1", runnerJob: { workflow: { steps: [{ id: "s", entry: "s.py", uses: ["tool:x"] }] } } }) as never);
     try {
-      const refused = await post("/api/steps/tool", JSON.stringify({ ref: "foundry_email_send", params: [{}] }), VALID_TOKEN);
+      const refused = await post("/api/steps/tool", JSON.stringify({ ref: "tether_email_send", params: [{}] }), VALID_TOKEN);
       expect(refused.status).toBe(403);
-      expect(await refused.json()).toMatchObject({ error: "undeclared_use", message: expect.stringMatching(/foundry_email_send/) });
+      expect(await refused.json()).toMatchObject({ error: "undeclared_use", message: expect.stringMatching(/tether_email_send/) });
       expect((await post("/api/steps/http", JSON.stringify({ ref: "x", params: [{}] }), VALID_TOKEN)).status).toBe(403);
       expect((await post("/api/steps/tool", bodyOfBytes(1024), VALID_TOKEN)).status).toBe(200);
     } finally {

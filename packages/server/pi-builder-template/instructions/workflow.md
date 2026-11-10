@@ -230,7 +230,7 @@ path = foundry.file("<file name>")                     # a workspace file, as a 
   them, build the file in the step and attach it by path:
   ```python
   foundry.write_xlsx("lop_report.xlsx", rows)
-  foundry.call("foundry_email_send", {"subject": "...", "body": "<a short summary>",
+  foundry.call("tether_email_send", {"subject": "...", "body": "<a short summary>",
                                       "attachments": [{"name": "LOP report.xlsx", "path": "lop_report.xlsx"}]})
   ```
   Build a spreadsheet with `foundry.write_xlsx(path, rows)`, never pandas' `to_excel`: `to_excel` holds several

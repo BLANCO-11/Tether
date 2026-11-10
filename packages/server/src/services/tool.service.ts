@@ -353,7 +353,7 @@ async function assertWorkspace(workspaceId: string) {
  * ── What this protects, and what it deliberately does not ────────────────────
  *
  * The tools page offers **Edit** and **Remove** on every row and `routes/tools.ts`
- * backs both with no exemptions. So `foundry_email_send` could be deleted —
+ * backs both with no exemptions. So `tether_email_send` could be deleted —
  * breaking every armed flow that references it by name — or repointed at another
  * host, which the executor would then hand `FOUNDRY_MAIL_KEY` to.
  *

@@ -6,7 +6,7 @@
  * Testing an automation that emails somebody used to have two bad outcomes and
  * no good one: either the flow named the simulated tool, in which case the
  * message went into a demo capture table nothing in the product read, or it
- * named `foundry_email_send`, in which case a **draft run delivered real mail**
+ * named `tether_email_send`, in which case a **draft run delivered real mail**
  * — before approval, because gate 1 requires a successful run before arming.
  *
  * The second half is now closed at the delivery boundary: `routes/mail.ts`
@@ -15,7 +15,7 @@
  *
  * ── ONE SOURCE ───────────────────────────────────────────────────────────────
  *
- * `foundry_email_send` records into Foundry's own `email_sends`, which is
+ * `tether_email_send` records into Foundry's own `email_sends`, which is
  * workspace-scoped and carries the resolved recipients, the outcome and — for a
  * captured message only — the rendered body. The second, simulated source (ops-api's
  * shared `mail_outbox`, which had no workspace column) went with ops-api on 2026-10-30.
@@ -164,7 +164,7 @@ emailBoxRouter.get(
 
     res.json({
       workspaceId,
-      /** From `foundry_email_send`. Workspace-scoped, and authoritative. */
+      /** From `tether_email_send`. Workspace-scoped, and authoritative. */
       foundry,
       notes: {
         capturedMeansHeld:

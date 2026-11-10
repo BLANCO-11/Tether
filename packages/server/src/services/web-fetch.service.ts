@@ -2,7 +2,7 @@
  * `web_fetch` — read one public web address (2026-10-30, plans/builtin-tools-2026-10-30).
  *
  * A workflow step has no network (it runs on `flow-runner`, internal network only), so reading the web is a built-in
- * tool like `foundry_email_send`: a `tools` row in every workspace pointing at `POST /api/web/fetch` on this server,
+ * tool like `tether_email_send`: a `tools` row in every workspace pointing at `POST /api/web/fetch` on this server,
  * and the same service behind Forge's build-time fetch (`/api/forge/fetch`). One implementation, one set of rules.
  *
  * The rules, all here:

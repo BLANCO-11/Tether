@@ -47,7 +47,7 @@ const attendance: CardSource = {
           branch: [
             {
               if: { op: "eq", to: true, value: "report.has_rows" },
-              steps: [{ id: "send_report", uses: ["tool:foundry_email_send"], entry: "steps/send_report/main.py", description: "Email the report." }],
+              steps: [{ id: "send_report", uses: ["tool:tether_email_send"], entry: "steps/send_report/main.py", description: "Email the report." }],
             },
             { else: true, steps: [] },
           ],
@@ -76,7 +76,7 @@ describe("buildCard", () => {
     expect(card).toContain('  - if report.has_rows eq true:');
     expect(card).toContain("    - send_report: Email the report.");
     expect(card).toContain("  - otherwise: nothing");
-    expect(card).toContain("- Tools it calls: foundry_email_send");
+    expect(card).toContain("- Tools it calls: tether_email_send");
     expect(card).toContain("- steps/report/main.py (3 lines)");
     expect(card).toContain("- report.rows may be empty: No muster records exist for the chosen month.");
   });

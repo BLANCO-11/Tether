@@ -12,7 +12,7 @@ import { join } from "node:path";
 const ROOT = new URL("..", import.meta.url).pathname;
 const DIRS = ["engine", "typecheck", "ir"];
 /** The tools this deployment ships, and the families their names come from. */
-const REFS = ["chat_list_channels", "chat_post_message", "flaky_probe", "foundry_email_send", "hr_attendance_daily", "hr_attendance_summary", "hr_get_employee", "hr_get_manager", "hr_list_departments", "hr_list_employees", "hr_list_offices", "http_request", "llm_complete", "mail_send", "mail_send_template", "page_oncall", "page_search", "test_email_send", "ticket_create", "ticket_search", "ticket_update"];
+const REFS = ["chat_list_channels", "chat_post_message", "flaky_probe", "tether_email_send", "hr_attendance_daily", "hr_attendance_summary", "hr_get_employee", "hr_get_manager", "hr_list_departments", "hr_list_employees", "hr_list_offices", "http_request", "llm_complete", "mail_send", "mail_send_template", "page_oncall", "page_search", "test_email_send", "ticket_create", "ticket_search", "ticket_update"];
 const NAMES = new RegExp(`["'\`](${REFS.join("|")})["'\`]`);
 /** Source with comments removed — a docblock explaining a rule may name the tool it was written for. */
 const code = (src: string) => src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:])\/\/.*$/gm, "$1");

@@ -54,7 +54,7 @@ export interface BuildGoal {
 }
 
 const ATTENDANCE = ["hr_attendance_summary", "hr_attendance_daily", "hr_demo.employees_with_attendance", "hr_demo.attendance_period_rows"];
-const EMAIL = ["foundry_email_send", "mail_send", "mail_send_template", "test_email_send"];
+const EMAIL = ["tether_email_send", "mail_send", "mail_send_template", "test_email_send"];
 const CHAT = ["chat_post_message"];
 
 export const BUILD_GOALS: BuildGoal[] = [

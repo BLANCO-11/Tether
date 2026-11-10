@@ -1991,7 +1991,7 @@ export async function gateRevisionModel(model: FlowModel, g: RevisionGateInputs)
   //
   // `refInterfaces` is the second half and answers the question the ref list
   // cannot: not "does this ref exist?" but "is it being CALLED correctly?".
-  // A `foundry_email_send` step carrying an undeclared `author` key compiled,
+  // A `tether_email_send` step carrying an undeclared `author` key compiled,
   // deployed and ran, and died at the last hop on the route's `.strict()`
   // body schema — after reading production data. `checkFlowParams` is that
   // refusal moved to the one place it costs nothing.

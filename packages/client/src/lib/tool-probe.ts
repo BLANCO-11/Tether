@@ -45,7 +45,7 @@ export function defaultModeFor(method: string | null | undefined): ToolProbeMode
  * control, because a button the API will always refuse reads as a broken page
  * rather than as a rule.
  */
-const PLATFORM_MANAGED_TOOLS = ["foundry_email_send"];
+const PLATFORM_MANAGED_TOOLS = ["tether_email_send"];
 
 /**
  * May a LIVE probe be offered for this tool?
@@ -53,7 +53,7 @@ const PLATFORM_MANAGED_TOOLS = ["foundry_email_send"];
  * ⚠ A mutating method is not the reason to refuse — a live probe of a `POST` is
  * offered, because a person may genuinely want to test it and the confirmation is
  * how they say so (P2). What is refused is a platform-managed tool: a live probe of
- * `foundry_email_send` would deliver REAL mail, and it would fail anyway, since
+ * `tether_email_send` would deliver REAL mail, and it would fail anyway, since
  * that tool resolves its recipient from an `x-foundry-run` header a probe has no
  * run to supply. A green or red result there would be a statement about the probe.
  */

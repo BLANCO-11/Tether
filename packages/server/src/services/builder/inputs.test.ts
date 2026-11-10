@@ -51,7 +51,7 @@ describe("a value relative to the run date, at a parameter's own end", () => {
 const CAT: BuilderCatalogue = { items: [
   { ref: "ds.items", kind: "reader", about: "items", fields: [{ name: "due", ty: "Date" }, { name: "amount", ty: "Number" }] },
   { ref: "ds.new_read", kind: "reader", about: "a new read" },
-  { ref: "foundry_email_send", kind: "tool", about: "email", params: [{ name: "to", about: "" }] },
+  { ref: "tether_email_send", kind: "tool", about: "email", params: [{ name: "to", about: "" }] },
 ] };
 const G = "for each item between two dates email me";
 const CS = clauses(G);
@@ -84,7 +84,7 @@ describe("the plan with inputs (switch on)", () => {
   it("an input a test on EACH ITEM names is the flow's, even when the field comes from the written read — never also a read parameter (2026-10-04)", () => {
     const N = { id: "in_a", kind: "number" as const, words: "over 100", fill: "given" as const, clauses: ["C1"] };
     const item = { clauses: ["C1"], over: "each_item" as const, where: [{ field: "new_read", about: "the amount", test: "above" as const, value: "", input: "in_a" }], count: null };
-    const p = plan({ sources: [{ ref: "ds.new_read", clauses: ["C1"] }], each: { over: 0, clauses: ["C1"] }, inputs: [N], conditions: [item], actions: [{ ref: "foundry_email_send", clauses: ["C1"], on: "if:0", per_item: true, approve_first: null, recipient: { from: "requester", words: "me" } }] });
+    const p = plan({ sources: [{ ref: "ds.new_read", clauses: ["C1"] }], each: { over: 0, clauses: ["C1"] }, inputs: [N], conditions: [item], actions: [{ ref: "tether_email_send", clauses: ["C1"], on: "if:0", per_item: true, approve_first: null, recipient: { from: "requester", words: "me" } }] });
     const { spec } = planToSpec(p, CS, CAT, G);
     expect(spec.inputs?.[0]?.at).toBe("flow");
     expect(readContract(spec, "ds.new_read", [G]).params).toEqual([]);
@@ -117,7 +117,7 @@ describe("the plan with inputs (switch on)", () => {
     expect(inputFindings(plan({ inputs: [RANGE], rows: [{ clauses: ["C1"], field: "ds.items.due", about: "", test: "equals", value: "", input: "in_a" }] }))).toEqual([]); // CONTROL
     expect(inputFindings(plan({ rows: [{ clauses: ["C1"], field: "ds.items.due", about: "", test: "equals", value: "", input: "in_b" }] })).join(" ")).toMatch(/in_b, which is not in `inputs`/);
     const guard = (over: Plan["conditions"][number]["over"], perItem: boolean) => inputFindings(plan({ each: { over: 0, clauses: ["C1"] }, conditions: [{ clauses: ["C1"], over, where: [], count: null }],
-      actions: [{ ref: "foundry_email_send", clauses: ["C1"], on: "if:0", per_item: perItem, approve_first: null, recipient: { from: "requester", words: "me" } }] }));
+      actions: [{ ref: "tether_email_send", clauses: ["C1"], on: "if:0", per_item: perItem, approve_first: null, recipient: { from: "requester", words: "me" } }] }));
     expect(guard("any_row", true).join(" ")).toMatch(/runs for each item, and condition 0 .* tests nothing about the item/); // B1
     expect(guard("any_row", false)).toEqual([]); // CONTROL: "if there are any, email me" — one action, the whole list
   });

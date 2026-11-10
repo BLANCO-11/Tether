@@ -98,7 +98,7 @@ describe("defaultModeFor — a Test button must not fire a mutating call", () =>
 describe("isLiveProbeOffered", () => {
   it("hides a live probe for a platform-managed tool", () => {
     // A button the API will always refuse (409) reads as a broken page, not a rule.
-    expect(isLiveProbeOffered("foundry_email_send", "POST")).toBe(false);
+    expect(isLiveProbeOffered("tether_email_send", "POST")).toBe(false);
   });
 
   it("offers one for an ordinary mutating tool — the confirmation is how consent is given", () => {
@@ -107,7 +107,7 @@ describe("isLiveProbeOffered", () => {
 
   /**
    * ⚠ `mail_send` is the SIMULATED ops-api tool that writes a row to
-   * `mail_outbox`; only `foundry_email_send` delivers real mail. Refusing both
+   * `mail_outbox`; only `tether_email_send` delivers real mail. Refusing both
    * would remove a harmless test for no reason, and the distinction is one the
    * server's list already makes.
    */

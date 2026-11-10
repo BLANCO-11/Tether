@@ -4,7 +4,7 @@
  *
  * ── Why this is a separate module, and why it is the first one written ───────
  *
- * `foundry_email_send` is the first tool in Foundry that leaves the building.
+ * `tether_email_send` is the first tool in Foundry that leaves the building.
  * Every other tool in the catalogue talks to `packages/ops-api`, which is a
  * *simulation* — a wrong recipient there costs a row in `api_call_log`. Here a
  * wrong recipient is a message in a stranger's inbox, and there is no unsend.
@@ -111,12 +111,16 @@ const domainOf = (address: string): string => address.slice(address.lastIndexOf(
  * The person who started this run, or `null` — and `null` is a legitimate,
  * common answer that callers must handle rather than paper over.
  *
- * ⚠ **Only `user` and `replay` runs have a person.** A `schedule`, `trigger`,
- * `system` or `unknown` run has none *by definition*, and the column may still
- * hold something address-shaped (a trigger's name, the literal `system`). Any
- * fallback here — the flow's author, the workspace owner, a configured operator
- * address — would mean a nightly job quietly emailing a tenant's payroll report
- * to whoever was convenient. Refusing is the correct behaviour and US3 exists to
+ * ⚠ **`user` and `replay` runs have a person, and so does a per-person
+ * `schedule`.** A "Turn on for me" schedule carries the person's subject and
+ * their email as `requested_by`: they turned it on, so they are the requester.
+ * A workflow's own schedule has no subject; it falls back to the workflow's
+ * OWNER (`ownerEmail`, looked up by the route), and only that. A `trigger`,
+ * `system` or `unknown` run has no person *by definition*, and the column may
+ * still hold something address-shaped (a trigger's name, the literal `system`).
+ * Any other fallback — the workspace owner, a configured operator address —
+ * would mean a nightly job quietly emailing a tenant's payroll report to
+ * whoever was convenient. Refusing is the correct behaviour and US3 exists to
  * assert that it is loud.
  *
  * The second guard is the one that is easy to forget: a `user` run's
@@ -127,10 +131,19 @@ const domainOf = (address: string): string => address.slice(address.lastIndexOf(
 export function resolveRequester(row: {
   requestedBy: string | null | undefined;
   requestedByKind: string | null | undefined;
+  requestedBySubject?: string | null;
+  /** The flow owner's email, supplied by the caller; used only for a subject-less schedule. */
+  ownerEmail?: string | null;
 }): string | null {
-  if (row.requestedByKind !== "user" && row.requestedByKind !== "replay") return null;
+  const kind = row.requestedByKind;
   const candidate = canon(row.requestedBy ?? "");
-  return EMAIL_RE.test(candidate) ? candidate : null;
+  if (kind === "user" || kind === "replay") return EMAIL_RE.test(candidate) ? candidate : null;
+  if (kind === "schedule") {
+    if (row.requestedBySubject) return EMAIL_RE.test(candidate) ? candidate : null;
+    const owner = canon(row.ownerEmail ?? "");
+    return EMAIL_RE.test(owner) ? owner : null;
+  }
+  return null;
 }
 
 /**

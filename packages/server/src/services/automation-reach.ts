@@ -12,7 +12,7 @@
  *   - the AI summary tool (`llm_complete`) — its usage is counted per person;
  *   - steps that only compute.
  * The workspace's: every read of a workspace datasource, every file in the shared Files library, the org mailbox
- * (`foundry_email_send`), a service called through the workspace's connection, any other tool (it carries the
+ * (`tether_email_send`), a service called through the workspace's connection, any other tool (it carries the
  * workspace's credentials), and anything this workspace no longer has.
  */
 import { pluginRepo, type PluginConnection } from "../repositories/plugin.repo.js";

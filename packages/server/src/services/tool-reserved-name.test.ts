@@ -5,7 +5,7 @@
  * ── The exposure this closes ─────────────────────────────────────────────────
  *
  * The tools page offers **Edit** and **Remove** on every row and `routes/tools.ts`
- * backs both with no exemptions. Left alone, `foundry_email_send` could be:
+ * backs both with no exemptions. Left alone, `tether_email_send` could be:
  *
  *  - **deleted**, breaking every armed flow that references it by name — a flow
  *    that was approved and is now unrunnable, for a reason the flow does not
@@ -53,7 +53,7 @@ afterAll(async () => {
 });
 
 describe("the reserved-name list", () => {
-  it("names foundry_email_send", () => {
+  it("names tether_email_send", () => {
     expect(PLATFORM_TOOL_NAMES).toContain(EMAIL_TOOL_NAME);
   });
 });

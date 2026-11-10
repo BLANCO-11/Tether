@@ -18,7 +18,7 @@ const CAT: CatalogueSnapshot = {
   refs: {
     "fin.invoices_past_due": { kind: "operation", params: [{ name: "as_of", ty: T.date(), required: true }], payload: T.rows(ROW) },
     "fin.raw_json": { kind: "query", params: [], payload: T.rows(T.json()) },
-    foundry_email_send: {
+    tether_email_send: {
       kind: "tool",
       params: [
         { name: "to", ty: T.address(), required: true },
@@ -45,7 +45,7 @@ const read: CheckStep = { id: "read", kind: "datasource", ref: "fin.invoices_pas
 const send: CheckStep = {
   id: "send",
   kind: "tool",
-  ref: "foundry_email_send",
+  ref: "tether_email_send",
   dependsOn: ["read"],
   over: { stepId: "read", field: "" },
   inputs: [
@@ -187,9 +187,9 @@ describe("a list port that accepts ONE element in its place (liftsScalar)", () =
     ...CAT,
     refs: {
       ...CAT.refs,
-      foundry_email_send: {
-        ...CAT.refs.foundry_email_send!,
-        params: CAT.refs.foundry_email_send!.params.map((p) => (p.name === "to" ? { ...p, ty: T.list(T.address()), ...(liftsScalar ? { liftsScalar } : {}) } : p)),
+      tether_email_send: {
+        ...CAT.refs.tether_email_send!,
+        params: CAT.refs.tether_email_send!.params.map((p) => (p.name === "to" ? { ...p, ty: T.list(T.address()), ...(liftsScalar ? { liftsScalar } : {}) } : p)),
       },
     },
   });
@@ -514,7 +514,7 @@ describe("FT0507 — a literal recipient the deployment refuses is an error; a r
 });
 
 describe("FT0508 — an unattended send with no recipient", () => {
-  const OPT = { ...CAT, refs: { ...CAT.refs, foundry_email_send: { ...CAT.refs.foundry_email_send!, params: CAT.refs.foundry_email_send!.params.map((p) => (p.name === "to" ? { ...p, required: false, fallsBackToRequester: true } : p)) } } };
+  const OPT = { ...CAT, refs: { ...CAT.refs, tether_email_send: { ...CAT.refs.tether_email_send!, params: CAT.refs.tether_email_send!.params.map((p) => (p.name === "to" ? { ...p, required: false, fallsBackToRequester: true } : p)) } } };
   const unset = (m: CheckModel) => { step(m, "send").inputs = step(m, "send").inputs!.filter((b) => b.name !== "to"); return m; };
   it("fires when the flow is scheduled and the optional recipient is unset", () => {
     const m = unset(clone(CLEAN)); (m as { schedule?: unknown }).schedule = { cron: "0 9 * * 1" };
@@ -526,7 +526,7 @@ describe("FT0508 — an unattended send with no recipient", () => {
     expect(checkFlow(m, OPT).map((d) => d.code)).not.toContain("FT0508");
   });
   it("⚠ CONTROL (I-287): an optional address port the receiver does NOT fill with the requester never fires", () => {
-    const NOFALL = { ...OPT, refs: { ...OPT.refs, foundry_email_send: { ...OPT.refs.foundry_email_send!, params: OPT.refs.foundry_email_send!.params.map((p) => ({ ...p, fallsBackToRequester: false })) } } };
+    const NOFALL = { ...OPT, refs: { ...OPT.refs, tether_email_send: { ...OPT.refs.tether_email_send!, params: OPT.refs.tether_email_send!.params.map((p) => ({ ...p, fallsBackToRequester: false })) } } };
     const m = unset(clone(CLEAN)); (m as { schedule?: unknown }).schedule = { cron: "0 9 * * 1" };
     expect(checkFlow(m, NOFALL).map((d) => d.code)).not.toContain("FT0508");
   });

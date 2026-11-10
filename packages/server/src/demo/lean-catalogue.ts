@@ -25,7 +25,7 @@
  *
  *   `test_email_send`     captured, never delivered. Visible in the Email box.
  *   `llm_complete`        figures in, one paragraph out. Terminal (D-34).
- *   `foundry_email_send`  real delivery, and NOT defined here — it comes from
+ *   `tether_email_send`  real delivery, and NOT defined here — it comes from
  *                         `platform-tool-catalogue.ts`, because it is a product
  *                         capability rather than demo data and must survive a
  *                         reseed.
@@ -132,7 +132,7 @@ export const LEAN_OPS_SERVICES: OpsService[] = ["mail", "llm", "ticketing", "cha
  *
  * ⚠ It is `test_email_send` and not `mail_send`, and the name is doing real
  * work. `mail_send` reads like the way to send mail; a model choosing between
- * `mail_send` and `foundry_email_send` has no way to tell which one reaches a
+ * `mail_send` and `tether_email_send` has no way to tell which one reaches a
  * person. The `test_` prefix is the only signal in the catalogue that says so,
  * and the description repeats it.
  */
@@ -157,7 +157,7 @@ export function leanToolCatalogue(domainKey?: string): ToolSpec[] {
       description:
         "Send a TEST email. ⚠ NOTHING IS DELIVERED — the message is captured and shown in " +
         "Foundry's Email box (Resources → Email box) for whoever is testing the automation. Use " +
-        "this while building and testing. `foundry_email_send` is the one that reaches a real " +
+        "this while building and testing. `tether_email_send` is the one that reaches a real " +
         "mailbox. Returns {message_id, status, accepted[], rejected[], bounce_reason}: status is " +
         "'sent' (201) or 'bounced' (202), and a 202 means nothing was accepted — so read " +
         "`status` and `rejected` rather than treating any 2xx as success. One call takes many " +

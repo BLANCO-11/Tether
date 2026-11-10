@@ -594,7 +594,7 @@
       }
      }
     },
-    "foundry_email_send": {
+    "tether_email_send": {
      "kind": "tool",
      "params": [
       {
@@ -1555,7 +1555,7 @@
     "endpoint": "POST /mail/send",
     "signature": "tool POST(body:string!,cc:array?,recipients:array!,sender:string!,subject:string!)"
    },
-   "foundry_email_send": {
+   "tether_email_send": {
     "kind": "tool",
     "params": [
      {
@@ -2413,7 +2413,7 @@
       }
      }
     },
-    "foundry_email_send": {
+    "tether_email_send": {
      "kind": "tool",
      "params": [
       {
@@ -2976,7 +2976,7 @@
     "endpoint": "POST /mail/send",
     "signature": "tool POST(body:string!,cc:array?,recipients:array!,sender:string!,subject:string!)"
    },
-   "foundry_email_send": {
+   "tether_email_send": {
     "kind": "tool",
     "params": [
      {
@@ -3369,7 +3369,7 @@
       }
      }
     },
-    "foundry_email_send": {
+    "tether_email_send": {
      "kind": "tool",
      "params": [
       {
@@ -3999,7 +3999,7 @@
     "endpoint": "POST /mail/send",
     "signature": "tool POST(body:string!,cc:array?,recipients:array!,sender:string!,subject:string!)"
    },
-   "foundry_email_send": {
+   "tether_email_send": {
     "kind": "tool",
     "params": [
      {
@@ -4628,7 +4628,7 @@
       }
      }
     },
-    "foundry_email_send": {
+    "tether_email_send": {
      "kind": "tool",
      "params": [
       {
@@ -4908,7 +4908,7 @@
     "endpoint": "POST /mail/send",
     "signature": "tool POST(body:string!,cc:array?,recipients:array!,sender:string!,subject:string!)"
    },
-   "foundry_email_send": {
+   "tether_email_send": {
     "kind": "tool",
     "params": [
      {
@@ -6322,7 +6322,7 @@
       }
      }
     },
-    "foundry_email_send": {
+    "tether_email_send": {
      "kind": "tool",
      "params": [
       {
@@ -7960,7 +7960,7 @@
     "endpoint": "GET /hr/employees",
     "signature": "tool GET(department:string?,employment_type:string?,has_email:string?,limit:integer?,manager_id:integer?,office:string?,offset:integer?,q:string?,region:string?,status:string?)"
    },
-   "foundry_email_send": {
+   "tether_email_send": {
     "kind": "tool",
     "params": [
      {
@@ -9059,7 +9059,7 @@
       }
      }
     },
-    "foundry_email_send": {
+    "tether_email_send": {
      "kind": "tool",
      "params": [
       {
@@ -10647,7 +10647,7 @@
     "endpoint": "POST /paging/pages",
     "signature": "tool POST(dedupe_key:string!,dedupe_window_mins:number?,escalation_target:string?,severity:string?,summary:string!,target:string!)"
    },
-   "foundry_email_send": {
+   "tether_email_send": {
     "kind": "tool",
     "params": [
      {
@@ -12038,7 +12038,7 @@
       }
      }
     },
-    "foundry_email_send": {
+    "tether_email_send": {
      "kind": "tool",
      "params": [
       {
@@ -12992,7 +12992,7 @@
     "endpoint": "POST /mail/send",
     "signature": "tool POST(attachments:array?,body:string!,cc:array?,recipients:array!,sender:string!,subject:string!)"
    },
-   "foundry_email_send": {
+   "tether_email_send": {
     "kind": "tool",
     "params": [
      {
@@ -14137,7 +14137,7 @@
       }
      }
     },
-    "foundry_email_send": {
+    "tether_email_send": {
      "kind": "tool",
      "params": [
       {
@@ -14997,7 +14997,7 @@
     "endpoint": "POST /mail/send",
     "signature": "tool POST(body:string!,cc:array?,recipients:array!,sender:string!,subject:string!)"
    },
-   "foundry_email_send": {
+   "tether_email_send": {
     "kind": "tool",
     "params": [
      {
@@ -15808,7 +15808,7 @@
       }
      }
     },
-    "foundry_email_send": {
+    "tether_email_send": {
      "kind": "tool",
      "params": [
       {
@@ -16371,7 +16371,7 @@
     "endpoint": "POST /mail/send",
     "signature": "tool POST(body:string!,cc:array?,recipients:array!,sender:string!,subject:string!)"
    },
-   "foundry_email_send": {
+   "tether_email_send": {
     "kind": "tool",
     "params": [
      {
@@ -17011,7 +17011,7 @@
       }
      }
     },
-    "foundry_email_send": {
+    "tether_email_send": {
      "kind": "tool",
      "params": [
       {
@@ -17900,7 +17900,7 @@
     "endpoint": "POST /mail/send",
     "signature": "tool POST(body:string!,cc:array?,recipients:array!,sender:string!,subject:string!)"
    },
-   "foundry_email_send": {
+   "tether_email_send": {
     "kind": "tool",
     "params": [
      {

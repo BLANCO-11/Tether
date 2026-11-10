@@ -3,7 +3,7 @@
 // ── WHY THIS PAGE EXISTS ────────────────────────────────────────────────────
 //
 // Testing an automation that emails somebody used to deliver real mail from a
-// draft run: a flow naming `foundry_email_send`, draft-run — and gate 1 requires a
+// draft run: a flow naming `tether_email_send`, draft-run — and gate 1 requires a
 // successful run before a flow can be armed, so it delivered before anybody had
 // approved anything.
 //

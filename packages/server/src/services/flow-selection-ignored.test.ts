@@ -78,7 +78,7 @@ describe("the check and the prompt agree about what was offered (D-197)", () => 
       { datasourceId: "ds1", datasourceName: "hr_demo", name: "approved_leave" },
       { datasourceId: "ds2", datasourceName: "finance_demo", name: "overdue" },
     ],
-    tools: [{ name: "foundry_email_send" }, { name: "llm_complete" }],
+    tools: [{ name: "tether_email_send" }, { name: "llm_complete" }],
     operations: [{ datasourceId: "ds1", datasourceName: "hr_demo", name: "headcount" }],
   };
 

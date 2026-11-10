@@ -81,7 +81,7 @@ describe("an unbound binding source parses", () => {
     const r = draftedStepSchema.safeParse({
       id: "email_report",
       kind: "tool",
-      ref: "foundry_email_send",
+      ref: "tether_email_send",
       paramsExpr: '[{"subject": "x", "body": ""}]',
       inputs: [
         { name: "subject", source: { from: "literal", value: "x" } },

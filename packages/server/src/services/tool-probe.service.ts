@@ -465,7 +465,7 @@ export const toolProbeService = {
      * 3 — platform-managed tools get reachability only (plan Decision 7).
      *
      * ⚠ Two independent reasons, and the second matters more: a live probe of
-     * `foundry_email_send` would deliver a REAL email; and it would fail anyway,
+     * `tether_email_send` would deliver a REAL email; and it would fail anyway,
      * because that tool points at Foundry's own `/api/mail/send`, which resolves
      * its recipient from the `x-foundry-run` header a probe has no run to supply.
      * A green or red result there would be a statement about the probe, not about

@@ -379,7 +379,7 @@ export const hrDepartmentDigest: FlowModel = {
       id: "send",
       kind: "tool",
       name: "Email the digest",
-      // ⚠ `mail_send`, deliberately NOT `foundry_email_send`. That one is REAL
+      // ⚠ `mail_send`, deliberately NOT `tether_email_send`. That one is REAL
       // delivery to a live mailbox and addresses "whoever started the run" —
       // which a scheduled or seeded run has no answer for. A demo flow that
       // depends on a human starter is a demo that fails when nobody is looking.

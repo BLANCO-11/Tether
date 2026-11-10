@@ -51,7 +51,7 @@ class SavedFiles(unittest.TestCase):
         threading.Thread(target=cls.server.serve_forever, daemon=True).start()
         foundry._configure({
             "serverBase": f"http://127.0.0.1:{cls.server.server_port}",
-            "token": "t", "stepId": "email_report", "uses": ["tool:foundry_email_send", "file:Rate card.csv", "file:missing.csv"],
+            "token": "t", "stepId": "email_report", "uses": ["tool:tether_email_send", "file:Rate card.csv", "file:missing.csv"],
         })
 
     @classmethod
@@ -66,7 +66,7 @@ class SavedFiles(unittest.TestCase):
             p = os.path.join(d, "report.xlsx")
             with open(p, "wb") as f:
                 f.write(b"PK\x03\x04" + b"x" * 1000)
-            foundry.call("foundry_email_send", {"subject": "s", "attachments": [{"name": "LOP report.xlsx", "path": p}]})
+            foundry.call("tether_email_send", {"subject": "s", "attachments": [{"name": "LOP report.xlsx", "path": p}]})
         self.assertEqual([s[0] for s in SEEN], ["/api/steps/files", "/api/steps/tool"])
         self.assertEqual(len(SEEN[0][2]), 1004)
         self.assertEqual(SEEN[0][1]["x-step-id"], "email_report")
@@ -79,7 +79,7 @@ class SavedFiles(unittest.TestCase):
             os.chdir(d)
             try:
                 with self.assertRaisesRegex(foundry.FoundryError, "run's folder") as cm:
-                    foundry.call("foundry_email_send", {"subject": "s", "attachments": [{"name": "r.xlsx", "path": "report.xlsx"}]})
+                    foundry.call("tether_email_send", {"subject": "s", "attachments": [{"name": "r.xlsx", "path": "report.xlsx"}]})
             finally:
                 os.chdir(old)
         self.assertNotIn("It is at", str(cm.exception))
@@ -102,12 +102,12 @@ class SavedFiles(unittest.TestCase):
 
     def test_an_oversized_call_is_refused_before_sending(self):
         with self.assertRaisesRegex(foundry.FoundryError, r"at most 5\.0 MB.*attach it by path"):
-            foundry.call("foundry_email_send", {"subject": "s", "body": "x" * (6 * 1024 * 1024)})
+            foundry.call("tether_email_send", {"subject": "s", "body": "x" * (6 * 1024 * 1024)})
         self.assertEqual(SEEN, [])
 
     def test_large_rows_become_an_excel_file_built_in_the_step(self):
         rows = [{"emp": f"E{i}", "hours": i % 9, "note": None, "tags": ["a"]} for i in range(30_000)]
-        foundry.call("foundry_email_send", {"subject": "s", "attach_rows": rows, "attach_name": "Muster Report.xlsx",
+        foundry.call("tether_email_send", {"subject": "s", "attach_rows": rows, "attach_name": "Muster Report.xlsx",
                                             "attach_format": "xlsx"})
         self.assertEqual([s[0] for s in SEEN], ["/api/steps/files", "/api/steps/tool"])
         self.assertTrue(SEEN[0][2].startswith(b"PK"))  # an xlsx is a zip
@@ -181,31 +181,31 @@ class SavedFiles(unittest.TestCase):
         foundry.FILE_MAX_BYTES = 100_000
         try:
             rows = [{"emp": f"E{i}", "dept": "Operations"} for i in range(40_000)]
-            foundry.call("foundry_email_send", {"subject": "s", "attach_rows": rows, "attach_format": "xlsx"})
+            foundry.call("tether_email_send", {"subject": "s", "attach_rows": rows, "attach_format": "xlsx"})
         finally:
             foundry.FILE_MAX_BYTES = old
         sent = json.loads(SEEN[-1][2])["params"][0]
         self.assertEqual(sent["attachments"][0]["name"], "report.csv.zip")
 
     def test_small_rows_still_go_as_data(self):
-        foundry.call("foundry_email_send", {"subject": "s", "attach_rows": [{"a": 1}], "attach_format": "csv"})
+        foundry.call("tether_email_send", {"subject": "s", "attach_rows": [{"a": 1}], "attach_format": "csv"})
         self.assertEqual([s[0] for s in SEEN], ["/api/steps/tool"])
 
     def test_attachment_text_past_the_limit_travels_as_the_file(self):
         # The shape that failed a real run (2026-10-13): the whole report as CSV text in `content`.
         csv_text = "emp,hours\n" + "".join(f"E{i},{i % 9}\n" for i in range(150_000))
-        foundry.call("foundry_email_send", {"subject": "s", "attachments": [{"name": "Muster.csv", "content": csv_text}]})
+        foundry.call("tether_email_send", {"subject": "s", "attachments": [{"name": "Muster.csv", "content": csv_text}]})
         self.assertEqual([s[0] for s in SEEN], ["/api/steps/files", "/api/steps/tool"])
         self.assertEqual(SEEN[0][2].decode(), csv_text)
         self.assertEqual(json.loads(SEEN[1][2])["params"][0]["attachments"], [{"name": "Muster.csv", "file": "f-1"}])
 
     def test_small_attachment_text_still_goes_as_text(self):
-        foundry.call("foundry_email_send", {"subject": "s", "attachments": [{"name": "a.csv", "content": "a\n1\n"}]})
+        foundry.call("tether_email_send", {"subject": "s", "attachments": [{"name": "a.csv", "content": "a\n1\n"}]})
         self.assertEqual([s[0] for s in SEEN], ["/api/steps/tool"])
 
     def test_a_table_in_the_body_becomes_an_attached_file(self):
         rows = [{"emp": f"E{i}", "status": "Present"} for i in range(60)]
-        foundry.call("foundry_email_send", {"subject": "Monthly muster", "body": json.dumps(rows)})
+        foundry.call("tether_email_send", {"subject": "Monthly muster", "body": json.dumps(rows)})
         self.assertEqual([s[0] for s in SEEN], ["/api/steps/files", "/api/steps/tool"])
         self.assertTrue(SEEN[0][2].startswith(b"PK"))
         sent = json.loads(SEEN[1][2])["params"][0]
@@ -214,15 +214,15 @@ class SavedFiles(unittest.TestCase):
 
     def test_a_body_table_beside_an_attachment_is_not_attached_twice(self):
         rows = [{"emp": f"E{i}"} for i in range(60)]
-        foundry.call("foundry_email_send", {"subject": "s", "body": rows, "attachments": [{"name": "a.csv", "content": "a\n"}]})
+        foundry.call("tether_email_send", {"subject": "s", "body": rows, "attachments": [{"name": "a.csv", "content": "a\n"}]})
         sent = json.loads(SEEN[-1][2])["params"][0]
         self.assertEqual([s[0] for s in SEEN], ["/api/steps/tool"])
         self.assertEqual((sent["body"], sent["attachments"]), (foundry.BODY_MOVED_TO_FILE, [{"name": "a.csv", "content": "a\n"}]))
 
     def test_CONTROL_a_short_table_and_prose_stay_in_the_body(self):
         small = json.dumps([{"dept": "Ops", "absent": 3}])
-        foundry.call("foundry_email_send", {"subject": "s", "body": small})
-        foundry.call("foundry_email_send", {"subject": "s", "body": "Hi team,\n\n3 people were absent today."})
+        foundry.call("tether_email_send", {"subject": "s", "body": small})
+        foundry.call("tether_email_send", {"subject": "s", "body": "Hi team,\n\n3 people were absent today."})
         bodies = [json.loads(x[2])["params"][0]["body"] for x in SEEN]
         self.assertEqual(bodies, [small, "Hi team,\n\n3 people were absent today."])
 

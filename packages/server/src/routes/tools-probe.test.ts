@@ -300,14 +300,14 @@ describe("the probe route answers in the contract's shape", () => {
     );
   });
 
-  it("409 `platform_managed_live_probe` for a live probe of foundry_email_send", async () => {
-    get.mockResolvedValue({ ...TOOL, name: "foundry_email_send", method: "POST" });
+  it("409 `platform_managed_live_probe` for a live probe of tether_email_send", async () => {
+    get.mockResolvedValue({ ...TOOL, name: "tether_email_send", method: "POST" });
     const res = await probe({ toolId: TOOL.id, mode: "live" });
 
     expect(res.status).toBe(409);
     await expect(res.json()).resolves.toMatchObject({
       error: "platform_managed_live_probe",
-      name: "foundry_email_send",
+      name: "tether_email_send",
     });
   });
 

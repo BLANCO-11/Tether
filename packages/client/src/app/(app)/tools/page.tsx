@@ -390,7 +390,7 @@ export default function ToolsPage() {
  * imported: the client shares no module with the server. The server is the control;
  * this is presentation, and if the two drift the API still refuses.
  */
-const PLATFORM_MANAGED_TOOLS = ["foundry_email_send"];
+const PLATFORM_MANAGED_TOOLS = ["tether_email_send"];
 const isPlatformManaged = (name: string) => PLATFORM_MANAGED_TOOLS.includes(name);
 
 function toolRow(
@@ -877,7 +877,7 @@ function ToolFormModal({ tool, onClose, onSaved }: {
   /**
    * ⚠ **Gated on the MODE, not on the tool alone.** `isLiveProbeOffered` answers
    * "may this tool be INVOKED from here", and the first version of this panel used
-   * it to disable the button outright — which blocked `foundry_email_send`
+   * it to disable the button outright — which blocked `tether_email_send`
    * entirely. That tool is a `POST`, so its default mode is `reachability`, and
    * the server explicitly ALLOWS reachability for a platform-managed tool
    * (`tool-probe.service.test.ts`: *"but REACHABILITY of a platform-managed tool

@@ -32,7 +32,7 @@ describe("T13 clarify-preserve (Intent IR)", () => {
   it("a rebuild-shaped re-plan that drops sources restores the prior reader", () => {
     const prev: GoalSpec = {
       sources: [{ ref: "Attendance_DB.query.banded_absences", quote: "from attendance" }],
-      sinks: [{ ref: "foundry_email_send", quote: "email me" }],
+      sinks: [{ ref: "tether_email_send", quote: "email me" }],
       values: [],
       conditions: [],
       schedule: null,
@@ -41,10 +41,10 @@ describe("T13 clarify-preserve (Intent IR)", () => {
     const next: GoalSpec = {
       ...prev,
       sources: [],
-      sinks: [{ ref: "foundry_email_send", quote: "email me the accumulated absences" }],
+      sinks: [{ ref: "tether_email_send", quote: "email me the accumulated absences" }],
     };
     const { spec } = pinSpecByIr(prev, next, "email me absences that are accumulated");
     expect(spec.sources[0]!.ref).toBe("Attendance_DB.query.banded_absences");
-    expect(spec.sinks[0]!.ref).toBe("foundry_email_send");
+    expect(spec.sinks[0]!.ref).toBe("tether_email_send");
   });
 });

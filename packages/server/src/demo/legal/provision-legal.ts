@@ -61,7 +61,7 @@ export interface LegalProvisionReport {
   workspaceCreated: boolean;
   seed: LegalSeedReport;
   tools: { created: number; updated: number; total: number };
-  /** Platform tools (`foundry_email_send`) — reported separately so a reseed that
+  /** Platform tools (`tether_email_send`) — reported separately so a reseed that
    *  restores a missing product capability says so, rather than doing it silently. */
   platformTools: { created: string[]; updated: string[] };
   datasource: {
@@ -231,7 +231,7 @@ export async function provisionLegal(): Promise<LegalProvisionReport> {
     `[mock] ${mock.started ? `ready (v${mock.version})` : `not built (${mock.why}${mock.detail ? `: ${mock.detail}` : ""})`}`,
   );
 
-  // 7b. Platform tools. NOT demo data — `foundry_email_send` is a product
+  // 7b. Platform tools. NOT demo data — `tether_email_send` is a product
   // capability, so it must survive a reseed rather than being left behind by one.
   //
   // ⚠ This is NOT redundant with `workspaceService.create`, which also registers
@@ -240,7 +240,7 @@ export async function provisionLegal(): Promise<LegalProvisionReport> {
   // creation. Both properties mean a workspace can exist without the tool and no
   // amount of re-running `legal:seed` would put it back. Measured on this very
   // deployment: the Finance workspace carried its 8 demo tools for 74 minutes with
-  // no `foundry_email_send`, until an unrelated startup backfill happened to catch
+  // no `tether_email_send`, until an unrelated startup backfill happened to catch
   // it. Re-registering here is what makes the reseed self-healing, exactly as the
   // HR provisioner does at its step 5b.
   //

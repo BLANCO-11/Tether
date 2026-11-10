@@ -14,7 +14,7 @@ describe("a workflow comparing tables with a File", () => {
   });
 
   it("CONTROL: tables alone, or a File alone, is not that case", () => {
-    expect(filesBesideTables({ steps: [{ id: "a", entry: "a.py", uses: ["read:attendance", "tool:foundry_email_send"] }] })).toEqual([]);
+    expect(filesBesideTables({ steps: [{ id: "a", entry: "a.py", uses: ["read:attendance", "tool:tether_email_send"] }] })).toEqual([]);
     expect(filesBesideTables({ steps: [{ id: "a", entry: "a.py", uses: ["file:Rates.xlsx"] }] })).toEqual([]);
     expect(filesBesideTables(null)).toEqual([]);
   });

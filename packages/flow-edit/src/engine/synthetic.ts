@@ -18,7 +18,7 @@ export const SYNTHETIC: CatalogueSnapshot = {
     "store.people": reader([], { name: T.text(), email: T.address(), team: T.option(T.text()), score: T.option(T.number()) }),
     "store.by_month": reader([port("period", T.month()), port("limit_to", T.int(), false)], { label: T.text(), total: T.number(), seen_at: T.dateTime() }),
     mail_send: tool([port("to", T.list(T.address()), true, true), port("subject", T.text([{ r: "SingleLine" }, { r: "MaxLen", n: 200 }])), port("body", T.text()), port("cc", T.list(T.address()), false, true)], { status: T.text(), message_id: T.text() }),
-    // `foundry_email_send`'s shape: an unset `to` goes to whoever started the run (I-287) — the port a schedule makes a hole.
+    // `tether_email_send`'s shape: an unset `to` goes to whoever started the run (I-287) — the port a schedule makes a hole.
     notify_me: tool([{ ...port("to", T.list(T.address()), false, true), fallsBackToRequester: true }, port("text", T.text())], { status: T.text() }),
     llm_complete: { ...tool([port("input", T.text()), port("instruction", T.text(), false)], { text: T.text() }), modelText: true },
     chat_post: tool([port("channel", T.text([{ r: "OneOf", values: ["#ops", "#alerts"] }])), port("text", T.text())], { ok: T.bool() }),

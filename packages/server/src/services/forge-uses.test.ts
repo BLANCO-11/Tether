@@ -43,7 +43,7 @@ describe("what a workflow declares", () => {
 describe("a step call is held to it", () => {
   it("a declared tool passes; any other tool is refused by name", () => {
     expect(useRefusal(workflow, { kind: "tool", ref: "github_create_issue" })).toBeNull();
-    expect(useRefusal(workflow, { kind: "tool", ref: "foundry_email_send" })).toMatch(/does not use the tool "foundry_email_send"/);
+    expect(useRefusal(workflow, { kind: "tool", ref: "tether_email_send" })).toMatch(/does not use the tool "tether_email_send"/);
   });
   it("a saved reader passes by its ref; one declared but used by no step does not", () => {
     expect(useRefusal(workflow, { kind: "read", ref: "orders.open_orders" })).toBeNull();
@@ -74,7 +74,7 @@ describe("only a Forge run is checked, from the job it was started with", () => 
   it("a runner execution is held to its stored workflow", async () => {
     m.exec = { kestraExecutionId: "fr-1", runnerJob: { workflow } };
     expect(await refuseUndeclaredUse("e1", { kind: "tool", ref: "llm_complete" })).toBeNull();
-    expect(await refuseUndeclaredUse("e1", { kind: "tool", ref: "foundry_email_send" })).not.toBeNull();
+    expect(await refuseUndeclaredUse("e1", { kind: "tool", ref: "tether_email_send" })).not.toBeNull();
   });
   it("⚠ a runner execution with no stored workflow refuses everything", async () => {
     m.exec = { kestraExecutionId: "fr-1", runnerJob: {} };

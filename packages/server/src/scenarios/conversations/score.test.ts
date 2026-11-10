@@ -45,7 +45,7 @@ describe("the verdict", () => {
   });
   it("a failed draft run fails; a skipped one (a tool that leaves the stack) does not", () => {
     expect(verdict(conv(), outcome({ run: { state: "FAILED", note: "read=FAILED" } })).join()).toMatch(/draft run FAILED/);
-    expect(verdict(conv(), outcome({ run: { state: "skipped", note: "calls foundry_email_send" } }))).toEqual([]);
+    expect(verdict(conv(), outcome({ run: { state: "skipped", note: "calls tether_email_send" } }))).toEqual([]);
   });
 });
 

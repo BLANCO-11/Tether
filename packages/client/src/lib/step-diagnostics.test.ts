@@ -58,7 +58,7 @@ describe("diagnosticsByStep — finding lines (a failed authored job)", () => {
   it("CONTROL: prose findings in the same array are left alone", () => {
     const m = diagnosticsByStep({
       findings: [
-        "step send: ref foundry_email_send does not exist",
+        "step send: ref tether_email_send does not exist",
         "could not draft a valid flow in 3 attempts",
         " FT0202 send: leading space is trimmed",
         "XFT0202 send: not at the start",

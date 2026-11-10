@@ -93,7 +93,7 @@ describe("R15 · whose address: the plan chooses the field, never the nearest na
     expect(r.blocked).toEqual([]);
   });
   it("an address that, left out, goes to WHOEVER RUNS IT is never gone without: the call is not done, and stated (cp3 B24)", () => {
-    // `notify_me` is `foundry_email_send`'s shape: an unset `to` delivers to the person who started the run. "Without" it, the
+    // `notify_me` is `tether_email_send`'s shape: an unset `to` delivers to the person who started the run. "Without" it, the
     // owner's manager's message would reach someone else — the silent fallback R15 removes, come back through an optional port.
     const goal = "For each widget, notify the owner's manager";
     const sp: GoalSpec = { sources: [{ ref: "store.widgets", quote: "For each widget" }], sinks: [{ ref: "notify_me", quote: "notify the owner's manager" }],

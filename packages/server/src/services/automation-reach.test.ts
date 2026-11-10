@@ -11,7 +11,7 @@ const GH = "@activepieces/piece-github";
 const facts: ReachFacts = {
   tools: new Map<string, { url: string | null }>([
     ["llm_complete", { url: "http://ops-api:4004/llm/complete" }],
-    ["foundry_email_send", { url: "http://server:4000/api/mail/send" }],
+    ["tether_email_send", { url: "http://server:4000/api/mail/send" }],
     ["github_create_issue", { url: `plugin://${GH}@0.11.0/create_issue` }],
     ["crm_lookup", { url: "https://crm.example/api" }],
   ]),
@@ -40,7 +40,7 @@ describe("⚠ anything of the workspace's needs a reviewer", () => {
   const cases: Array<[string, Parameters<typeof classifyReach>[0], RegExp]> = [
     ["a read of the workspace's data", { workflow: step("read:late") }, /reads the workspace's data/],
     ["a file in the shared Files library", { workflow: step("file:rates.xlsx") }, /from the workspace's Files/],
-    ["the org mailbox", { workflow: step("tool:foundry_email_send") }, /workspace's mailbox/],
+    ["the org mailbox", { workflow: step("tool:tether_email_send") }, /workspace's mailbox/],
     ["a service with no connection chosen (the workspace's)", { workflow: step("tool:github_create_issue") }, /through the workspace's connection/],
     [
       "a service through the workspace's connection",

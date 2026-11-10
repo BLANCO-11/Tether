@@ -31,9 +31,9 @@ describe("the demo tool catalogue authenticates", () => {
 
   it("marks both mail tools SIMULATED, so the drafter can tell them from the real sender", () => {
     /**
-     * email-send-tool US5. `foundry_email_send` sits in the same manifest as these
+     * email-send-tool US5. `tether_email_send` sits in the same manifest as these
      * two and delivers to real mailboxes; these two deliver nothing. The names
-     * (`mail_send` vs `foundry_email_send`) do not carry that difference, and the
+     * (`mail_send` vs `tether_email_send`) do not carry that difference, and the
      * cost of confusing them is asymmetric — picking the simulated one wastes a
      * redraft, picking the real one emails a stranger.
      *

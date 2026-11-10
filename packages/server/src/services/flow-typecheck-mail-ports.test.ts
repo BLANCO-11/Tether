@@ -25,10 +25,10 @@ describe("mail ports carry the service's own contract (I-287)", () => {
     expect(port("mail_send_template", "variables").ty).toEqual({ t: "Record", fields: {} });
   });
 
-  it("only `foundry_email_send`'s `to` falls back to the requester — never a `cc`, never another tool", () => {
-    expect(port("foundry_email_send", "to").fallsBackToRequester).toBe(true);
+  it("only `tether_email_send`'s `to` falls back to the requester — never a `cc`, never another tool", () => {
+    expect(port("tether_email_send", "to").fallsBackToRequester).toBe(true);
     const others = Object.entries(cat.refs).flatMap(([ref, r]) => r.params.filter((p) => p.fallsBackToRequester).map((p) => `${ref}.${p.name}`));
-    expect(others).toEqual(["foundry_email_send.to"]);
+    expect(others).toEqual(["tether_email_send.to"]);
   });
 
   it("⚠ the engine now refuses the call it built before: a plan name into `recipients`", () => {

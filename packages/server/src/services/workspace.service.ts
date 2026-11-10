@@ -170,7 +170,7 @@ export const workspaceService = {
     });
 
     /**
-     * Platform tools — currently just `foundry_email_send` (email-send-tool T032).
+     * Platform tools — currently just `tether_email_send` (email-send-tool T032).
      *
      * ⚠ Registered **unconditionally**, even when Graph is unconfigured. An absent
      * tool makes the drafter compose a flow around a capability that is not in the

@@ -52,7 +52,7 @@ describe("matchShape", () => {
       { id: "a", kind: "tool", ref: "hr_attendance_summary" },
       { id: "t", kind: "transform", dependsOn: ["a"] },
       { id: "g", kind: "approval", dependsOn: ["t"] },
-      { id: "s", kind: "tool", ref: "foundry_email_send", dependsOn: ["g"] },
+      { id: "s", kind: "tool", ref: "tether_email_send", dependsOn: ["g"] },
     ]);
     expect(m).toMatchObject({ exact: true, matched: 3, missing: [], extra: [], brokenEdges: [] });
   });
@@ -60,7 +60,7 @@ describe("matchShape", () => {
   it("⚠ a gate AFTER the send breaks the edge — the appended-gate failure", () => {
     const m = matchShape(R06, [
       { id: "a", kind: "tool", ref: "hr_attendance_summary" },
-      { id: "s", kind: "tool", ref: "foundry_email_send", dependsOn: ["a"] },
+      { id: "s", kind: "tool", ref: "tether_email_send", dependsOn: ["a"] },
       { id: "g", kind: "approval", dependsOn: ["s"] },
     ]);
     expect(m.exact).toBe(false);
@@ -70,7 +70,7 @@ describe("matchShape", () => {
   it("a missing gate is reported by its label", () => {
     const m = matchShape(R06, [
       { id: "a", kind: "tool", ref: "hr_attendance_summary" },
-      { id: "s", kind: "tool", ref: "foundry_email_send", dependsOn: ["a"] },
+      { id: "s", kind: "tool", ref: "tether_email_send", dependsOn: ["a"] },
     ]);
     expect(m.missing).toEqual(["gate"]);
   });
@@ -79,7 +79,7 @@ describe("matchShape", () => {
     const R02 = BUILD_GOALS.find((g) => g.id === "R02")!;
     const base = [
       { id: "a", kind: "tool", ref: "hr_attendance_summary" },
-      { id: "s", kind: "tool", ref: "foundry_email_send", dependsOn: ["a", "d"] },
+      { id: "s", kind: "tool", ref: "tether_email_send", dependsOn: ["a", "d"] },
     ];
     expect(matchShape(R02, [...base, { id: "d", kind: "tool", ref: "hr_list_departments" }]).exact).toBe(true);
     expect(matchShape(R02, [...base, { id: "d", kind: "tool", ref: "ticket_create" }]).extra).toEqual(["d:tool(ticket_create)"]);

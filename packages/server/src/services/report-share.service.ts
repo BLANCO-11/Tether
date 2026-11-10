@@ -10,7 +10,7 @@
  *   - every attempt leaves a `report_shares` row, written BEFORE the send and finished after, so a crash mid-send
  *     reads as "attempted", never as "sent".
  *
- * Delivery is `mailService.send`, the same Graph transport `foundry_email_send` uses. This path does not go through
+ * Delivery is `mailService.send`, the same Graph transport `tether_email_send` uses. This path does not go through
  * `POST /api/mail/send`: that route's recipient policy is built around a flow run's requester, and a report has none.
  */
 import { eq } from "drizzle-orm";

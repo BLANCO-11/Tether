@@ -660,7 +660,7 @@ describe("the intent row is written BEFORE the provider is called", () => {
  * A DRAFT RUN IS CAPTURED, NEVER DELIVERED — and this suite is the proof.
  *
  * ⚠ **The exposure.** Nothing bound tool choice to the run environment, so a
- * *test* run of a flow naming `foundry_email_send` delivered real mail through
+ * *test* run of a flow naming `tether_email_send` delivered real mail through
  * Graph. Gate 1 requires a successful run before a flow can be armed, so it
  * delivered **before anybody had approved anything** — the D-52 shape, in the
  * one place where the side effect cannot be taken back.

@@ -33,7 +33,7 @@ const ATTACHMENT = "Attachment";
 export const DECLARED: Readonly<Record<string, ToolDeclaration>> = {
   // `routes/mail.ts` + `mail-recipients.ts`: a subject is one non-empty line of at most SUBJECT_MAX_CHARS; `to`/`cc` are
   // address lists that take one address; `resolveRecipients`: an empty `to` becomes the run's requester (I-287).
-  foundry_email_send: { ports: {
+  tether_email_send: { ports: {
     /**
      * ⚠ The route's real shape, not `array`. Typed as "a list of anything" (I-287's hole) a reader's rows fit this port and
      * every check was green — then `mail.ts` refused each row at run time: no `name`, unknown keys. A row now misses `name`.

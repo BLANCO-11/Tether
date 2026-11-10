@@ -4,7 +4,7 @@
  *
  * ── Why this endpoint exists at all ──────────────────────────────────────────
  *
- * The registered tool `foundry_email_send` points **here**, not at
+ * The registered tool `tether_email_send` points **here**, not at
  * `graph.microsoft.com`. That is the load-bearing decision of the whole feature
  * (plan.md Decision 1): Graph delivers to whatever the request body names, so a
  * tool aimed straight at Microsoft would hand the model the destination. The
@@ -52,7 +52,7 @@ import { z } from "zod";
 import { eq } from "drizzle-orm";
 import { asyncHandler } from "../middleware/error.middleware.js";
 import { db } from "../db/index.js";
-import { flowExecutions } from "../db/schema.js";
+import { flowExecutions, flows, platformUsers } from "../db/schema.js";
 import { workspaceRepo } from "../repositories/workspace.repo.js";
 import { emailSendRepo } from "../repositories/email-send.repo.js";
 import { config } from "../config/index.js";
@@ -198,11 +198,28 @@ async function resolveExecution(runId: string | undefined) {
       workspaceId: flowExecutions.workspaceId,
       requestedBy: flowExecutions.requestedBy,
       requestedByKind: flowExecutions.requestedByKind,
+      requestedBySubject: flowExecutions.requestedBySubject,
+      flowId: flowExecutions.flowId,
     })
     .from(flowExecutions)
     .where(eq(flowExecutions.id, runId))
     .limit(1);
   return rows[0] ?? null;
+}
+
+/**
+ * The email of a workflow's owner, for a schedule run that has no requester of its
+ * own. `flows.owner_subject` is a subject; `email:<addr>` subjects carry the address,
+ * any other is looked up in `platform_users`. Null when there is no owner or no address.
+ */
+async function ownerEmailOf(flowId: string | null): Promise<string | null> {
+  if (!flowId) return null;
+  const f = await db.select({ owner: flows.ownerSubject }).from(flows).where(eq(flows.id, flowId)).limit(1);
+  const subject = f[0]?.owner;
+  if (!subject) return null;
+  if (subject.startsWith("email:")) return subject.slice(6);
+  const u = await db.select({ email: platformUsers.email }).from(platformUsers).where(eq(platformUsers.subject, subject)).limit(1);
+  return u[0]?.email ?? null;
 }
 
 mailRouter.post(
@@ -239,7 +256,13 @@ mailRouter.post(
     }
 
     const workspace = await workspaceRepo.get(execution.workspaceId);
-    const requester = resolveRequester(execution);
+    const requester = resolveRequester({
+      ...execution,
+      ownerEmail:
+        execution.requestedByKind === "schedule" && !execution.requestedBySubject
+          ? await ownerEmailOf(execution.flowId)
+          : null,
+    });
 
     /** Record and answer in one place, so no refusal path can forget the row. */
     const refuse = async (
@@ -406,7 +429,7 @@ mailRouter.post(
     /**
      * ⚠ **THE EXPOSURE THIS CLOSES.** Nothing bound tool choice to the run
      * environment: a step names its tool at authoring time, so a *test* run of
-     * a flow naming `foundry_email_send` delivered real mail through Graph. And
+     * a flow naming `tether_email_send` delivered real mail through Graph. And
      * gate 1 requires a successful run before a flow can be armed, so that real
      * send happened **before anybody had approved anything** — the same shape
      * D-52 closed for datasource reads, in the one place where the side effect

@@ -132,14 +132,14 @@ describe("a fact about each item the written read must return (R5)", () => {
   beforeEach(on); afterEach(off);
   const CAT: BuilderCatalogue = { items: [
     { ref: "ds.new_read", kind: "reader", about: "a new read" },
-    { ref: "foundry_email_send", kind: "tool", about: "email", params: [{ name: "to", about: "" }] },
+    { ref: "tether_email_send", kind: "tool", about: "email", params: [{ name: "to", about: "" }] },
   ] };
   const G = "for each offer, if the candidate has an interview scheduled email me, otherwise email me too";
   const CS = clauses(G);
   const plan: Plan = {
     sources: [{ ref: "ds.new_read", clauses: ["C1"] }], each: { over: 0, clauses: ["C1"] }, rows: [], schedule: null,
     conditions: [{ clauses: [CS[1]?.id ?? "C1"], over: "each_item", where: [{ field: "new_read", about: "whether the candidate has an interview scheduled", test: "is_true", value: "" }], count: null }],
-    actions: [{ ref: "foundry_email_send", clauses: ["C1"], on: "if:0", per_item: true, approve_first: null, recipient: { from: "requester", words: "me" } }],
+    actions: [{ ref: "tether_email_send", clauses: ["C1"], on: "if:0", per_item: true, approve_first: null, recipient: { from: "requester", words: "me" } }],
     values: [], missing: "", joining: [],
   };
   it("is named by code and is a column of the read's contract; CONTROL: off, it is stated unbuilt and the contract has no such column", () => {

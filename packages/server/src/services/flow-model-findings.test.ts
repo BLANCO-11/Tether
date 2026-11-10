@@ -93,7 +93,7 @@ const FIXTURES: Record<string, Array<Record<string, unknown>>> = {
   ],
   /**
    * ⚠ **Verbatim from execution `e097b55b` (2026-08-18)**, the first real use of
-   * `foundry_email_send`. `.data.text` is the LLM's report — a String — and
+   * `tether_email_send`. `.data.text` is the LLM's report — a String — and
    * Kestra's `jq` parses its input as JSON, so this failed at RENDER time with
    * "Unable to parse jq value … with type 'java.lang.String'". The step never made
    * an HTTP request, so nothing anywhere reported an email problem.
@@ -119,7 +119,7 @@ const FIXTURES: Record<string, Array<Record<string, unknown>>> = {
     {
       id: "send",
       kind: "tool",
-      ref: "foundry_email_send",
+      ref: "tether_email_send",
       paramsExpr:
         `[{"body":"{{ json(outputs.report.body).results[0].data.text }}",` +
         `"subject":"Attendance report"}]`,
@@ -179,7 +179,7 @@ const FIXTURES: Record<string, Array<Record<string, unknown>>> = {
     {
       id: "send_email",
       kind: "tool",
-      ref: "foundry_email_send",
+      ref: "tether_email_send",
       paramsExpr:
         `[{"body":{{ json(outputs.report_text.body).results[0].data.text | ` +
         `jq('tostring | @json') | first }},"subject":"Employee attendance report"}]`,
@@ -209,7 +209,7 @@ const FIXTURES: Record<string, Array<Record<string, unknown>>> = {
     {
       id: "send",
       kind: "tool",
-      ref: "foundry_email_send",
+      ref: "tether_email_send",
       paramsExpr: `[{"text":"{{ outputs.rows_step.value | jq('tostring') | first }}"}]`,
     },
   ],
@@ -668,7 +668,7 @@ describe("unused_step — the dead-step warning", () => {
       {
         id: "send",
         kind: "tool",
-        ref: "foundry_email_send",
+        ref: "tether_email_send",
         paramsExpr: `[{"to":"ops@example.com","subject":"Report","body":"done"}]`,
       },
     ];

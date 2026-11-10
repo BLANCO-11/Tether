@@ -1,5 +1,5 @@
 /**
- * Attachments on `foundry_email_send` — the pure checks, text or generated.
+ * Attachments on `tether_email_send` — the pure checks, text or generated.
  *
  * ── Two ways to attach a file, one set of checks ───────────────────────────
  *

@@ -472,13 +472,13 @@ describe("I-119 — an llm_complete `input` that describes the data instead of c
 describe("checkPluckedThenJq — a leaf selected in Pebble and then piped into jq", () => {
   /** Local, because the I-119 block's helper is scoped to that block. */
   const step = (paramsExpr: string, id = "send_email") => [
-    { id, kind: "tool", ref: "foundry_email_send", paramsExpr },
+    { id, kind: "tool", ref: "tether_email_send", paramsExpr },
   ];
 
   /**
    * ── The failure, measured on a real run ────────────────────────────────────
    *
-   * Execution `e097b55b` (2026-08-18), the first real use of `foundry_email_send`.
+   * Execution `e097b55b` (2026-08-18), the first real use of `tether_email_send`.
    * The drafter wrote, for the tool's `body` parameter:
    *
    *   {{ json(outputs.report_text.body).results[0].data.text | jq('tostring | @json') | first }}
@@ -595,7 +595,7 @@ describe("checkPluckedThenJq — a leaf selected in Pebble and then piped into j
 });
 describe("checkTextValueThenJq — a TEXT .value piped straight into jq", () => {
   const step = (paramsExpr: string, id = "send_email") => [
-    { id, kind: "tool", ref: "foundry_email_send", paramsExpr },
+    { id, kind: "tool", ref: "tether_email_send", paramsExpr },
   ];
 
   it("flags the QUOTED blind spot: text piped into jq('@json')", () => {
@@ -696,7 +696,7 @@ describe("checkFreeTextInQuotes — an LLM's prose interpolated into a quoted JS
    */
   const twoStep = (sendExpr: string) => [
     { id: "report", kind: "tool", ref: "llm_complete", paramsExpr: `[{"input":"x"}]` },
-    { id: "send", kind: "tool", ref: "foundry_email_send", paramsExpr: sendExpr },
+    { id: "send", kind: "tool", ref: "tether_email_send", paramsExpr: sendExpr },
   ];
 
   it("flags the exact expression that failed execution fa04cfc3", () => {
@@ -729,7 +729,7 @@ describe("checkFreeTextInQuotes — an LLM's prose interpolated into a quoted JS
         {
           id: "send",
           kind: "tool",
-          ref: "foundry_email_send",
+          ref: "tether_email_send",
           paramsExpr: `[{"to":["{{ json(outputs.fetch.body).results[0].data[0].email }}"],"subject":"Hi"}]`,
         },
       ]),
@@ -754,7 +754,7 @@ describe("checkFreeTextInQuotes — an LLM's prose interpolated into a quoted JS
         {
           id: "send",
           kind: "tool",
-          ref: "foundry_email_send",
+          ref: "tether_email_send",
           paramsExpr: `[{"body":"{{ json(outputs.q.body).results[0].data.text }}"}]`,
         },
       ]),
@@ -769,7 +769,7 @@ describe("checkFreeTextInQuotes — an LLM's prose interpolated into a quoted JS
         {
           id: "send",
           kind: "tool",
-          ref: "foundry_email_send",
+          ref: "tether_email_send",
           paramsExpr: `[{"body":"{{ json(outputs.mystery.body).results[0].data.text }}"}]`,
         },
       ]),

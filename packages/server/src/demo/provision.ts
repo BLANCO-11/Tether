@@ -243,7 +243,7 @@ export async function provisionDemo(): Promise<ProvisionReport> {
     `[mock] ${mock.started ? `ready (v${mock.version})` : `not built (${mock.why}${mock.detail ? `: ${mock.detail}` : ""})`}`,
   );
 
-  // 5b. Platform tools (email-send-tool T033). NOT demo data — `foundry_email_send`
+  // 5b. Platform tools (email-send-tool T033). NOT demo data — `tether_email_send`
   // is a product capability, so it must survive a reseed rather than being left
   // behind by one. `rebuildManifest: false` because step 6 below renders the
   // manifest once for everything; bumping the version here as well would make the

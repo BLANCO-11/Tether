@@ -239,7 +239,7 @@ function parsePairs(body: string, pebble: string[]): { mappings: ParsedMapping[]
     // `@json` emits the value WITH its quotes, so the span must splice raw;
     // binding it as a literal stringifies it whole at emit and the value
     // arrives double-quoted (post-loop `json_double_encoded`, measured
-    // 2026-09-14 on `foundry_email_send.body`). Skipped here means the stored
+    // 2026-09-14 on `tether_email_send.body`). Skipped here means the stored
     // display stays authoritative and the binding is explicitly unbound
     // (`null`), which the emitter never reads while a display exists and the
     // validator never scans. Bare templates WITHOUT a live encoder keep

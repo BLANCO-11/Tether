@@ -241,7 +241,7 @@ export function createApp() {
   // may call it — see routes/oracle.ts.
   app.use("/api/test-oracle", requireApiKey, oracleRouter);
 
-  // REAL email delivery — the `foundry_email_send` tool's endpoint.
+  // REAL email delivery — the `tether_email_send` tool's endpoint.
   //
   // ⚠ At its EXACT path, never `app.use("/api", requireMailKey, …)`. See the
   // warning on `/api/signals` above: that form attaches the gate to every

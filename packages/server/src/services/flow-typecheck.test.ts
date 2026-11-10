@@ -80,7 +80,7 @@ describe("FT0206 compares the blob against the COMPILER's render (I-204)", () =>
   const steps = (paramsExpr?: string) => [
     { id: "read", kind: "datasource", ref: "fin.overdue", inputs: [{ name: "as_of", source: { from: "input", inputId: "as_of" } }] },
     {
-      id: "send", kind: "tool", ref: "foundry_email_send", dependsOn: ["read"], over: { stepId: "read", field: "" },
+      id: "send", kind: "tool", ref: "tether_email_send", dependsOn: ["read"], over: { stepId: "read", field: "" },
       inputs: [{ name: "to", source: { from: "step", stepId: "read", field: "email" } }],
       ...(paramsExpr !== undefined ? { paramsExpr } : {}),
     },

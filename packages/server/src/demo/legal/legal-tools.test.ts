@@ -154,7 +154,7 @@ describe("the Legal tool catalogue", () => {
 });
 
 /**
- * `foundry_email_send` is NOT in the catalogue above, and must not be — it is a
+ * `tether_email_send` is NOT in the catalogue above, and must not be — it is a
  * product capability, not demo data, so it is registered by
  * `registerPlatformTools` rather than by the Legal tool list.
  *
@@ -162,7 +162,7 @@ describe("the Legal tool catalogue", () => {
  * Legal workspace had no email tool: parity is asserted over the DEMO catalogues,
  * and the platform tool is in neither of them. The gap is real and was measured on
  * this deployment — the Finance workspace held its 8 demo tools for 74 minutes
- * carrying no `foundry_email_send`, because the only thing that registers it on
+ * carrying no `tether_email_send`, because the only thing that registers it on
  * the Finance/Legal path is `workspaceService.create`, which fires once and
  * deliberately SWALLOWS failure.
  *

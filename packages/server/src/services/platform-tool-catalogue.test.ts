@@ -147,7 +147,7 @@ describe("US5 — the real tool and the simulated ones do not read alike", () =>
 });
 
 describe("registration reaches the manifest", () => {
-  it("a NEW workspace lists foundry_email_send with its params and <auth>", async () => {
+  it("a NEW workspace lists tether_email_send with its params and <auth>", async () => {
     // No explicit registration call — `workspaceService.create` does it (T032).
     const workspaceId = await makeWorkspace("Platform Tools — fresh");
     const manifest = await manifestBuilderService.buildAndPersist(workspaceId);

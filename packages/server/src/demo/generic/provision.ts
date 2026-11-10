@@ -270,7 +270,7 @@ export async function provisionDomain(spec: DomainSpec, opts: ProvisionOptions =
     `[mock] ${mock.started ? `ready (v${mock.version})` : `not built (${mock.why}${mock.detail ? `: ${mock.detail}` : ""})`}`,
   );
 
-  // 7b. Platform tools. NOT demo data — `foundry_email_send` is a product
+  // 7b. Platform tools. NOT demo data — `tether_email_send` is a product
   // capability, so it must survive a reseed. `workspaceService.create` also
   // registers them, but only on the creating branch and it SWALLOWS failure, so
   // a workspace can exist without the tool and no amount of reseeding would put

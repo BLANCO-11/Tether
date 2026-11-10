@@ -203,7 +203,7 @@ export function demoToolCatalogue(): ToolSpec[] {
       url: `${b}/mail/send`,
       description:
         // ⚠ The `SIMULATED` prefix is the cheapest defence available against the
-        // drafter picking this instead of `foundry_email_send`, which delivers for
+        // drafter picking this instead of `tether_email_send`, which delivers for
         // real. The two read like they do the same job and one of them delivers
         // nothing; the difference has to be in the first four words, because a
         // caveat at the end of a paragraph is a caveat a model may not weight.

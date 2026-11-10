@@ -14,7 +14,7 @@
 //
 // ── Email delivery is its own section (email-send-tool T038) ────────────────
 //
-// `foundry_email_send` records each message in `email_sends`: to whom, and whether it was held, sent, refused or
+// `tether_email_send` records each message in `email_sends`: to whom, and whether it was held, sent, refused or
 // failed. The call above says the step asked; the section below says what happened to the email.
 "use client";
 

@@ -650,7 +650,7 @@ function inlineSqlInterface(step: FlowModel["steps"][number]): { params: Array<{
  *
  * ── The incident ────────────────────────────────────────────────────────────
  *
- * A drafted flow called `foundry_email_send` with a fifth key, `author`, which
+ * A drafted flow called `tether_email_send` with a fifth key, `author`, which
  * the tool does not declare. `POST /api/mail/send`'s body schema is `.strict()`,
  * so the call was refused `400 invalid_body` — after the flow had been saved,
  * compiled, deployed and run, at the last hop, having already read production
@@ -764,7 +764,7 @@ export function checkFlowParams(
           // a finding that says only "wrong" is the guess `checkFlowRefs`'s own
           // docblock refuses to make a model take. MEASURED: a real goal was
           // refused three times for passing `recipients` (which is `mail_send`'s
-          // parameter) to `foundry_email_send`, never told the four names that
+          // parameter) to `tether_email_send`, never told the four names that
           // would have worked, and the next draft dropped the email step
           // altogether.
           `It declares: ${declaredList}`,
@@ -1100,7 +1100,7 @@ export function checkHttpSteps(model: FlowModel): FlowFinding[] {
  * and remain the run-time refusal's business.
  *
  * Only steps whose ref names mail are inspected (`mail_send`,
- * `mail_send_template`, `foundry_email_send`, `test_email_send`), and channel
+ * `mail_send_template`, `tether_email_send`, `test_email_send`), and channel
  * tools (`chat_post_message` and friends) are excluded — they address
  * channels, not mailboxes, and a `to` there means something else.
  */
@@ -1285,7 +1285,7 @@ export function checkMailFlatAttachments(model: FlowModel): FlowFinding[] {
 /**
  * A `@json` inside an already-quoted span double-encodes — always fatal.
  *
- * Measured 2026-09-14: a prod `foundry_email_send` step carried
+ * Measured 2026-09-14: a prod `tether_email_send` step carried
  * `"body": "{{ … | jq('.text | @json') | first }}"`. `@json` emits the value
  * WITH its quotes, and the span sits inside quotes of its own, so Kestra
  * rendered `"body": ""# …""` and its Jackson parse died with

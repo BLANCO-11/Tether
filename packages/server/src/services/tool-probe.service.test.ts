@@ -582,10 +582,10 @@ describe("Foundry refusing to ask is a non-200, never a verdict", () => {
   /**
    * ⚠ Reachable in EVERY workspace since 2026-08-18, which it was not when this
    * rule was written: every workspace is created with its platform tools, so
-   * `foundry_email_send` is a row everywhere.
+   * `tether_email_send` is a row everywhere.
    */
   it("409 for a LIVE probe of a platform-managed tool", async () => {
-    get.mockResolvedValue({ ...POST_TOOL, name: "foundry_email_send" });
+    get.mockResolvedValue({ ...POST_TOOL, name: "tether_email_send" });
     const fetchMock = answers({ status: 200 });
     vi.stubGlobal("fetch", fetchMock);
 
@@ -600,7 +600,7 @@ describe("Foundry refusing to ask is a non-200, never a verdict", () => {
 
   it("but REACHABILITY of a platform-managed tool is allowed", async () => {
     // The refusal is about invoking it, not about looking at it.
-    get.mockResolvedValue({ ...POST_TOOL, name: "foundry_email_send" });
+    get.mockResolvedValue({ ...POST_TOOL, name: "tether_email_send" });
     vi.stubGlobal("fetch", answers({ status: 200 }));
     const probe = await toolProbeService.probe("ws", { toolId: "t-post" });
     expect(probe.verdict).toBe("reachable");
@@ -838,7 +838,7 @@ describe("what a probe remembers", () => {
    * a probe result would put a verdict on a row nothing was asked about.
    */
   it("marks nothing when the probe was refused before anything was dialled", async () => {
-    get.mockResolvedValue({ ...GET_TOOL, name: "foundry_email_send" });
+    get.mockResolvedValue({ ...GET_TOOL, name: "tether_email_send" });
     const fetchMock = answers({ status: 200 });
     vi.stubGlobal("fetch", fetchMock);
 

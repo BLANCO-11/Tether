@@ -1568,7 +1568,7 @@ export type EnginePlugins = {
 };
 
 /**
- * One message Foundry itself handled — `foundry_email_send` → `/api/mail/send`.
+ * One message Foundry itself handled — `tether_email_send` → `/api/mail/send`.
  *
  * ⚠ `outcome` has FOUR values and only `sent` is a delivery. `captured` means
  * the run was a draft (test) run, so Foundry deliberately did not contact the

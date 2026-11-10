@@ -10,7 +10,7 @@
  *
  * ⚠ It also closes the loop on the draft-capture control (migration 0058) with
  * real data rather than a mocked transport: the flow under test names
- * `foundry_email_send`, the REAL tool, and the assertion is that nothing was
+ * `tether_email_send`, the REAL tool, and the assertion is that nothing was
  * delivered.
  */
 import { workspaceRepo } from "../repositories/workspace.repo.js";

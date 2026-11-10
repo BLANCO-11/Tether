@@ -22,7 +22,7 @@ const draft = namespaceFor("acme", "hr", "draft");
 const mailStep = (paramsExpr: string): FlowModel =>
   ({
     id: "m",
-    steps: [{ id: "send", kind: "tool", ref: "foundry_email_send", paramsExpr }],
+    steps: [{ id: "send", kind: "tool", ref: "tether_email_send", paramsExpr }],
   }) as unknown as FlowModel;
 
 describe("compile refuses verbatim double-encoded @json", () => {

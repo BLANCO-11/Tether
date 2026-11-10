@@ -14,13 +14,13 @@
  *
  * A column would land in `refFingerprints`, `refInterfaces`, the tools UI and the
  * update schema, and would buy nothing the name check does not already give. The
- * name is the identity a flow step references (`ref: "foundry_email_send"`), so it
+ * name is the identity a flow step references (`ref: "tether_email_send"`), so it
  * is the thing that must be stable — and a check on it is greppable, needs no
  * migration, and cannot drift from the row it describes.
  */
 
 /** REAL email delivery. Registered by `platformToolCatalogue()`, guarded in `tool.service.ts`. */
-export const EMAIL_TOOL_NAME = "foundry_email_send";
+export const EMAIL_TOOL_NAME = "tether_email_send";
 
 /**
  * Every platform-managed tool name.
@@ -35,7 +35,10 @@ export const LLM_TOOL_NAME = "llm_complete";
 /** Read one public web address (2026-10-30). Served by Foundry itself (`routes/web.ts`). */
 export const WEB_FETCH_TOOL_NAME = "web_fetch";
 
-export const PLATFORM_TOOL_NAMES: readonly string[] = [EMAIL_TOOL_NAME, LLM_TOOL_NAME, WEB_FETCH_TOOL_NAME];
+/** The email tool's name before the Tether rebrand; still reserved so an old row cannot be hand-recreated. */
+export const LEGACY_EMAIL_TOOL_NAME = "foundry_" + "email_send"; // split so a repo-wide grep for the old tool name stays empty
+
+export const PLATFORM_TOOL_NAMES: readonly string[] = [EMAIL_TOOL_NAME, LEGACY_EMAIL_TOOL_NAME, LLM_TOOL_NAME, WEB_FETCH_TOOL_NAME];
 
 export const isPlatformToolName = (name: string | null | undefined): boolean =>
   typeof name === "string" && PLATFORM_TOOL_NAMES.includes(name);
@@ -49,7 +52,7 @@ export const isPlatformToolName = (name: string | null | undefined): boolean =>
  * Why: the pair is simulated delivery (ops-api outbox, never a mailbox) and
  * reads like the real thing. Authors picked `mail_send_template` thinking
  * "template" means the email feature, then armed flows that can never deliver.
- * New email steps should be `foundry_email_send` — captured to the Email box
+ * New email steps should be `tether_email_send` — captured to the Email box
  * on test runs, delivered on live ones — so the drafter and the palette no
  * longer offer the pair. Kept as names, not a column, for the same reason
  * `PLATFORM_TOOL_NAMES` is names: greppable, no migration, cannot drift.

@@ -209,7 +209,7 @@ export function coerce(answer: string, type: string | undefined): string {
 /** The old harness's fallback, kept only so a run can start; every use is recorded. */
 export function harnessDefault(i: { id: string; type?: string }): string {
   const t = String(i.type ?? "").toUpperCase(), id = i.id.toLowerCase();
-  // ⚠ An RFC 2606 reserved address, NEVER the deployment's allowed domain: `foundry_email_send`
+  // ⚠ An RFC 2606 reserved address, NEVER the deployment's allowed domain: `tether_email_send`
   // really delivers, and a harness must not be able to mail a real mailbox (D-267 accepts
   // reserved recipients on draft runs).
   if (/email|recipient|address|owner|^to$|_to$/.test(id)) return "requester@harness.example";

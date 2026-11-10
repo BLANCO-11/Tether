@@ -51,7 +51,7 @@ describe("checkMailAddressSteps", () => {
   });
 
   it("accepts real addresses on every mail ref", () => {
-    for (const ref of ["mail_send", "mail_send_template", "foundry_email_send", "test_email_send"]) {
+    for (const ref of ["mail_send", "mail_send_template", "tether_email_send", "test_email_send"]) {
       expect(checkMailAddressSteps(model([mailStep(ref, GOOD)]))).toEqual([]);
     }
   });
@@ -89,7 +89,7 @@ describe("checkMailFlatAttachments", () => {
   it("refuses attach_rows without attach_name and attach_format", () => {
     const findings = checkMailFlatAttachments(
       model([
-        mailStep("foundry_email_send", {
+        mailStep("tether_email_send", {
           to: ["me@example.com"],
           subject: "Budgets",
           body: "See attached",
@@ -106,7 +106,7 @@ describe("checkMailFlatAttachments", () => {
     expect(
       checkMailFlatAttachments(
         model([
-          mailStep("foundry_email_send", {
+          mailStep("tether_email_send", {
             to: ["me@example.com"],
             subject: "Budgets",
             body: "See attached",
@@ -121,7 +121,7 @@ describe("checkMailFlatAttachments", () => {
 
   it("refuses attach_name without attach_rows", () => {
     const findings = checkMailFlatAttachments(
-      model([mailStep("foundry_email_send", { to: ["a@example.com"], attach_name: "x", attach_format: "csv" })]),
+      model([mailStep("tether_email_send", { to: ["a@example.com"], attach_name: "x", attach_format: "csv" })]),
     );
     expect(findings[0]!.message).toMatch(/without attach_rows/);
   });
@@ -135,7 +135,7 @@ describe("checkMailFlatAttachments", () => {
           {
             id: "call_1",
             kind: "tool",
-            ref: "foundry_email_send",
+            ref: "tether_email_send",
             paramsExpr: "",
             inputs: [
               { name: "attach_format", source: { from: "literal", value: "xlsx" } },
@@ -158,7 +158,7 @@ describe("checkMailFlatAttachments", () => {
           {
             id: "call_1",
             kind: "tool",
-            ref: "foundry_email_send",
+            ref: "tether_email_send",
             paramsExpr: "",
             inputs: [
               { name: "attach_format", source: { from: "literal", value: "csv" } },
@@ -173,8 +173,8 @@ describe("checkMailFlatAttachments", () => {
   it("fires through assertValid", () => {
     expect(() =>
       flowValidator.assertValid(
-        model([mailStep("foundry_email_send", { to: ["a@example.com"], attach_rows: "[]" })]),
-        ["foundry_email_send"],
+        model([mailStep("tether_email_send", { to: ["a@example.com"], attach_rows: "[]" })]),
+        ["tether_email_send"],
       ),
     ).toThrow(FlowValidationError);
   });
@@ -182,7 +182,7 @@ describe("checkMailFlatAttachments", () => {
 
 describe("checkMailAddressSteps on typed bindings (phase 3 step 3)", () => {
   const typed = (to: unknown) =>
-    model([{ id: "mail", kind: "tool", ref: "foundry_email_send", paramsExpr: "", inputs: [{ name: "to", source: to }, { name: "subject", source: { from: "literal", value: "x" } }] }]);
+    model([{ id: "mail", kind: "tool", ref: "tether_email_send", paramsExpr: "", inputs: [{ name: "to", source: to }, { name: "subject", source: { from: "literal", value: "x" } }] }]);
   it("refuses a literal `to` that is not an address", () => {
     expect(checkMailAddressSteps(typed({ from: "literal", value: "Finance Team" })).length).toBeGreaterThan(0);
   });

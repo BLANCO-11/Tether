@@ -2,7 +2,7 @@
  * `POST /api/web/fetch` — the endpoint behind the built-in `web_fetch` tool (2026-10-30).
  *
  * Called by `step-execution.service.ts` when a workflow step runs `foundry.call("web_fetch", …)`, exactly as
- * `foundry_email_send` reaches `/api/mail/send`: the tool row carries a key derived from `PARENT_API_KEY`
+ * `tether_email_send` reaches `/api/mail/send`: the tool row carries a key derived from `PARENT_API_KEY`
  * (`X-Foundry-Web-Key`), and the run travels as `x-foundry-run`. The run decides the workspace — never the body — so
  * a call that names no known run is refused rather than guessed at.
  */

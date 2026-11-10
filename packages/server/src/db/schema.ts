@@ -2922,7 +2922,7 @@ export const flowChatTurns = pgTable(
  *
  * ── Why this table exists ────────────────────────────────────────────────────
  *
- * `foundry_email_send` is the first capability in Foundry that leaves the
+ * `tether_email_send` is the first capability in Foundry that leaves the
  * building, and it is invisible on every surface that already exists.
  * `ToolActivity.tsx` answers "did this run actually do anything?" by reading
  * `api_call_log` **through ops-api** — and ops-api is the simulation. A Foundry

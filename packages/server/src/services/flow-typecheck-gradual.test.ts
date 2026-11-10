@@ -16,8 +16,8 @@ import type { FlowModel } from "./flow-compiler.service.js";
  */
 const TEMPLATE = "{{ outputs.read.value | jq('[.[] | {to: .vendor_email}]') | first }}";
 const read = { id: "read", kind: "datasource", ref: "fin.overdue", inputs: [] };
-const unsafe = (id = "send") => ({ id, kind: "tool", ref: "foundry_email_send", dependsOn: ["read"], inputs: [], paramsExpr: TEMPLATE });
-const typed = (id = "send") => ({ id, kind: "tool", ref: "foundry_email_send", dependsOn: ["read"], inputs: [] });
+const unsafe = (id = "send") => ({ id, kind: "tool", ref: "tether_email_send", dependsOn: ["read"], inputs: [], paramsExpr: TEMPLATE });
+const typed = (id = "send") => ({ id, kind: "tool", ref: "tether_email_send", dependsOn: ["read"], inputs: [] });
 const model = (...steps: unknown[]): FlowModel =>
   normaliseModel({ id: "f", inputs: [], steps } as never) as unknown as FlowModel;
 

@@ -7,13 +7,13 @@ import type { BuilderCatalogue } from "./goal-spec.js";
 
 const CAT: BuilderCatalogue = { items: [
   { ref: "ds.items", kind: "reader", about: "items", fields: [{ name: "amount", ty: "number" }] },
-  { ref: "foundry_email_send", kind: "tool", about: "email", params: [{ name: "to", about: "" }] },
+  { ref: "tether_email_send", kind: "tool", about: "email", params: [{ name: "to", about: "" }] },
   { ref: "chat_post_message", kind: "tool", about: "post", params: [{ name: "text", about: "" }] },
 ] };
 const GOAL = "for each overdue item: if the amount is over 100 email a@b.example, otherwise post it";
 const CS = clauses(GOAL);
 const email = (on: Plan["actions"][number]["on"], extra: Partial<Plan["actions"][number]> = {}): Plan["actions"][number] =>
-  ({ ref: "foundry_email_send", clauses: ["C2"], on, per_item: true, approve_first: null, heading: "Overdue", message: "", recipient: { from: "goal", words: "a@b.example" }, ...extra });
+  ({ ref: "tether_email_send", clauses: ["C2"], on, per_item: true, approve_first: null, heading: "Overdue", message: "", recipient: { from: "goal", words: "a@b.example" }, ...extra });
 const post = (on: Plan["actions"][number]["on"]): Plan["actions"][number] =>
   ({ ref: "chat_post_message", clauses: ["C3"], on, per_item: true, approve_first: null, heading: "All clear", message: "", recipient: { from: "goal", words: "" } });
 const base = (p: Partial<Plan>): Plan => ({ sources: [{ ref: "ds.items", clauses: ["C1"], quote: "for each overdue item", also: [] }], each: { over: 0, clauses: ["C1"] }, rows: [], schedule: null, conditions: [], actions: [], values: [], missing: "", joining: [], ...p });

@@ -38,7 +38,7 @@ async function main() {
   console.log("[migrate] done");
   await pool.end();
   // ⚠ Schema only. Nothing is seeded here (prod release, 2026-10-21): a workspace gets its platform tools
-  // (`foundry_email_send`, `llm_complete`) when it is created, and `pnpm --filter @foundry/server platform:tools`
+  // (`tether_email_send`, `llm_complete`) when it is created, and `pnpm --filter @foundry/server platform:tools`
   // refreshes them in every workspace on purpose (e.g. after rotating PARENT_API_KEY or OPS_API_KEY).
 }
 

@@ -196,7 +196,7 @@ describe("the `usedBy` column renders the server's real count — asserted by RE
 
 describe("a platform-managed tool offers no action the API would refuse — email-send-tool T048", () => {
   /**
-   * `tool.service.ts` refuses `update`/`remove` on `foundry_email_send` with a 409
+   * `tool.service.ts` refuses `update`/`remove` on `tether_email_send` with a 409
    * (`assertNotPlatformManaged`). The server is the control; these assertions are
    * that the UI does not OFFER the refused action — a button that always errors
    * reads as a broken page rather than as a deliberate rule.
@@ -207,7 +207,7 @@ describe("a platform-managed tool offers no action the API would refuse — emai
   const platformTool: Tool = {
     ...existing,
     id: "t-mail",
-    name: "foundry_email_send",
+    name: "tether_email_send",
     description: "REAL DELIVERY to a live mailbox — this is not the demo mail service.",
     endpoint: "http://localhost:4000/api/mail/send",
     secretEnvName: "FOUNDRY_MAIL_KEY",
@@ -218,7 +218,7 @@ describe("a platform-managed tool offers no action the API would refuse — emai
   it("marks the row Platform and shows neither Edit nor Remove", async () => {
     listTools.mockResolvedValueOnce([platformTool]);
     render(<ToolsPage />);
-    await screen.findByText("foundry_email_send");
+    await screen.findByText("tether_email_send");
 
     expect(screen.getByText("Platform")).toBeTruthy();
     // ⚠ ABSENT, not disabled. A disabled control invites a hover-and-wonder.
@@ -245,7 +245,7 @@ describe("a platform-managed tool offers no action the API would refuse — emai
     // real sender. One row loses its actions; the rest keep theirs.
     listTools.mockResolvedValueOnce([existing, platformTool]);
     render(<ToolsPage />);
-    await screen.findByText("foundry_email_send");
+    await screen.findByText("tether_email_send");
 
     expect(screen.getByText("Edit")).toBeTruthy();
     expect(screen.getByText("Remove")).toBeTruthy();
@@ -863,7 +863,7 @@ describe("the Test panel", () => {
   /**
    * ⚠ **A BUG IN THE FIRST VERSION OF THIS PANEL, found by enumerating what was
    * left rather than by any test.** `isLiveProbeOffered` disabled the button
-   * outright, so `foundry_email_send` — a `POST`, therefore defaulting to
+   * outright, so `tether_email_send` — a `POST`, therefore defaulting to
    * `reachability` — could not be probed at all, while the server explicitly
    * allows reachability for a platform-managed tool. The client refused what the
    * server permits, and the caption said "cannot be called from here", which was
@@ -874,7 +874,7 @@ describe("the Test panel", () => {
       probeResult({ mode: "reachability", verdict: "reachable", invoked: false }),
     );
     await openCreateForm();
-    set("Name", "foundry_email_send");
+    set("Name", "tether_email_send");
     set("HTTP method", "POST");
     set("API endpoint", "https://api.example.com/mail/send");
 
@@ -1181,7 +1181,7 @@ describe("the live escalation of a mutating tool", () => {
    */
   it("offers no real send for a platform-managed tool", async () => {
     await openCreateForm();
-    set("Name", "foundry_email_send");
+    set("Name", "tether_email_send");
     set("HTTP method", "POST");
     set("API endpoint", "https://api.example.com/mail");
 
@@ -1308,11 +1308,11 @@ describe("the tested marker in a row's expanded detail", () => {
   /** ⚠ Absent, matching the row's Edit and Remove controls. */
   it("offers no row-level Test for a platform-managed tool", async () => {
     listTools.mockResolvedValueOnce([
-      { ...existing, id: "t9", name: "foundry_email_send", lastProbe: null },
+      { ...existing, id: "t9", name: "tether_email_send", lastProbe: null },
     ]);
     render(<ToolsPage />);
-    await screen.findByText("foundry_email_send");
-    expandRow("foundry_email_send");
+    await screen.findByText("tether_email_send");
+    expandRow("tether_email_send");
 
     expect(screen.queryByRole("button", { name: "Test" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Check reachability" })).toBeNull();

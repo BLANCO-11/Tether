@@ -29,7 +29,7 @@ import type { FlowModel, FlowStep } from "./flow-compiler.service.js";
  */
 
 const IFACES = {
-  foundry_email_send: {
+  tether_email_send: {
     params: [
       { name: "subject", required: true },
       { name: "body", required: true },
@@ -94,7 +94,7 @@ const REAL_EXPRESSIONS: Array<{ ref: string; expr: string; readable: boolean }> 
     readable: true,
   },
   {
-    ref: "foundry_email_send",
+    ref: "tether_email_send",
     expr: `[{"body":{{ json(outputs.fetch.body).results[0].data | jq('tostring | @json') | first }},"subject":"Attendance report for {{ inputs.period }}","to":[]}]`,
     readable: true,
   },
@@ -110,7 +110,7 @@ const REAL_EXPRESSIONS: Array<{ ref: string; expr: string; readable: boolean }> 
   },
   // Shape C — a literal object INSIDE a template span, then piped through jq.
   {
-    ref: "foundry_email_send",
+    ref: "tether_email_send",
     expr: `{{ [{"body": (json(outputs.fetch.body).results[0].data | jq('tostring') | first), "subject": ("Report for " ~ inputs.period), "cc": [], "to": []}] | jq('.') | first }}`,
     readable: true,
   },
@@ -187,7 +187,7 @@ describe("checkFlowParams", () => {
   /** The incident, exactly as it was drafted. */
   it("refuses the undeclared key that caused the incident", () => {
     const f = findings(
-      "foundry_email_send",
+      "tether_email_send",
       `{{ [{"body": (x | jq('tostring') | first), "subject": ("Report"), "cc": [], "to": [], "author": "foundry-automation"}] | jq('.') | first }}`,
     );
     expect(f).toHaveLength(1);
@@ -203,12 +203,12 @@ describe("checkFlowParams", () => {
    * pushes the string, not the finding. So a message that says only "wrong" is
    * a refusal a model cannot act on, and this was measured the hard way: a real
    * Legal goal was refused three times for passing `recipients` (which is
-   * `mail_send`'s parameter, not `foundry_email_send`'s), never told the four
+   * `mail_send`'s parameter, not `tether_email_send`'s), never told the four
    * names that would have worked, and the next draft dropped the email step
    * entirely. Putting the list in `facts` alone is not enough.
    */
   it("names the declared parameters IN THE MESSAGE, not just in facts", () => {
-    const f = findings("foundry_email_send", `[{"subject":"s","body":"b","recipients":["a@b.example"]}]`);
+    const f = findings("tether_email_send", `[{"subject":"s","body":"b","recipients":["a@b.example"]}]`);
     expect(f[0]!.message).toContain("recipients");
     expect(f[0]!.message).toContain("It declares:");
     for (const p of ["subject", "body", "to", "cc"]) expect(f[0]!.message).toContain(p);
@@ -218,30 +218,30 @@ describe("checkFlowParams", () => {
   });
 
   it("names the declared parameters in a missing-required message too", () => {
-    const f = findings("foundry_email_send", `[{"subject":"s"}]`);
+    const f = findings("tether_email_send", `[{"subject":"s"}]`);
     expect(f[0]!.message).toContain("It declares:");
     expect(f[0]!.message).toContain("body (required)");
   });
 
   it("names every undeclared key at once, not just the first", () => {
-    const f = findings("foundry_email_send", `[{"subject":"s","body":"b","author":"a","reply_to":"r"}]`);
+    const f = findings("tether_email_send", `[{"subject":"s","body":"b","author":"a","reply_to":"r"}]`);
     expect(f[0]!.facts!.unknown).toEqual(["author", "reply_to"]);
   });
 
   it("refuses a call missing a required parameter", () => {
-    const f = findings("foundry_email_send", `[{"subject":"s","to":[]}]`);
+    const f = findings("tether_email_send", `[{"subject":"s","to":[]}]`);
     expect(f).toHaveLength(1);
     expect(f[0]!.rule).toBe("missing_required_param");
     expect(f[0]!.facts!.missing).toEqual(["body"]);
   });
 
   it("reports both problems separately when a call has both", () => {
-    const f = findings("foundry_email_send", `[{"subject":"s","author":"a"}]`);
+    const f = findings("tether_email_send", `[{"subject":"s","author":"a"}]`);
     expect(f.map((x) => x.rule).sort()).toEqual(["missing_required_param", "unknown_param"]);
   });
 
   it("accepts a call using only declared parameters", () => {
-    expect(findings("foundry_email_send", `[{"subject":"s","body":"b","to":[],"cc":[]}]`)).toEqual([]);
+    expect(findings("tether_email_send", `[{"subject":"s","body":"b","to":[],"cc":[]}]`)).toEqual([]);
   });
 
   /**
@@ -344,15 +344,15 @@ describe("the real corpus", () => {
 });
 
 describe("assertValid", () => {
-  const ok = model([step("foundry_email_send", `[{"subject":"s","body":"b"}]`)]);
-  const bad = model([step("foundry_email_send", `[{"subject":"s","body":"b","author":"a"}]`)]);
+  const ok = model([step("tether_email_send", `[{"subject":"s","body":"b"}]`)]);
+  const bad = model([step("tether_email_send", `[{"subject":"s","body":"b","author":"a"}]`)]);
 
   it("throws on an undeclared parameter", () => {
-    expect(() => flowValidator.assertValid(bad, ["foundry_email_send"], IFACES)).toThrow(/author/);
+    expect(() => flowValidator.assertValid(bad, ["tether_email_send"], IFACES)).toThrow(/author/);
   });
 
   it("does not throw on a correct call", () => {
-    expect(() => flowValidator.assertValid(ok, ["foundry_email_send"], IFACES)).not.toThrow();
+    expect(() => flowValidator.assertValid(ok, ["tether_email_send"], IFACES)).not.toThrow();
   });
 
   /**
@@ -361,7 +361,7 @@ describe("assertValid", () => {
    * starts refusing every flow.
    */
   it("skips the param check when no interfaces are supplied", () => {
-    expect(() => flowValidator.assertValid(bad, ["foundry_email_send"])).not.toThrow();
+    expect(() => flowValidator.assertValid(bad, ["tether_email_send"])).not.toThrow();
   });
 });
 

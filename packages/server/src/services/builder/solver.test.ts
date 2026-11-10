@@ -245,7 +245,7 @@ describe("the solver (phase 5 task 1, D-322)", () => {
     expect(step(loose.flow, "call_1").over).toBeDefined();
     const looseNone = run("tell everyone in store people", { ...NOTIFY, values: [{ role: "recipient", from: "goal", quote: "everyone", fills: "none" }] }, new Map(), noEmail);
     expect(looseNone.unmet).toEqual([expect.stringMatching(/says who receives `call_1.to`/)]);
-    // The foundry_email_send shape: `to` falls back to the requester AND an optional `cc` exists. A recipient the spec maps to `to`
+    // The tether_email_send shape: `to` falls back to the requester AND an optional `cc` exists. A recipient the spec maps to `to`
     // is looked for on `to` — not on `cc` because `cc` does not fall back.
     const withCc: CatalogueSnapshot = { ...cat, refs: { ...cat.refs, notify_me: { ...cat.refs.notify_me!, params: [...cat.refs.notify_me!.params, { name: "cc", ty: T_LIST_ADDR, required: false, liftsScalar: true }] } } };
     const toNotCc = run("tell everyone in store people", { ...NOTIFY, values: [{ role: "recipient", from: "goal", quote: "everyone", fills: "notify_me.to" }] }, new Map(), withCc);

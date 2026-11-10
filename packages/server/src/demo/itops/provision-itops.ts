@@ -64,7 +64,7 @@ export interface ItopsProvisionReport {
   workspaceCreated: boolean;
   seed: ItopsSeedReport;
   tools: { created: number; updated: number; total: number };
-  /** Platform tools (`foundry_email_send`) — reported separately so a reseed that
+  /** Platform tools (`tether_email_send`) — reported separately so a reseed that
    *  restores a missing product capability says so, rather than doing it silently. */
   platformTools: { created: string[]; updated: string[] };
   datasource: {
@@ -241,7 +241,7 @@ export async function provisionItops(): Promise<ItopsProvisionReport> {
     `[mock] ${mock.started ? `ready (v${mock.version})` : `not built (${mock.why}${mock.detail ? `: ${mock.detail}` : ""})`}`,
   );
 
-  // 7b. Platform tools. NOT demo data — `foundry_email_send` is a product
+  // 7b. Platform tools. NOT demo data — `tether_email_send` is a product
   // capability, so it must survive a reseed rather than being left behind by one.
   //
   // ⚠ This is NOT redundant with `workspaceService.create`, which also registers
@@ -250,7 +250,7 @@ export async function provisionItops(): Promise<ItopsProvisionReport> {
   // creation. Both properties mean a workspace can exist without the tool and no
   // amount of re-running `itops:seed` would put it back — measured on this
   // deployment, where the Finance workspace carried its 8 demo tools for 74
-  // minutes with no `foundry_email_send`.
+  // minutes with no `tether_email_send`.
   //
   // `rebuildManifest: false` because step 8 renders the manifest once for
   // everything; bumping the version here too would make the version a count of

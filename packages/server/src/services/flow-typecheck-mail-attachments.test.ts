@@ -20,7 +20,7 @@ type Fixture = { workspace: string; cat: CatalogueSnapshot };
 const CATALOGUES: Fixture[] = JSON.parse(readFileSync(new URL("./__fixtures__/engine-catalogues.json", import.meta.url), "utf8"));
 const support = CATALOGUES.find((f) => f.workspace === "Customer Support")!;
 
-const email = platformToolCatalogue().find((t) => t.name === "foundry_email_send")!;
+const email = platformToolCatalogue().find((t) => t.name === "tether_email_send")!;
 const iface = {
   kind: "tool",
   signature: "",
@@ -30,10 +30,10 @@ const iface = {
 } as unknown as RefInterface;
 const cat: CatalogueSnapshot = {
   ...support.cat,
-  refs: { ...support.cat.refs, foundry_email_send: toolSig("foundry_email_send", iface) },
+  refs: { ...support.cat.refs, tether_email_send: toolSig("tether_email_send", iface) },
   renderInputs: compilerRenderInputs,
 };
-const port = (name: string) => cat.refs.foundry_email_send!.params.find((p) => p.name === name)!;
+const port = (name: string) => cat.refs.tether_email_send!.params.find((p) => p.name === name)!;
 
 function build(ops: EngineOp[]): EFlow {
   return ops.reduce<EFlow>((g, op) => {
@@ -45,7 +45,7 @@ function build(ops: EngineOp[]): EFlow {
 const READ: EngineOp[] = [
   { op: "add_reader", id: "read", ref: "support_demo.tickets_opened_since" },
   { op: "bind", stepId: "read", port: "since", source: { from: "literal", value: "2026-06-30", provenance: "goal" } },
-  { op: "add_call", id: "mail", ref: "foundry_email_send" },
+  { op: "add_call", id: "mail", ref: "tether_email_send" },
 ];
 
 describe("the email tool's attachment ports", () => {

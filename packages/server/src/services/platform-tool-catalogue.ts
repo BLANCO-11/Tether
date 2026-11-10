@@ -9,7 +9,7 @@
  * `packages/ops-api` — a simulation — and a workspace without them is simply a
  * workspace with no demo data in it.
  *
- * `foundry_email_send` is a different kind of thing. It is a **capability of the
+ * `tether_email_send` is a different kind of thing. It is a **capability of the
  * product**: real delivery to real mailboxes, available to every workspace,
  * whether or not anyone ever ran a seed. Registering it from the demo catalogue
  * would mean the platform's only real-world side effect arrives as a side effect

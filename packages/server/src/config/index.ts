@@ -684,7 +684,7 @@ export const config = {
    * refusal is always the one a person reads:
    *
    *   `llm_complete`'s `input`      32,000 chars   (ops-api, 422)
-   *   `foundry_email_send`'s `body` 262,144 B      (`mail.maxBodyBytes`, below)
+   *   `tether_email_send`'s `body` 262,144 B      (`mail.maxBodyBytes`, below)
    *   a step callback's whole body  5,242,880 B    (here)
    *   every other route             2 MB           (`app.ts`, unchanged)
    *
@@ -789,7 +789,7 @@ export const config = {
       maxBodyBytes: Number(process.env.MAIL_MAX_BODY_BYTES ?? 262_144),
       maxRecipients: Number(process.env.MAIL_MAX_RECIPIENTS ?? 10),
       /**
-       * Attachments on `foundry_email_send` (`services/mail-attachments.ts`).
+       * Attachments on `tether_email_send` (`services/mail-attachments.ts`).
        *
        * ⚠ The total is bounded by the ROUTE's own `express.json({ limit: "2mb" })`
        * (`app.ts`), which carries the body and the attachments in one request —

@@ -46,7 +46,7 @@ describe("the flow page for a Pi workflow", () => {
     render(
       <PiFlowOverview
         flow={flow}
-        workflow={{ steps: [{ id: "send", description: "Email each manager", uses: ["tool:foundry_email_send"] }] }}
+        workflow={{ steps: [{ id: "send", description: "Email each manager", uses: ["tool:tether_email_send"] }] }}
         runs={[]}
         onRename={async () => {}}
       />,
@@ -54,7 +54,7 @@ describe("the flow page for a Pi workflow", () => {
     expect(screen.getByText("Email each manager")).toBeTruthy();
     expect(screen.getByText("send")).toBeTruthy();
     expect(screen.getByText("Action")).toBeTruthy();
-    expect(screen.getByText("uses foundry_email_send")).toBeTruthy();
+    expect(screen.getByText("uses tether_email_send")).toBeTruthy();
   });
 
   it("a paused run says it is waiting for approval; the rate counts settled runs only", () => {

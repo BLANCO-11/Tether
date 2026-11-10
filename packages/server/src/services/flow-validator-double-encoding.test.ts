@@ -11,7 +11,7 @@ import type { FlowModel } from "./flow-compiler.service.js";
 /**
  * `@json` inside an already-quoted span double-encodes — always fatal.
  *
- * Measured 2026-09-14: a prod `foundry_email_send` step carried
+ * Measured 2026-09-14: a prod `tether_email_send` step carried
  * `"body": "{{ … | jq('.text | @json') | first }}"`. Kestra rendered
  * `"body": ""# …""` and its Jackson parse died before Foundry was reached.
  * Valid forms are quoted-span-with-raw-text and unquoted-span-with-`@json`.
@@ -20,7 +20,7 @@ import type { FlowModel } from "./flow-compiler.service.js";
 const toolStep = (paramsExpr: string, over: Record<string, unknown> = {}) => ({
   id: "send",
   kind: "tool",
-  ref: "foundry_email_send",
+  ref: "tether_email_send",
   paramsExpr,
   ...over,
 });
@@ -71,7 +71,7 @@ describe("checkDoubleEncodedJson", () => {
     expect(() =>
       flowValidator.assertValid(
         model([toolStep('[{ "body": "{{ x | @json }}" }]')]),
-        ["foundry_email_send"],
+        ["tether_email_send"],
       ),
     ).toThrow(FlowValidationError);
   });
@@ -82,7 +82,7 @@ describe("typed rows (normalised form)", () => {
   const typedStep = {
     id: "send",
     kind: "tool",
-    ref: "foundry_email_send",
+    ref: "tether_email_send",
     inputs: [
       { name: "subject", source: { from: "literal", value: "S" } },
       {
@@ -98,7 +98,7 @@ describe("typed rows (normalised form)", () => {
   });
 
   it("fires through assertValid on the normalised shape", () => {
-    expect(() => flowValidator.assertValid(model([typedStep]), ["foundry_email_send"])).toThrow(
+    expect(() => flowValidator.assertValid(model([typedStep]), ["tether_email_send"])).toThrow(
       FlowValidationError,
     );
   });
@@ -115,7 +115,7 @@ describe("typed rows (normalised form)", () => {
  */
 describe("the draft loop's directed finding — send_report/body", () => {
   const sendReport = (paramsExpr: string) =>
-    model([toolStep(paramsExpr, { id: "send_report", ref: "foundry_email_send" })]);
+    model([toolStep(paramsExpr, { id: "send_report", ref: "tether_email_send" })]);
 
   it("a quoted @json body on send_report is refused with the existing sentence", () => {
     const findings = checkDoubleEncodedJson(
@@ -123,7 +123,7 @@ describe("the draft loop's directed finding — send_report/body", () => {
     );
     expect(findings).toHaveLength(1);
     expect(findings[0]).toMatchObject({ rule: "json_double_encoded", stepId: "send_report", blocking: true });
-    expect(findings[0]!.facts).toEqual({ stepId: "send_report", ref: "foundry_email_send" });
+    expect(findings[0]!.facts).toEqual({ stepId: "send_report", ref: "tether_email_send" });
     // ⚠ No new wording: the loop reuses this message verbatim.
     expect(findings[0]!.message).toContain('step "send_report"');
     expect(findings[0]!.message).toMatch(/one quoting, not both/);
@@ -173,7 +173,7 @@ describe("double-quoted jq programs and jq string literals", () => {
         {
           id: "send",
           kind: "tool",
-          ref: "foundry_email_send",
+          ref: "tether_email_send",
           inputs: [
             { name: "subject", source: { from: "literal", value: "S" } },
             {
@@ -210,7 +210,7 @@ describe("double-quoted jq programs and jq string literals", () => {
      {
        id: "send_report",
        kind: "tool",
-       ref: "foundry_email_send",
+       ref: "tether_email_send",
        paramsExpr: `[{"to":["himanshu.saini@microland.com"],"subject":"Attendance report for {{ inputs.period }}","body":{{ json(outputs.generate_attendance_report.body).results[0].data | jq('tostring | @json') | first }} }]`,
        dependsOn: ["generate_attendance_report"],
      },

@@ -321,7 +321,7 @@ flowExecutionsRouter.get(
  * ── Why this exists as its own read ──────────────────────────────────────────
  *
  * `ToolActivity.tsx` answers "did this run actually do anything?" by reading
- * `api_call_log` **through ops-api** — the simulation. `foundry_email_send` is a
+ * `api_call_log` **through ops-api** — the simulation. `tether_email_send` is a
  * Foundry route and writes no `api_call_log` row, so without this endpoint a real
  * message to a real mailbox appears **nowhere** on the run page.
  *

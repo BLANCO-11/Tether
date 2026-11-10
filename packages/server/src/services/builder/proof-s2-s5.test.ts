@@ -17,12 +17,12 @@ describe("PROOF S2: single-step fix patches, sink survives", () => {
   const head = {
     steps: [
       { id: "read_1", kind: "query", ref: "Attendance_DB.query.banded_absences" },
-      { id: "call_1", kind: "tool", ref: "foundry_email_send" },
+      { id: "call_1", kind: "tool", ref: "tether_email_send" },
     ],
   } as never;
   const prev = {
     sources: [{ ref: "Attendance_DB.query.banded_absences", quote: "absence days" }],
-    sinks: [{ ref: "foundry_email_send", quote: "email this as a excel report to me" }],
+    sinks: [{ ref: "tether_email_send", quote: "email this as a excel report to me" }],
     values: [],
     conditions: [],
     schedule: null,
@@ -72,12 +72,12 @@ describe("PROOF S2: single-step fix patches, sink survives", () => {
     const after = {
       steps: [
         { id: "read_1", kind: "query", ref: "Attendance_DB.query.banded_absences", fixed: true },
-        { id: "call_1", kind: "tool", ref: "foundry_email_send" },
+        { id: "call_1", kind: "tool", ref: "tether_email_send" },
       ],
     } as never;
     const kept = {
       sources: [{ ref: "Attendance_DB.query.banded_absences", quote: "absence days" }],
-      sinks: [{ ref: "foundry_email_send", quote: "email this as a excel report to me" }],
+      sinks: [{ ref: "tether_email_send", quote: "email this as a excel report to me" }],
       values: [],
       conditions: [],
       schedule: null,

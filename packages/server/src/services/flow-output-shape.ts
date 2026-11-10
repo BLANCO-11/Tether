@@ -735,7 +735,7 @@ const PLUCKED_THEN_JQ_RE =
  *
  * ── The failure, measured on a real run ──────────────────────────────────────
  *
- * Execution `e097b55b` (2026-08-18), the first real use of `foundry_email_send`.
+ * Execution `e097b55b` (2026-08-18), the first real use of `tether_email_send`.
  * The drafter wrote, for the tool's `body` parameter:
  *
  *   {{ json(outputs.report_text.body).results[0].data.text | jq('tostring | @json') | first }}

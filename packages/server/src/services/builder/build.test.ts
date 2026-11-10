@@ -246,7 +246,7 @@ describe("answer — me on a scheduled address port", () => {
     ...SYNTHETIC,
     refs: {
       ...SYNTHETIC.refs,
-      foundry_email_send: {
+      tether_email_send: {
         kind: "tool",
         params: [
           { name: "to", ty: { t: "List", of: { t: "Address" } }, required: false, liftsScalar: true, fallsBackToRequester: true },
@@ -265,7 +265,7 @@ describe("answer — me on a scheduled address port", () => {
 
   it("binds the requester address when the person answers me", () => {
     let f = run([
-      { op: "add_call", id: "call_1", ref: "foundry_email_send" },
+      { op: "add_call", id: "call_1", ref: "tether_email_send" },
       { op: "set_schedule", cron: "0 9 * * 1" },
     ]);
     // schedule makes scheduled_recipient on fallsBackToRequester to
@@ -282,7 +282,7 @@ describe("answer — me on a scheduled address port", () => {
 
   it("CONTROL: me without a requester address does not pretend to fill", () => {
     const f0 = run([
-      { op: "add_call", id: "call_1", ref: "foundry_email_send" },
+      { op: "add_call", id: "call_1", ref: "tether_email_send" },
       { op: "set_schedule", cron: "0 9 * * 1" },
     ]);
     const q = questionsFor(f0, f0.holes.map((h) => h.id), { questions: [] } as never, 1, mailCat).find((x) => x.port === "to")!;

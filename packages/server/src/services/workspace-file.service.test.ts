@@ -8,7 +8,7 @@ describe("filesUsedBy", () => {
       workflow: {
         steps: [
           { id: "a", uses: ["read:x", "file:Rates.xlsx"] },
-          { id: "each", foreach: "a.rows", steps: [{ id: "b", uses: ["file:Policy.pdf", "tool:foundry_email_send"] }] },
+          { id: "each", foreach: "a.rows", steps: [{ id: "b", uses: ["file:Policy.pdf", "tool:tether_email_send"] }] },
           { id: "c", branch: [{ steps: [{ id: "d", uses: ["file:Rates.xlsx"] }] }] },
         ],
       },

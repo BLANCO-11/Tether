@@ -87,7 +87,7 @@ async function main() {
     ok(gated.length > 0 && gated.every((s) => s.kind === "tool" && s.ref === "test_email_send"), `…gating its test email (${gated.map((s) => `${s.id}:${s.kind === "tool" ? s.ref : s.kind}`).join(", ")})`);
     const mails = f.steps.filter((s) => s.kind === "tool" && s.ref === "test_email_send");
     ok(mails.length === 3 && links.every((b) => onPath(b).some((s) => s.kind === "tool" && s.ref === "test_email_send")), `a test email on every path (${mails.length})`);
-    ok(!f.steps.some((s) => s.kind === "tool" && s.ref === "foundry_email_send"), "nothing sends real mail");
+    ok(!f.steps.some((s) => s.kind === "tool" && s.ref === "tether_email_send"), "nothing sends real mail");
     const input = f.inputs.find((i) => !i.computed);
     const at = (day: string) => (input ? { [input.id]: day } : {});
 
