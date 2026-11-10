@@ -28,6 +28,16 @@
   Do not lighten one of these by eye; re-run the table in
   docs/programmes/ui-upgrade/evidence.md §3 instead. */
 @tailwind base;
+
+/* No browser focus outline on text fields (Chrome draws it WHITE in dark mode, a hard box inside our soft
+   composers). Fields show focus their own way — the shared control's soft accent ring, or a composer's
+   focus-within glow. :where() keeps this at zero specificity so any component's own focus style still wins. */
+@layer base {
+  :where(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]), textarea, select, [contenteditable]):focus,
+  :where(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]), textarea, select, [contenteditable]):focus-visible {
+    outline: none;
+  }
+}
 @tailwind components;
 @tailwind utilities;
 
