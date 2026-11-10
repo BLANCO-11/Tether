@@ -33,36 +33,82 @@ const pane = (over: Partial<Parameters<typeof PiSidePane>[0]> = {}) => (
   />
 );
 
+const wf = { name: "w", steps: [{ id: "a", entry: "steps/a/main.py" }] } as never;
+
 describe("the explorer", () => {
-  it("with no workflow: tree + Drive overview, no dropdown menu, no auto-open", () => {
+  it("lists rows with name and size, grouped by who made them, with no dropdown and no auto-open", () => {
     render(pane());
     expect(screen.getByRole("navigation", { name: "Files" })).toBeTruthy();
     expect(screen.getByText("Made by Forge")).toBeTruthy();
-    expect(screen.getByText("From you")).toBeTruthy();
-    expect(screen.getByRole("list", { name: "All files in this chat" })).toBeTruthy();
+    expect(screen.getByText("Uploaded by you")).toBeTruthy();
+    const row = screen.getByRole("button", { name: /mock\.html/ });
+    expect(row.textContent).toContain("17 KB");
+    expect(row.textContent).toContain("Forge");
     expect(screen.queryByRole("menu")).toBeNull();
     expect(screen.queryByTestId("html-preview")).toBeNull();
     expect(screen.getByText(/of 300 MB used by this chat/)).toBeTruthy();
   });
 
-  it("picking a file from the overview opens it", async () => {
+  it("has a single header: no separate 'All files' bar or tree toggle", () => {
+    const { container } = render(pane());
+    expect(container.querySelectorAll(".pis-bar")).toHaveLength(1);
+    expect(screen.queryByText("All files")).toBeNull();
+    expect(screen.queryByRole("button", { name: /file list/ })).toBeNull();
+  });
+
+  it("leaves out group labels when there is only one group", () => {
+    render(pane({ chatFiles: [chatFiles[1]!] }));
+    expect(screen.queryByText("Made by Forge")).toBeNull();
+  });
+
+  it("says so, in one line, when there are no files", () => {
+    render(pane({ chatFiles: [] }));
+    expect(screen.getByText(/No files yet/)).toBeTruthy();
+  });
+
+  it("toggles to a grid of cards and back", () => {
+    render(pane());
+    expect(screen.queryByRole("list")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Grid view" }));
+    expect(screen.getAllByRole("list").length).toBeGreaterThan(0);
+    fireEvent.click(screen.getByRole("button", { name: "List view" }));
+    expect(screen.queryByRole("list")).toBeNull();
+  });
+
+  it("clicking a row opens it", () => {
     vi.stubGlobal("fetch", vi.fn(async () => new Response("<p>hi</p>")));
     const onView = vi.fn();
     render(pane({ onView }));
-    const grid = screen.getByRole("list", { name: "All files in this chat" });
-    fireEvent.click(within(grid).getByRole("button", { name: /mock\.html/ }));
+    fireEvent.click(screen.getByRole("button", { name: /mock\.html/ }));
     expect(onView).toHaveBeenCalledWith({ kind: "files", path: "chat:mock.html" });
   });
 
-  it("with a path: preview opens and All files clears the path", async () => {
+  it("clicking a grid card opens it too", () => {
+    const onView = vi.fn();
+    render(pane({ onView }));
+    fireEvent.click(screen.getByRole("button", { name: "Grid view" }));
+    const grids = screen.getAllByRole("list");
+    fireEvent.click(within(grids[0]!).getByRole("button", { name: /mock\.html/ }));
+    expect(onView).toHaveBeenCalledWith({ kind: "files", path: "chat:mock.html" });
+  });
+
+  it("with a path: the preview opens with a way back, which clears the path", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => new Response("<p>hi</p>")));
     const onView = vi.fn();
     render(pane({ view: { kind: "files", path: "chat:mock.html" }, onView }));
     expect(await screen.findByTestId("html-preview")).toBeTruthy();
     fireEvent.click(screen.getByRole("tab", { name: "Source" }));
     expect(await screen.findByTestId("code-view")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "All files" }));
+    fireEvent.click(screen.getByRole("button", { name: "Back to files" }));
     expect(onView).toHaveBeenCalledWith({ kind: "files" });
+  });
+
+  it("when wide, shows the list and the preview side by side", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("<p>hi</p>")));
+    render(pane({ expanded: true, view: { kind: "files", path: "chat:mock.html" } }));
+    expect(await screen.findByTestId("html-preview")).toBeTruthy();
+    expect(screen.getByRole("navigation", { name: "Files" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Back to files" })).toBeNull();
   });
 
   it("shows the open file full screen, and Esc leaves full screen without closing the pane", async () => {
@@ -78,11 +124,20 @@ describe("the explorer", () => {
     expect(onView).not.toHaveBeenCalled();
   });
 
-  it("CONTROL: with a workflow, the list column is there and it can be hidden", () => {
-    render(pane({ workflow: { name: "w", steps: [{ id: "a", entry: "steps/a/main.py" }] } as never, chatFiles: [] }));
-    expect(screen.getByText("Workflow")).toBeTruthy();
+  it("folders are tree rows that expand and collapse; clicking a file in one opens it", () => {
+    const onView = vi.fn();
+    render(pane({ workflow: wf, files: { "steps/a/main.py": "print(1)" }, chatFiles: [], onView }));
+    const dir = screen.getByRole("button", { name: /^steps$/ });
+    expect(dir.getAttribute("aria-expanded")).toBe("true");
+    fireEvent.click(screen.getByTitle("steps/a/main.py"));
+    expect(onView).toHaveBeenCalledWith({ kind: "files", path: "steps/a/main.py" });
+    fireEvent.click(dir);
+    expect(dir.getAttribute("aria-expanded")).toBe("false");
+    expect(screen.queryByTitle("steps/a/main.py")).toBeNull();
+  });
+
+  it("a workflow file opens its code in the same pane", () => {
+    render(pane({ workflow: wf, chatFiles: [], view: { kind: "files", path: "workflow.json" } }));
     expect(screen.getByLabelText("Contents of workflow.json")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Hide the file list" }));
-    expect(screen.queryByRole("navigation", { name: "Files" })).toBeNull();
   });
 });

@@ -1704,6 +1704,37 @@ body.wb .page-enter {
 .pis-card-name { width: 100%; font-size: 12.5px; font-weight: 550; color: var(--text); }
 .pis-card-meta { font-size: 11px; color: var(--dim); }
 .pis-overview-foot { margin: 14px 2px 0; font-size: 11.5px; }
+/* Files explorer: one header, then a list (or grid) and the open file — side by side when wide, swapped when narrow. */
+.pis-xp { display: flex; flex: 1; min-height: 0; min-width: 0; }
+.pis-list { display: flex; flex-direction: column; flex: 1; min-width: 0; min-height: 0; overflow: hidden; background: color-mix(in srgb, var(--sunken) 45%, var(--surface)); --pis-row-bg: color-mix(in srgb, var(--sunken) 45%, var(--surface)); }
+.pis-xp.split .pis-list { flex: none; width: clamp(220px, 34%, 300px); border-right: 1px solid var(--line); }
+.pis-xp.swap .pis-list { display: none; }
+.pis-xp .pis-code-wrap { flex: 1; min-width: 0; }
+.pis-crumbs { flex: none; display: flex; align-items: center; gap: 6px; height: 32px; padding: 0 10px 0 6px; border-bottom: 1px solid var(--line); font-size: 12px; min-width: 0; }
+.pis-crumbs .pis-name { gap: 4px; font-size: 12px; }
+.pis-xrow, .pis-xcard { position: relative; }
+.pis-xrow { display: flex; align-items: center; height: 32px; border-left: 2px solid transparent; }
+.pis-xrow:hover { background: color-mix(in srgb, var(--text) 5%, transparent); }
+.pis-xrow.on { background: var(--accent-bg); border-left-color: var(--accent); --pis-row-bg: var(--accent-bg); }
+.pis-xmain { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; height: 100%; padding-right: 10px; font-size: 12.5px; color: var(--text); text-align: left; }
+.pis-xname { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pis-xmeta { flex: none; font-size: 11px; color: var(--dim); }
+.pis-xdir { display: flex; align-items: center; gap: 6px; width: 100%; height: 32px; padding-right: 10px; font-size: 12.5px; color: var(--text); text-align: left; }
+.pis-xdir:hover { background: color-mix(in srgb, var(--text) 5%, transparent); }
+.pis-xdir svg { color: var(--dim); flex: none; }
+.pis-xrow:hover, .pis-xrow:focus-within { --pis-row-bg: color-mix(in srgb, var(--text) 5%, var(--sunken)); }
+.pis-xrow:hover .pis-acts, .pis-xrow:focus-within .pis-acts, .pis-xrow.armed .pis-acts,
+.pis-xcard:hover .pis-acts, .pis-xcard:focus-within .pis-acts, .pis-xcard.armed .pis-acts { opacity: 1; pointer-events: auto; }
+.pis-xrow:hover .pis-xmeta, .pis-xrow:focus-within .pis-xmeta { visibility: hidden; }
+.pis-xgrid { padding: 8px 12px; }
+.pis-xcard.on .pis-card { border-color: var(--accent); background: var(--accent-bg); }
+.pis-xcard .pis-acts { top: 6px; right: 6px; bottom: auto; padding: 0; background: var(--surface); border-radius: 6px; }
+.pis-foot { flex: none; display: flex; flex-direction: column; gap: 5px; padding: 8px 12px 10px; border-top: 1px solid var(--line); font-size: 11px; }
+.pis-meter { display: block; height: 3px; border-radius: 2px; background: var(--sunken); overflow: hidden; }
+.pis-meter i { display: block; height: 100%; border-radius: 2px; background: var(--accent); }
+.pis-meter i.near { background: var(--warn); }
+.pis-meter i.full { background: var(--danger); }
+@media (prefers-reduced-motion: reduce) { .pis-acts, .pis-chev, .pis-pane { transition: none; } }
 .pis-row {
   display: flex; align-items: center; gap: 8px; width: 100%; height: 28px; padding-right: 10px;
   font-size: 12.5px; color: var(--muted); text-align: left; border-left: 2px solid transparent;

@@ -73,8 +73,6 @@ describe("a removed file", () => {
         storage={{ bytes: 6 * MB, limit: 300 * MB, chat: 5 * MB }}
       />,
     );
-    // In a chat with no workflow the files are a menu on the open file's name.
-    fireEvent.click(screen.getByRole("button", { name: /big\.csv/ }));
     expect(screen.getByText("6 MB of 300 MB used by this chat")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Remove big.csv" }));
     expect(onRemove).not.toHaveBeenCalled();
@@ -95,8 +93,7 @@ describe("a removed file", () => {
         chatFiles={[{ name: "big.csv", size: 5, type: "text/csv", from: "you" }]}
       />,
     );
-    fireEvent.click(screen.getByRole("button", { name: /big\.csv/ }));
-    expect(screen.getByRole("menuitem", { name: /big\.csv/ })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /big\.csv/ })).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Remove big.csv" })).toBeNull();
   });
 });

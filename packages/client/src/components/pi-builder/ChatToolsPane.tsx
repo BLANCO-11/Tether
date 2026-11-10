@@ -4,8 +4,14 @@
  * Right tools drawer for Forge chat — Files and Canvas. Icon switches (not text tabs),
  * left-edge drag to resize, and an expand that fills the workbench width.
  */
-import { useCallback, useRef, useState, type ReactNode } from "react";
+import { createContext, useCallback, useRef, useState, type ReactNode } from "react";
 import { Close, Folder, Workflow } from "@/components/ui/icons";
+
+/**
+ * Where the Files view puts its own controls (layout, preview actions) so the drawer has ONE header row: the tabs on
+ * the left, those controls, then expand and close. `undefined` outside a drawer; `null` until the slot has mounted.
+ */
+export const ToolsHeaderSlot = createContext<HTMLElement | null | undefined>(undefined);
 
 export type ToolsTab = "files" | "canvas";
 
@@ -42,6 +48,7 @@ export function ChatToolsPane({
   const ref = useRef<HTMLElement>(null);
   const dragging = useRef(false);
   const [, bump] = useState(0);
+  const [slot, setSlot] = useState<HTMLElement | null>(null);
 
   const clamp = useCallback((w: number) => {
     const total = ref.current?.parentElement?.getBoundingClientRect().width || window.innerWidth;
@@ -119,6 +126,7 @@ export function ChatToolsPane({
             <IconTab active={tab === "canvas"} onClick={() => onTab("canvas")} icon={<Workflow s={15} />} label="Canvas" />
           ) : null}
         </div>
+        <div ref={setSlot} className="flex shrink-0 items-center gap-0.5" />
         <button
           type="button"
           onClick={onToggleExpand}
@@ -153,7 +161,9 @@ export function ChatToolsPane({
           <Close className="h-4 w-4" />
         </button>
       </div>
-      <div className="min-h-0 flex-1 overflow-hidden">{tab === "canvas" && showCanvas ? canvas : files}</div>
+      <ToolsHeaderSlot.Provider value={tab === "canvas" && showCanvas ? undefined : slot}>
+        <div className="min-h-0 flex-1 overflow-hidden">{tab === "canvas" && showCanvas ? canvas : files}</div>
+      </ToolsHeaderSlot.Provider>
     </aside>
   );
 }
