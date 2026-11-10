@@ -1839,6 +1839,13 @@ body.wb .page-enter {
   box-shadow: 0 10px 32px -14px var(--shadow);
   transition: border-color 0.15s, box-shadow 0.15s;
 }
+/* The text field inside never draws its own focus ring: the composer's soft glow (below) is the focus cue. */
+.pi-composer textarea:focus,
+.pi-composer textarea:focus-visible,
+.pi-composer input[type="text"]:focus-visible {
+  outline: none !important;
+  box-shadow: none !important;
+}
 .pi-composer:focus-within {
   border-color: var(--accent-line);
   box-shadow: 0 0 0 4px var(--accent-bg), 0 10px 32px -14px var(--shadow);
