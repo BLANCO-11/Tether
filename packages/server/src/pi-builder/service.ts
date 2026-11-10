@@ -1,3 +1,4 @@
+import { EMAIL_TOOL_NAME, LEGACY_EMAIL_TOOL_NAME } from "../services/platform-tool-names.js";
 import { EventEmitter } from "node:events";
 import { randomBytes, randomUUID } from "node:crypto";
 import { spawn } from "node:child_process";
@@ -3990,7 +3991,18 @@ function writeMyCatalogue(workspaceId: string, sessionId: string, tools: Tool[])
  * change is refused by the connector, not by Forge's good behaviour: "Nothing leaves this chat" (SYSTEM.md) is
  * enforced here, and a workflow is how a change happens, after a person approves it.
  */
+/** Email is not a connected service: point Forge at the one way it can email the person (tools/send-email.mjs). */
+function refuseEmailAsService(toolName: string): void {
+  if (toolName !== EMAIL_TOOL_NAME && toolName !== LEGACY_EMAIL_TOOL_NAME) return;
+  throw httpErr(
+    `"${toolName}" is the workflow email step, not a connected service, so it cannot be used or proposed from chat. ` +
+      `To email the person you are talking with (only them), run: node tools/send-email.mjs --subject "<one line>" --body-file scratch/mail.md --attach out/<file>`,
+    400,
+  );
+}
+
 export async function usePlugin(token: string, toolName: string, params: Record<string, unknown>): Promise<{ result: unknown; via: string }> {
+  refuseEmailAsService(toolName);
   const sid = toolTokens.get(token);
   const s = sid ? sessions.get(sid) : undefined;
   if (!s) throw httpErr("This key does not belong to an open conversation.", 401);
@@ -4048,6 +4060,7 @@ export async function usePlugin(token: string, toolName: string, params: Record<
  * (`decideProposal`). See agent-changes.ts for why a question card could not be the confirmation.
  */
 export async function proposeChange(token: string, toolName: string, params: Record<string, unknown> | Array<Record<string, unknown>>, summary: string): Promise<{ proposed: true; message: string }> {
+  refuseEmailAsService(toolName);
   const sid = toolTokens.get(token);
   const s = sid ? sessions.get(sid) : undefined;
   if (!s) throw httpErr("This key does not belong to an open conversation.", 401);
