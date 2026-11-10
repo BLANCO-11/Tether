@@ -335,6 +335,9 @@ export class GatewayInference implements InferenceClient {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), opts.timeoutMs ?? DEFAULT_TIMEOUT_MS);
     // Once per call, so the temperature retry below keeps the same session.
+    if (!(opts.model ?? this.model)?.trim()) {
+      throw Object.assign(new Error("No AI model configured — set one on the AI models page."), { statusCode: 400 });
+    }
     const extra = gatewayHeaders({ providerId: this.providerId, baseUrl: this.baseUrl }, opts.sessionId);
     const send = (withTemperature: boolean) =>
       fetch(`${this.baseUrl}/chat/completions`, {

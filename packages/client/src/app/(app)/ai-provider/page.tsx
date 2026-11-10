@@ -152,7 +152,9 @@ function Step({ n, title, hint, children, action }: { n: number; title: string; 
 function TestLine({ test }: { test: FALlmTest }) {
   return test.ok ? (
     <p className="text-caption text-ok" role="status">
-      Connected — {test.model} answered in {test.latencyMs}ms.
+      {test.text?.trim()
+        ? `Connected — ${test.model} answered in ${test.latencyMs}ms.`
+        : `Connected (model replied with no text) — ${test.model}, ${test.latencyMs}ms.`}
     </p>
   ) : (
     <p className="text-caption text-danger" role="status">
@@ -324,10 +326,12 @@ function ModelSettings({ p, reload }: { p: FALlmProvider; reload: () => void }) 
       return r;
     });
 
+  const testModel = defaultModel || allowed[0] || "";
+
   const runTest = () =>
     run("test", async () => {
       setTest(null);
-      const r = await foundryApi.llmTest({ ...probe(), model: defaultModel || undefined });
+      const r = await foundryApi.llmTest({ ...probe(), model: testModel || undefined });
       setTest(r);
       return r;
     });
@@ -400,7 +404,7 @@ function ModelSettings({ p, reload }: { p: FALlmProvider; reload: () => void }) 
             </div>
             <div>
               <dt className="text-dim">Default model</dt>
-              <dd className="mt-0.5 font-mono text-text">{build.defaultModel || "—"}</dd>
+              <dd className="mt-0.5 font-mono text-text">{build.defaultModel || "No model configured"}</dd>
             </div>
             <div>
               <dt className="text-dim">Key</dt>
@@ -458,10 +462,10 @@ function ModelSettings({ p, reload }: { p: FALlmProvider; reload: () => void }) 
           </Field>
         </div>
         <div className="mt-3 flex flex-wrap items-center gap-3">
-          <Button size="sm" variant="ghost" onClick={runTest} disabled={busy !== "" || !effectiveBase}>
+          <Button size="sm" variant="ghost" onClick={runTest} disabled={busy !== "" || !effectiveBase || !testModel}>
             {busy === "test" ? "Testing…" : "Test connection"}
           </Button>
-          {test ? <TestLine test={test} /> : <span className="text-caption text-dim">A quick test checks that your key works.</span>}
+          {test ? <TestLine test={test} /> : <span className="text-caption text-dim">{testModel ? "A quick test checks that your key works." : "Fetch models and pick one first"}</span>}
         </div>
       </Step>
 

@@ -29,3 +29,10 @@ describe("modelChoices", () => {
   it("gives the default when nothing is listed", () => expect(modelChoices({ model: "p/a", allowedModels: [] }, "fb")).toEqual(["a"]));
   it("gives the fallback with no generation", () => expect(modelChoices(null, "p/fb")).toEqual(["fb"]));
 });
+
+describe("no model configured", () => {
+  it("offers no empty choice and resolves to an empty model", () => {
+    expect(modelChoices(null, "")).toEqual([]);
+    expect(effectiveModel(null, null, "")).toBe("");
+  });
+});

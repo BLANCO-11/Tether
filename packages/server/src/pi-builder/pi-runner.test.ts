@@ -92,3 +92,18 @@ describe("forgeOpenCodeEnv — OpenCode's session headers via the tether-gateway
     expect(forgeOpenCodeEnv("sess-1")).toEqual({});
   });
 });
+
+describe("piModel", () => {
+  it("has no hardcoded fallback", async () => {
+    const { piModel } = await import("./pi-runner.js");
+    const saved = [process.env.PI_MODEL, config.inference.model] as const;
+    delete process.env.PI_MODEL;
+    (config.inference as { model: string }).model = "";
+    try {
+      expect(piModel()).toBe("");
+    } finally {
+      if (saved[0] !== undefined) process.env.PI_MODEL = saved[0];
+      (config.inference as { model: string }).model = saved[1];
+    }
+  });
+});

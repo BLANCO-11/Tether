@@ -391,8 +391,11 @@ export async function complete(p: RuntimeProvider, opts: { model: string; system
   };
 }
 
-export function testCompletion(p: RuntimeProvider, model?: string): Promise<CompletionResult> {
-  return complete(p, { model: model || p.defaultModel, system: "Reply with exactly the word OK.", user: "OK?", maxTokens: 8 });
+export async function testCompletion(p: RuntimeProvider, model?: string): Promise<CompletionResult> {
+  const chosen = model?.trim() || p.defaultModel?.trim();
+  if (!chosen) throw new RuntimeModelError(400, "model_required", "Pick a model to test.");
+  // 256: reasoning models spend the budget thinking; a 2xx reply counts as connected even when its text is empty.
+  return complete(p, { model: chosen, system: "Reply with exactly the word OK.", user: "OK?", maxTokens: 256 });
 }
 
 /** Unsaved gateway/key for Fetch models / Test before save. */

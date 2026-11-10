@@ -45,7 +45,7 @@ export function ModelThinkingPill({
   const popover = useRef<HTMLDivElement>(null);
   const wasOpen = useRef(false);
 
-  const options = models.includes(model) ? models : [model, ...models];
+  const options = !model || models.includes(model) ? models : [model, ...models];
   const open = menu !== null && !disabled;
   const focus = menu?.focus;
 
@@ -77,6 +77,16 @@ export function ModelThinkingPill({
 
   const raw = (id: string) => `${id}`;
   const hint = disabled ? "Wait for Forge to finish to change it" : "Applies from your next message";
+
+  if (!model) {
+    return (
+      <span className="relative inline-flex min-w-0">
+        <a data-testid="model-pill" href="/ai-provider" title="Set one on the AI models page" className={PILL}>
+          <span className="truncate">No model configured</span>
+        </a>
+      </span>
+    );
+  }
 
   if (options.length <= 1 && thinking === undefined) {
     return (

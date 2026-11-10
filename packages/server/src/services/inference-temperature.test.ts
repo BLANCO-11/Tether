@@ -253,3 +253,14 @@ describe("GatewayInference — gateway headers", () => {
     expect(sent[0]).not.toHaveProperty("User-Agent");
   });
 });
+
+describe("GatewayInference — no model configured", () => {
+  it("refuses with a 400 before calling the gateway", async () => {
+    const f = vi.fn();
+    vi.stubGlobal("fetch", f);
+    const gw = new GatewayInference("https://gw.example/v1", "k", "");
+    await expect(gw.complete("hi", { label: "t" })).rejects.toMatchObject({ statusCode: 400, message: expect.stringMatching(/No AI model configured/) });
+    expect(f).not.toHaveBeenCalled();
+    vi.unstubAllGlobals();
+  });
+});

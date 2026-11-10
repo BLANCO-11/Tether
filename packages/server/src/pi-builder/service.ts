@@ -501,7 +501,10 @@ const toolTokens = new Map<string, string>();
 /** One live session per (workspace, scope). Scope = flow:<id> | draft:<key>. */
 const scopeIndex = new Map<string, string>();
 
+const NO_MODEL_MESSAGE = "No AI model configured — set one on the AI models page.";
+
 /** The model a chat's Forge runs with: its own choice while the admin still allows it, else the builder's default. */
+
 function forgeModelOf(s: Session): string {
   return effectiveModel(s.model, s.generation, piModel());
 }
@@ -1630,6 +1633,7 @@ function readyForTurn(s: Session): void {
   if (s.compacting) throw httpErr("Forge is making room in this conversation. Send your message again in a moment.", 409);
   if (s.abort) throw httpErr("Forge is still working on the last message. Wait for it to finish or press Stop.", 409);
   if (s.testing) throw httpErr("A test run is still going. Wait for it to finish, then send your message.", 409);
+  if (!forgeModelOf(s)) throw httpErr(NO_MODEL_MESSAGE, 400);
   forgePool.acquire(s.workspaceId, s.id);
   s.lastSeenAt = Date.now();
 }

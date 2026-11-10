@@ -23,7 +23,7 @@ export type TurnEnd = {
 };
 
 export function piModel(): string {
-  return (process.env.PI_MODEL || config.inference.model || "gpt-6-luna").replace(/^.*\//, "");
+  return (process.env.PI_MODEL || config.inference.model || "").replace(/^.*\//, "");
 }
 
 /**

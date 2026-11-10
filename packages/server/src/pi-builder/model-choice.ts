@@ -26,5 +26,7 @@ export function effectiveModel(chosen: string | null, gen: Generation | null, fa
 /** The models a chat may choose from: the enabled ones, or the default alone when none are listed. */
 export function modelChoices(gen: Generation | null, fallback: string): string[] {
   const list = [...new Set((gen?.allowedModels ?? []).map(bareModel).filter(Boolean))];
-  return list.length > 0 ? list : [bareModel(gen?.model || fallback)];
+  if (list.length > 0) return list;
+  const one = bareModel(gen?.model || fallback);
+  return one ? [one] : [];
 }

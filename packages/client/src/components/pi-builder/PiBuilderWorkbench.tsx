@@ -1687,7 +1687,7 @@ function Workbench_({
                           />
                         <div className="ml-auto flex min-w-0 items-center">
                           <ModelThinkingPill
-                            model={model ?? session.model ?? "Deployment default"}
+                            model={model ?? session.model ?? ""}
                             models={models}
                             thinking={mode === "agent" ? thinking : undefined}
                             disabled={busy || status === "running"}
