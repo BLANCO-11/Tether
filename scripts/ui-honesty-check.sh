@@ -1019,8 +1019,10 @@ echo "Colour comes from the token map, and only from there"
 # the earthy theme. It is quarantined in a file that holds nothing else, so the
 # exemption cannot silently widen to cover a real defect. If a second file ever
 # needs exempting, that is a decision to write down — not a pattern to loosen.
+# DECIDED 2026-11-10: `components/ui/GoogleMark.tsx` (Google's G, same reasoning).
 theme_literals=$(grep -rn --include=\*.ts --include=\*.tsx -E '#[0-9a-fA-F]{3,8}\b|rgba?\(' "$SRC" 2>/dev/null \
   | grep -v '/MicrosoftMark\.tsx:' \
+  | grep -v '/GoogleMark\.tsx:' \
   | grep -vE '^[^:]+:[0-9]+:[[:space:]]*(//|\*|/\*)' \
   | head -5)
 if [ -n "$theme_literals" ]; then

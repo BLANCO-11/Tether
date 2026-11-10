@@ -19,6 +19,7 @@ vi.mock("@/auth", () => ({ signIn: vi.fn() }));
 // The form is the one consumer of `next`; render it as its own prop so the test reads what the page passed.
 vi.mock("./email-otp-form", () => ({
   EmailOtpForm: ({ next }: { next: string }) => <div data-testid="otp-form" data-next={next} />,
+  GoogleButton: () => <button type="submit">Continue with Google</button>,
 }));
 vi.mock("./local-login-form", () => ({
   LocalLoginForm: ({ next }: { next: string }) => <div data-testid="form" data-next={next} />,

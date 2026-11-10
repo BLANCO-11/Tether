@@ -5,14 +5,24 @@
 //     "Sign in with password" unless LOCAL_LOGIN=off. Real
 // sign-in replaced the earlier mock; components elsewhere still use useAuth().
 import { signIn } from "@/auth";
+import type React from "react";
 import { Button } from "@/components/ui/Button";
 import { Cube } from "@/components/ui/icons";
 // A third party's brand mark, quarantined in its own file because it is the one
 // thing in `src/**` that legitimately holds colour literals — see that file.
 import { MicrosoftMark } from "@/components/ui/MicrosoftMark";
 import { LocalLoginForm } from "./local-login-form";
-import { EmailOtpForm } from "./email-otp-form";
+import { EmailOtpForm, GoogleButton } from "./email-otp-form";
 import { safeNext } from "@/lib/session-expiry";
+
+// "or" divider whose rules grow outward on load.
+function OrDivider() {
+  return (
+    <div className="lg-divider my-5" aria-hidden="true">
+      <span /> <b>or</b> <span />
+    </div>
+  );
+}
 
 // Must be dynamic so the auth env (LOCAL_ADMIN_PASSWORD, Entra credentials) is
 // read at request time from the container environment — not baked in at build.
@@ -47,61 +57,56 @@ export default async function LoginPage({ searchParams }: { searchParams?: Promi
 
   return (
     <main className="relative flex min-h-screen items-center justify-center p-6">
-      {/* Soft focal glow behind the card, in Tether's accent. */}
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute left-1/2 top-1/2 -z-10 h-[440px] w-[440px] -translate-x-1/2 -translate-y-1/2 rounded-full blur-3xl"
-        style={{ background: "var(--accent-bg)" }}
-      />
+      {/* Slowly drifting blurred orbs in Tether's accent. */}
+      <div aria-hidden="true" className="lg-backdrop">
+        <div className="lg-orb lg-orb-a" />
+        <div className="lg-orb lg-orb-b" />
+        <div className="lg-orb lg-orb-c" />
+      </div>
 
-      <div className="w-full max-w-sm rounded-lg border border-line bg-surface p-8">
+      <div className="lg-card w-full max-w-sm rounded-2xl p-8">
         <div className="mb-8 flex flex-col items-center text-center">
-          <span className="btn-grad mb-4 flex h-12 w-12 items-center justify-center rounded-lg text-[color:var(--on-cta)]">
+          <span className="lg-logo btn-grad mb-4 flex h-12 w-12 items-center justify-center rounded-lg text-[color:var(--on-cta)]">
             <Cube s={24} />
           </span>
-          <h1 className="text-lg font-semibold">Welcome to Tether</h1>
-          <p className="mt-1 text-sm text-muted">Sign in to your Automation Studio.</p>
+          <p className="lg-rise text-xs font-semibold uppercase tracking-[0.3em] text-muted" style={{ "--d": "200ms" } as React.CSSProperties}>Tether</p>
+          <h1 className="lg-rise mt-2 text-lg font-semibold" style={{ "--d": "260ms" } as React.CSSProperties}>Welcome to Tether</h1>
+          <p className="lg-rise mt-1 text-sm text-muted" style={{ "--d": "320ms" } as React.CSSProperties}>Sign in to your Automation Studio.</p>
         </div>
 
         {expired ? (
-          <p role="status" className="mb-5 rounded-md border border-warn/30 bg-warn/5 px-3 py-2 text-center text-xs text-text">
+          <p role="status" className="lg-notice mb-5 rounded-md border border-warn/30 bg-warn/5 px-3 py-2 text-center text-xs text-text">
             Your session ended. Sign in again to carry on where you were.
           </p>
         ) : null}
 
         {accessDenied ? (
-          <p role="alert" className="mb-5 rounded-md border border-warn/30 bg-warn/5 px-3 py-2 text-center text-xs text-text">
+          <p role="alert" className="lg-notice mb-5 rounded-md border border-warn/30 bg-warn/5 px-3 py-2 text-center text-xs text-text">
             This Google account is not allowed. Ask an admin to add your email.
           </p>
         ) : null}
 
         {GOOGLE_ENABLED && (
-          <>
+          <div className="lg-rise" style={{ "--d": "380ms" } as React.CSSProperties}>
             <form
               action={async () => {
                 "use server";
                 await signIn("google", { redirectTo: next });
               }}
             >
-              <Button type="submit" className="w-full gap-2.5">
-                Continue with Google
-              </Button>
+              <GoogleButton />
             </form>
-            <div className="my-5 flex items-center gap-3 text-xs text-dim">
-              <span className="h-px flex-1 bg-line" /> or <span className="h-px flex-1 bg-line" />
-            </div>
-          </>
+            <OrDivider />
+          </div>
         )}
 
         {/* Email code — the primary method. */}
-        <EmailOtpForm next={next} />
+        <div className="lg-rise" style={{ "--d": "440ms" } as React.CSSProperties}>
+          <EmailOtpForm next={next} />
+        </div>
 
         {/* Divider — before the work-account button. */}
-        {SSO_ENABLED && (
-          <div className="my-5 flex items-center gap-3 text-xs text-dim">
-            <span className="h-px flex-1 bg-line" /> or <span className="h-px flex-1 bg-line" />
-          </div>
-        )}
+        {SSO_ENABLED && <OrDivider />}
 
         {/* Microsoft Entra ID — the work-account path. */}
         {SSO_ENABLED && (
@@ -111,25 +116,22 @@ export default async function LoginPage({ searchParams }: { searchParams?: Promi
               await signIn("microsoft-entra-id", { redirectTo: next });
             }}
           >
-            <Button type="submit" className="w-full gap-2.5">
+            <Button type="submit" variant="ghost" className="lg-press w-full gap-2.5">
               <MicrosoftMark />
               Sign in with your work account
             </Button>
           </form>
         )}
 
-        {/* Password — kept in the DOM inside <details>. */}
+        {/* Password — kept in the DOM, behind an animated expander (inside LocalLoginForm). */}
         {LOCAL_LOGIN_ENABLED && (
-          <details className="mt-5">
-            <summary className="cursor-pointer text-center text-xs text-muted">Sign in with password</summary>
-            <div className="mt-3">
-              <LocalLoginForm defaultEmail={LOCAL_ADMIN_EMAIL} next={next} />
-            </div>
-          </details>
+          <div className="mt-5">
+            <LocalLoginForm defaultEmail={LOCAL_ADMIN_EMAIL} next={next} />
+          </div>
         )}
 
         {/* Footer note — reflects which methods are on. */}
-        <p className="mt-6 text-center text-xs text-dim">
+        <p className="lg-rise mt-6 text-center text-xs text-dim" style={{ "--d": "520ms" } as React.CSSProperties}>
           {SSO_ENABLED && LOCAL_LOGIN_ENABLED
             ? "Work account, email code or password"
             : SSO_ENABLED

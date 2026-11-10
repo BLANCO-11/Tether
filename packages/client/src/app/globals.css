@@ -2074,3 +2074,78 @@ body.chat-resizing .pi-wide { transition: none; }
 .act-switch:disabled { cursor: default; opacity: 0.45; }
 .act-switch:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .act-savebar { position: sticky; bottom: 12px; z-index: 5; display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 10px 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); box-shadow: 0 6px 24px rgb(0 0 0 / 0.12); }
+
+/* ── Login (2026-11): animated sign-in. Backdrop orbs, glass card, staggered rise, step slide, digit boxes, shake. ── */
+.lg-backdrop { position: fixed; inset: 0; z-index: -10; overflow: hidden; pointer-events: none; }
+.lg-orb { position: absolute; border-radius: 9999px; filter: blur(80px); opacity: 0.55; will-change: transform; }
+.lg-orb-a { left: 12%; top: 10%; width: 460px; height: 460px; background: var(--accent-bg-2); animation: lg-drift-a 26s ease-in-out infinite alternate; }
+.lg-orb-b { right: 8%; bottom: 6%; width: 520px; height: 520px; background: color-mix(in srgb, var(--accent) 22%, transparent); animation: lg-drift-b 32s ease-in-out infinite alternate; }
+.lg-orb-c { left: 46%; top: 55%; width: 320px; height: 320px; background: color-mix(in srgb, var(--accent) 12%, var(--text) 6%); animation: lg-drift-c 38s ease-in-out infinite alternate; }
+@keyframes lg-drift-a { to { transform: translate(18vw, 14vh) scale(1.15); } }
+@keyframes lg-drift-b { to { transform: translate(-16vw, -12vh) scale(0.9); } }
+@keyframes lg-drift-c { to { transform: translate(-10vw, -18vh) scale(1.25); } }
+
+.lg-card {
+  background: color-mix(in srgb, var(--surface) 72%, transparent);
+  -webkit-backdrop-filter: blur(18px) saturate(1.2); backdrop-filter: blur(18px) saturate(1.2);
+  border: 1px solid color-mix(in srgb, var(--line) 80%, transparent);
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--text) 6%, transparent) inset, 0 24px 60px -20px rgb(0 0 0 / 0.35);
+  animation: lg-rise 600ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+.lg-rise { animation: lg-rise 560ms cubic-bezier(0.2, 0.8, 0.2, 1) both; animation-delay: var(--d, 0ms); }
+@keyframes lg-rise { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+.lg-logo { animation: lg-pop 700ms cubic-bezier(0.34, 1.56, 0.64, 1) both; animation-delay: 120ms; }
+@keyframes lg-pop { from { opacity: 0; transform: scale(0.6) rotate(-8deg); } to { opacity: 1; transform: none; } }
+
+.lg-notice { animation: lg-notice 320ms cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+@keyframes lg-notice { from { opacity: 0; transform: translateY(-8px) scale(0.98); } to { opacity: 1; transform: none; } }
+
+.lg-height { transition: height 320ms cubic-bezier(0.2, 0.8, 0.2, 1); overflow: hidden; }
+.lg-in-fwd { animation: lg-in-fwd 320ms cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+.lg-in-back { animation: lg-in-back 320ms cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+.lg-out-fwd { animation: lg-out-fwd 160ms ease-in both; }
+.lg-out-back { animation: lg-out-back 160ms ease-in both; }
+@keyframes lg-in-fwd { from { opacity: 0; transform: translateX(28px); } to { opacity: 1; transform: none; } }
+@keyframes lg-in-back { from { opacity: 0; transform: translateX(-28px); } to { opacity: 1; transform: none; } }
+@keyframes lg-out-fwd { to { opacity: 0; transform: translateX(-28px); } }
+@keyframes lg-out-back { to { opacity: 0; transform: translateX(28px); } }
+
+.lg-digit {
+  width: 100%; min-width: 0; height: 3rem; text-align: center; font-size: 1.25rem; font-weight: 600; font-variant-numeric: tabular-nums;
+  border-radius: 10px; border: 1px solid var(--line); background: color-mix(in srgb, var(--bg) 70%, transparent); color: var(--text);
+  transition: border-color 150ms, box-shadow 150ms, transform 150ms, background 150ms;
+}
+.lg-digit:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-bg-2); transform: translateY(-2px); }
+.lg-digit[data-filled="true"] { border-color: color-mix(in srgb, var(--accent) 55%, var(--line)); background: var(--accent-bg); }
+.lg-digit:disabled { opacity: 0.6; }
+.lg-shake { animation: lg-shake 420ms cubic-bezier(0.36, 0.07, 0.19, 0.97) both; }
+@keyframes lg-shake { 10%, 90% { transform: translateX(-2px); } 20%, 80% { transform: translateX(4px); } 30%, 50%, 70% { transform: translateX(-8px); } 40%, 60% { transform: translateX(8px); } }
+
+.lg-press { transition: transform 150ms ease-out, background-color 150ms, box-shadow 150ms, opacity 150ms; }
+.lg-press:not(:disabled):hover { transform: translateY(-1px); box-shadow: 0 6px 18px -8px var(--accent); }
+.lg-press:not(:disabled):active { transform: translateY(0) scale(0.98); box-shadow: none; }
+.lg-link { text-underline-offset: 3px; transition: color 150ms, opacity 150ms; border-radius: 4px; }
+.lg-link:focus-visible, .lg-digit:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.lg-check path { stroke-dasharray: 24; stroke-dashoffset: 24; animation: lg-draw 380ms ease-out 60ms forwards; }
+@keyframes lg-draw { to { stroke-dashoffset: 0; } }
+.lg-check-pop { animation: lg-pop 400ms cubic-bezier(0.34, 1.56, 0.64, 1) both; }
+
+.lg-divider { display: flex; align-items: center; gap: 12px; font-size: 12px; color: var(--dim); }
+.lg-divider > span { height: 1px; flex: 1; background: var(--line); transform-origin: center; animation: lg-grow 700ms cubic-bezier(0.2, 0.8, 0.2, 1) 300ms both; }
+.lg-divider > b { font-weight: 400; animation: lg-rise 500ms ease-out 450ms both; }
+@keyframes lg-grow { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+
+.lg-collapse { display: grid; grid-template-rows: 0fr; visibility: hidden; opacity: 0; transition: grid-template-rows 320ms cubic-bezier(0.2, 0.8, 0.2, 1), opacity 240ms, visibility 0s linear 320ms; }
+.lg-collapse[data-open="true"] { grid-template-rows: 1fr; visibility: visible; opacity: 1; transition-delay: 0s; }
+.lg-collapse > div { overflow: hidden; min-height: 0; }
+.lg-chevron { transition: transform 250ms ease-out; }
+[aria-expanded="true"] > .lg-chevron { transform: rotate(180deg); }
+
+@media (prefers-reduced-motion: reduce) {
+  .lg-orb, .lg-card, .lg-rise, .lg-logo, .lg-notice, .lg-in-fwd, .lg-in-back, .lg-out-fwd, .lg-out-back, .lg-shake,
+  .lg-check path, .lg-check-pop, .lg-divider > span, .lg-divider > b { animation: none !important; }
+  .lg-check path { stroke-dashoffset: 0; }
+  .lg-height, .lg-collapse, .lg-press, .lg-digit, .lg-chevron { transition: none !important; }
+  .lg-press:not(:disabled):hover, .lg-digit:focus { transform: none; }
+}
