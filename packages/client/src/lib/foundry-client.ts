@@ -3303,7 +3303,7 @@ export const foundryApi = {
   getPeople: () => req<FAPeopleView>("/platform/people"),
   listAllowedUsers: () => req<{ users: FAAllowedUser[]; superAdmins: string[] }>("/allowed-users"),
   addAllowedUser: (body: { email: string; role: "admin" | "user" }) =>
-    req<{ user: FAAllowedUser }>("/allowed-users", { method: "POST", body: JSON.stringify(body) }),
+    req<{ user: FAAllowedUser; invited?: boolean }>("/allowed-users", { method: "POST", body: JSON.stringify(body) }),
   updateAllowedUser: (id: string, body: { role?: "admin" | "user"; enabled?: boolean }) =>
     req<{ user: FAAllowedUser }>(`/allowed-users/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(body) }),
   removeAllowedUser: (id: string) =>

@@ -16,6 +16,7 @@ const svc = vi.hoisted(() => ({
   isUserAdmin: vi.fn(),
 }));
 
+vi.mock("../services/mail.service.js", () => ({ sendSystemMail: vi.fn(async () => ({ ok: true, messageId: null, requestId: null })) }));
 vi.mock("../services/allowed-user.service.js", () => ({
   allowedUserService: svc,
   normalizeEmail: (s: string) => s.trim().toLowerCase(),

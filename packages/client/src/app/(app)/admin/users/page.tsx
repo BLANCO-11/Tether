@@ -94,14 +94,18 @@ function UsersAdmin({ myEmail }: { myEmail: string }) {
     e.preventDefault();
     const trimmed = email.trim().toLowerCase();
     if (!trimmed) return;
+    let added = "";
     await run(
       async () => {
-        await foundryApi.addAllowedUser({ email: trimmed, role });
+        const r = await foundryApi.addAllowedUser({ email: trimmed, role });
         setEmail("");
+        added = r.invited
+          ? `Added ${trimmed} and emailed them an invite. They can sign in with an email code or Google.`
+          : `Added ${trimmed}. The invite email could not be sent — tell them to sign in at this site with their email.`;
       },
       "Could not add that email.",
-      `Added ${trimmed}. They can now sign in with an email code.`,
     );
+    if (added) setNotice(added);
   }
 
   function onRemove(u: FAAllowedUser) {

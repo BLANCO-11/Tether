@@ -8,6 +8,7 @@ import { requireIdentity } from "../middleware/identity.middleware.js";
 import { requireUserAdmin } from "../middleware/user-admin.middleware.js";
 import { allowedUserService } from "../services/allowed-user.service.js";
 import { config } from "../config/index.js";
+import { sendSystemMail } from "../services/mail.service.js";
 
 export const allowedUsersRouter = Router();
 
@@ -54,7 +55,16 @@ allowedUsersRouter.post(
   asyncHandler(async (req, res) => {
     const input = createSchema.parse(req.body);
     const user = await allowedUserService.add({ ...input, createdBy: req.user!.subject });
-    res.status(201).json({ user });
+    // Invite: a link only — never a password or code. A failed send does not undo the add.
+    const site = (process.env.AUTH_URL ?? "").replace(/\/+$/, "") || "Tether";
+    const invited = await sendSystemMail(
+      user.email,
+      "You've been given access to Tether",
+      `You've been given access to Tether.\n\nSign in at ${site}/login with this email address (we'll email you a one-time code) or with Google.\n\nIf you weren't expecting this, you can ignore this email.`,
+    )
+      .then((r) => (r as { ok?: boolean }).ok !== false)
+      .catch(() => false);
+    res.status(201).json({ user, invited });
   }),
 );
 
