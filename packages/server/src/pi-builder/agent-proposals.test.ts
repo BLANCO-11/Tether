@@ -2,6 +2,7 @@
  * Forge Agent proposals through the chat service: Forge PROPOSES (its conversation key, mid-answer, Forge Agent only),
  * the PERSON decides (only the one Forge was answering, only once). The rules themselves are agent-changes.test.ts.
  */
+process.env.PI_MODEL ??= "test-model"; // readyForTurn refuses a turn with no model configured (no built-in default since a1182c5).
 import { EventEmitter } from "node:events";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -94,6 +95,7 @@ function session(over: Record<string, unknown> = {}) {
     id: "sess-1",
     workspaceId: WS,
     chatId: null,
+    scrub: (t: string) => t,
     mode: "agent",
     abort: new AbortController() as AbortController | null,
     bus: new EventEmitter(),

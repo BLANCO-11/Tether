@@ -38,6 +38,6 @@ describe("bash timeout", () => {
     const src = readFileSync(new URL("./pi-runner.ts", import.meta.url), "utf8");
     expect(src.length).toBeGreaterThan(1000);
     expect(src).toMatch(/join\(ext, "bash-timeout\.js"\)/);
-    expect(src).toMatch(/\["luna-tools-compat\.js", "image-budget\.js", "bash-timeout\.js"\]/);
+    expect(src).toMatch(/\["luna-tools-compat\.js", "image-budget\.js", "bash-timeout\.js", "tether-gateway\.js"\]/);
   });
 });

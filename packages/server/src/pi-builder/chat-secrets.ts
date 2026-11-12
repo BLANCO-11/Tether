@@ -188,3 +188,30 @@ export function forgeNoteFor(caught: Array<{ name: string }>): string {
   const names = caught.map((c) => c.name).join(", ");
   return `\n\n(Tether: the person pasted ${n} secret${n === 1 ? "" : "s"} into this message. They were moved to this chat's vault as ${names} and replaced above with {{secret:<name>}}. They are not usable until the person chooses each one's website on the card under their message. Never ask them to paste a key into the chat again; to call an API with a secret use node tools/http.mjs ... --secret <name>.)`;
 }
+
+const VAULT_LINE_MAX = 10;
+
+/** The per-turn line about this chat's vault (Forge Agent). Names and websites only, never a value. */
+export function vaultLine(secrets: ChatSecretView[]): string {
+  if (!secrets.length) {
+    return "No keys in this chat's vault. If a job needs an API key, ask the person to add it with the key button under the message box — never ask them to paste it into chat.";
+  }
+  const sentAs = (p: ChatSecretView["placement"]) =>
+    p.kind === "bearer" ? "bearer" : p.kind === "header" ? `header ${p.name ?? ""}`.trim() : `query ${p.name ?? ""}`.trim();
+  const active = secrets.filter((v) => v.status === "active");
+  const pending = secrets.filter((v) => v.status === "pending");
+  const shown = [...active, ...pending].slice(0, VAULT_LINE_MAX);
+  const parts = shown.map((v) =>
+    v.status === "pending"
+      ? `${v.name} (waiting for the person to choose its website)`
+      : `${v.name} — for ${[v.host, ...v.extraHosts].filter(Boolean).join(", ")}, sent as ${sentAs(v.placement)}`,
+  );
+  const more = secrets.length > shown.length ? `; and ${secrets.length - shown.length} more` : "";
+  const first = active[0];
+  return (
+    `Keys saved in this chat's vault (use them by name; you never see the values): ${parts.join("; ")}${more}.` +
+    (first
+      ? ` Call a web API with: node tools/http.mjs GET https://${first.host ?? "<host>"}/... --secret ${first.name}. A saved key does NOT need a connected service.`
+      : "")
+  );
+}

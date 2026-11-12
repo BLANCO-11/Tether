@@ -77,7 +77,7 @@ import { droppedSources, fixPrompt, noProgress, routeFailure, sourceList } from 
 import { firstNameOf, newWelcome, savedWelcome, type WelcomeCatalogue } from "./welcome.js";
 import { workspaceRepo } from "../repositories/workspace.repo.js";
 import { chatSecretService } from "../services/chat-secret.service.js";
-import { ChatSecretError, forgeNoteFor, interceptSecrets } from "./chat-secrets.js";
+import { ChatSecretError, forgeNoteFor, interceptSecrets, vaultLine, type ChatSecretView } from "./chat-secrets.js";
 import { makeScrubber, scrubDeep } from "./scrub.js";
 import {
   DEFAULT_FORGE_HTTP_CAPS,
@@ -968,6 +968,8 @@ export function withAttachments(text: string, files: PiAttachment[]): string {
 export type TurnWorkspace = {
   purpose: string | null;
   assistant: boolean;
+  /** Forge Agent: this chat's vault (names only), said every turn; undefined leaves the line out. */
+  vault?: ChatSecretView[];
   files?: string[];
   /** Plugins POC — the workspace's plugin tools (connected services), named so Forge Agent can read from them. */
   plugins?: string[];
@@ -1045,6 +1047,7 @@ export function workspaceLines(ws: TurnWorkspace): string[] {
         ? FILES_UNREAD
         : "Workspace Files (Resources → Files): none.",
   ];
+  if (ws.vault) lines.push(vaultLine(ws.vault));
   // ⚠ Which services this person can reach is said EVERY turn, whether or not any action is on (2026-10-29). It was
   // said only when tools were on, so a service connected with nothing switched on yet — the usual state right after
   // connecting — was invisible, and Forge guessed names ("github", "Foundry") and told the person it was not connected.
@@ -1052,7 +1055,7 @@ export function workspaceLines(ws: TurnWorkspace): string[] {
     lines.push(
       ws.services.length
         ? `Connected services you can use here: ${ws.services.join("; ")}. Use these names with node tools/connector-actions.mjs <service>; never guess one.`
-        : "Connected services: none you can use in this workspace. If the job needs one, say they can connect it as themselves (Apps → the service → Connect as yourself) or ask an Admin to connect it for the workspace.",
+        : "Connected services: none you can use in this workspace. If the job needs one, say they can connect it as themselves (Apps → the service → Connect as yourself) or ask an Admin to connect it for the workspace. (A key in this chat's vault needs no connected service: use it with tools/http.mjs.)",
     );
   }
   // Said only where there are workspace tools AND the workspace lets Forge read real data.
@@ -1777,14 +1780,6 @@ async function runTurn(
     throw err;
   }
 
-  // Before any event: this chat's secrets (maybe just added) must be known to the scrubber.
-  await refreshScrubber(s);
-  if (s.abort) {
-    const err = new Error("a turn is already running") as Error & { statusCode?: number };
-    err.statusCode = 409;
-    throw err;
-  }
-
   if (s.edgeFlushTimer) {
     clearTimeout(s.edgeFlushTimer);
     s.edgeFlushTimer = null;
@@ -1806,6 +1801,14 @@ async function runTurn(
     s.messages.push(userMsg);
     emit(s, { type: "message", message: userMsg });
     persistChat(s);
+  }
+  // Before Forge says anything: this chat's secrets (maybe just added) must be known to the scrubber. After the
+  // person's message is shown (its pasted keys were already swapped out in message()), so it does not delay it.
+  await refreshScrubber(s);
+  if (s.abort) {
+    const err = new Error("a turn is already running") as Error & { statusCode?: number };
+    err.statusCode = 409;
+    throw err;
   }
   s.lastTurn = { userText, fixRound };
   s.lastModelError = null;
@@ -1876,6 +1879,13 @@ async function runTurn(
       const turnWs: TurnWorkspace = {
         purpose: row?.description ?? null,
         assistant: row?.assistant === true,
+        vault:
+          s.mode === "agent" && s.chatId
+            ? await chatSecretService.names(s.chatId).catch((e) => {
+                console.warn(`[pi-builder] could not read the chat's vault for the turn: ${(e as Error).message}`);
+                return undefined;
+              })
+            : undefined,
         files: fileNames,
         plugins: pluginNames,
         changes: s.mode === "agent" && row?.assistant === true && row?.agentChanges === true,
@@ -2481,7 +2491,7 @@ export const piBuilderService = {
     }
     // The person's first message saves the chat (0095); the files it sends are kept with it.
     const chatId = await ensureChat(s, chatTitle(safe, attached.map((f) => f.name), s.goal), by ?? null);
-    const kept = await keepCaughtSecrets(s, chatId, caught, by ?? null);
+    const kept = caught.length ? await keepCaughtSecrets(s, chatId, caught, by ?? null) : { names: [] as string[], note: "" };
     await keepSentFiles(s, chatId, attached);
     readyForTurn(s);
     // The person's words are shown as they wrote them; the agent is also told where the files are.

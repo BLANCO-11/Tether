@@ -6,6 +6,7 @@ import {
   interceptSecrets,
   placementSchema,
   toView,
+  vaultLine,
 } from "./chat-secrets.js";
 
 const KEY = "twtr_9fK2LmQ8xZ7pR4sT1vW3yB6n";
@@ -80,5 +81,22 @@ describe("chat secrets", () => {
   it("forgeNoteFor is empty for nothing", () => {
     expect(forgeNoteFor([])).toBe("");
     expect(forgeNoteFor([{ name: "twtr-key" }])).toContain("twtr-key");
+  });
+});
+
+describe("vaultLine", () => {
+  const base = { id: "1", createdAt: "", expiresAt: null, lastUsedAt: null, extraHosts: [] as string[] };
+  it("lists active keys with host, placement and the http tool, and says no service is needed", () => {
+    const l = vaultLine([{ ...base, name: "twitterapikey", status: "active", host: "api.twitterapis.com", placement: { kind: "bearer", name: null } }]);
+    expect(l).toContain("twitterapikey — for api.twitterapis.com, sent as bearer");
+    expect(l).toContain("node tools/http.mjs GET https://api.twitterapis.com/... --secret twitterapikey");
+    expect(l).toContain("does NOT need a connected service");
+  });
+  it("lists pending keys as waiting", () => {
+    const l = vaultLine([{ ...base, name: "k2", status: "pending", host: null, placement: { kind: "header", name: "X-Key" } }]);
+    expect(l).toContain("k2 (waiting for the person to choose its website)");
+  });
+  it("says so when the vault is empty", () => {
+    expect(vaultLine([])).toMatch(/^No keys in this chat's vault\..*key button/);
   });
 });
