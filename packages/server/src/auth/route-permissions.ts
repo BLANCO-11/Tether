@@ -33,9 +33,9 @@ import type { PlatformPermission, WorkspacePermission } from "./permissions.js";
  * `:workspaceId`. Inferring scope from "does this path contain :workspaceId" gets one of
  * those wrong in each direction, so every workspace entry names its parameter.
  *
- * Counts at generation time: **398 mounted routes** —
- * 276 workspace-scoped, 37 platform, 31 identity-only,
- * 46 exempt. ⚠ Read these from the exported arrays, never from this comment.
+ * Counts at generation time: **406 mounted routes** —
+ * 282 workspace-scoped, 37 platform, 31 identity-only,
+ * 48 exempt. ⚠ Read these from the exported arrays, never from this comment.
  */
 
 export type RouteRequirement =
@@ -86,6 +86,7 @@ export const ROUTE_PERMISSIONS: ReadonlyMap<string, RouteRequirement> = Object.f
     ["DELETE /api/workspaces/:workspaceId/member-capabilities/:subject/:capability", { kind: "workspace", permission: "members.grant", param: "workspaceId" }],
     ["DELETE /api/workspaces/:workspaceId/members/:subject", { kind: "workspace", permission: "members.grant", param: "workspaceId" }],
     ["DELETE /api/workspaces/:workspaceId/pi-builder/chats/:chatId", { kind: "workspace", permission: "flows.read", param: "workspaceId" }],
+    ["DELETE /api/workspaces/:workspaceId/pi-builder/chats/:chatId/secrets/:name", { kind: "workspace", permission: "flows.read", param: "workspaceId" }],
     ["DELETE /api/workspaces/:workspaceId/pi-builder/sessions/:sessionId", { kind: "workspace", permission: "flows.write", param: "workspaceId" }],
     ["DELETE /api/workspaces/:workspaceId/pi-builder/sessions/:sessionId/attachments/:name", { kind: "workspace", permission: "flows.write", param: "workspaceId" }],
     ["DELETE /api/workspaces/:workspaceId/pi-builder/sessions/:sessionId/files/:name", { kind: "workspace", permission: "flows.write", param: "workspaceId" }],
@@ -177,6 +178,7 @@ export const ROUTE_PERMISSIONS: ReadonlyMap<string, RouteRequirement> = Object.f
     ["GET /api/workspaces/:workspaceId/pi-builder/chats/:chatId", { kind: "workspace", permission: "flows.read", param: "workspaceId" }],
     ["GET /api/workspaces/:workspaceId/pi-builder/chats/:chatId/files/:name", { kind: "workspace", permission: "flows.read", param: "workspaceId" }],
     ["GET /api/workspaces/:workspaceId/pi-builder/chats/:chatId/move-preview", { kind: "workspace", permission: "flows.read", param: "workspaceId" }],
+    ["GET /api/workspaces/:workspaceId/pi-builder/chats/:chatId/secrets", { kind: "workspace", permission: "flows.read", param: "workspaceId" }],
     ["GET /api/workspaces/:workspaceId/pi-builder/sessions/:sessionId", { kind: "workspace", permission: "flows.read", param: "workspaceId" }],
     ["GET /api/workspaces/:workspaceId/pi-builder/sessions/:sessionId/background", { kind: "workspace", permission: "flows.read", param: "workspaceId" }],
     ["GET /api/workspaces/:workspaceId/pi-builder/sessions/:sessionId/events", { kind: "workspace", permission: "flows.read", param: "workspaceId" }],
@@ -214,6 +216,7 @@ export const ROUTE_PERMISSIONS: ReadonlyMap<string, RouteRequirement> = Object.f
     ["PATCH /api/workspaces/:workspaceId/flows/:flowId/triggers/:tid", { kind: "workspace", permission: "flows.arm", param: "workspaceId" }],
     ["PATCH /api/workspaces/:workspaceId/incidents/:id", { kind: "workspace", permission: "incidents.write", param: "workspaceId" }],
     ["PATCH /api/workspaces/:workspaceId/pi-builder/chats/:chatId", { kind: "workspace", permission: "flows.read", param: "workspaceId" }],
+    ["PATCH /api/workspaces/:workspaceId/pi-builder/chats/:chatId/secrets/:name", { kind: "workspace", permission: "flows.read", param: "workspaceId" }],
     ["PATCH /api/workspaces/:workspaceId/pi-builder/sessions/:sessionId/references/:refId", { kind: "workspace", permission: "flows.write", param: "workspaceId" }],
     ["PATCH /api/workspaces/:workspaceId/plugins/connections/:connectionId", { kind: "workspace", permission: "plugins.read", param: "workspaceId" }],
     ["PATCH /api/workspaces/:workspaceId/projects/:projectId", { kind: "workspace", permission: "flows.write", param: "workspaceId" }],
@@ -289,6 +292,7 @@ export const ROUTE_PERMISSIONS: ReadonlyMap<string, RouteRequirement> = Object.f
     ["POST /api/workspaces/:workspaceId/members", { kind: "workspace", permission: "members.grant", param: "workspaceId" }],
     ["POST /api/workspaces/:workspaceId/notifications/read", { kind: "workspace", permission: "bootstrap.read", param: "workspaceId" }],
     ["POST /api/workspaces/:workspaceId/pi-builder/chats/:chatId/move", { kind: "workspace", permission: "flows.read", param: "workspaceId" }],
+    ["POST /api/workspaces/:workspaceId/pi-builder/chats/:chatId/secrets", { kind: "workspace", permission: "flows.read", param: "workspaceId" }],
     ["POST /api/workspaces/:workspaceId/pi-builder/runs", { kind: "workspace", permission: "flows.write", param: "workspaceId" }],
     ["POST /api/workspaces/:workspaceId/pi-builder/sessions", { kind: "workspace", permission: "flows.write", param: "workspaceId" }],
     ["POST /api/workspaces/:workspaceId/pi-builder/sessions/:sessionId/accept", { kind: "workspace", permission: "flows.write", param: "workspaceId" }],
@@ -298,6 +302,8 @@ export const ROUTE_PERMISSIONS: ReadonlyMap<string, RouteRequirement> = Object.f
     ["POST /api/workspaces/:workspaceId/pi-builder/sessions/:sessionId/background/:jobId/cancel", { kind: "workspace", permission: "flows.write", param: "workspaceId" }],
     ["POST /api/workspaces/:workspaceId/pi-builder/sessions/:sessionId/bind-flow", { kind: "workspace", permission: "flows.write", param: "workspaceId" }],
     ["POST /api/workspaces/:workspaceId/pi-builder/sessions/:sessionId/compact", { kind: "workspace", permission: "flows.write", param: "workspaceId" }],
+    ["POST /api/workspaces/:workspaceId/pi-builder/sessions/:sessionId/http/:proposalId/cancel", { kind: "workspace", permission: "flows.write", param: "workspaceId" }],
+    ["POST /api/workspaces/:workspaceId/pi-builder/sessions/:sessionId/http/:proposalId/send", { kind: "workspace", permission: "flows.write", param: "workspaceId" }],
     ["POST /api/workspaces/:workspaceId/pi-builder/sessions/:sessionId/mail/:proposalId/cancel", { kind: "workspace", permission: "flows.write", param: "workspaceId" }],
     ["POST /api/workspaces/:workspaceId/pi-builder/sessions/:sessionId/mail/:proposalId/send", { kind: "workspace", permission: "flows.write", param: "workspaceId" }],
     ["POST /api/workspaces/:workspaceId/pi-builder/sessions/:sessionId/messages", { kind: "workspace", permission: "flows.write", param: "workspaceId" }],
@@ -460,10 +466,12 @@ export const EXEMPT: ReadonlyMap<string, { reason: string }> = Object.freeze(
     ["POST /api/forge/edge/job", { reason: "Forge's per-conversation tool key (personal thin; polls an edge job)" }],
     ["POST /api/forge/fetch", { reason: "Forge's per-conversation tool key (a public web address read while building; web access checked in the service)" }],
     ["POST /api/forge/file", { reason: "Forge's per-conversation tool key (a workspace File opened while building)" }],
+    ["POST /api/forge/http", { reason: "Forge's per-conversation tool key (Forge Agent; GET/HEAD direct, any write becomes a card only the person's click performs; vault secrets injected server-side for their bound host)" }],
     ["POST /api/forge/mail", { reason: "Forge's per-conversation tool key (Forge Agent; emails the chat's owner only, recipient resolved in the service, no `to` accepted)" }],
     ["POST /api/forge/plugin", { reason: "Forge's per-conversation tool key (assistant mode; a connector READ — a write is refused in the service)" }],
     ["POST /api/forge/propose", { reason: "Forge's per-conversation tool key (Forge Agent; PROPOSES a change, performs nothing — the person's click does)" }],
     ["POST /api/forge/propose-setting", { reason: "Forge's per-conversation tool key (Forge Agent; PROPOSES switching an action on or off, applies nothing — the person's click does)" }],
+    ["POST /api/forge/secrets", { reason: "Forge's per-conversation tool key (Forge Agent; lists this chat's vault names and websites, never values)" }],
     ["POST /api/llm/complete", { reason: "requireLlmKey" }],
     ["POST /api/local-auth/verify", { reason: "answers before anybody has a session" }],
     ["POST /api/mail/send", { reason: "requireMailKey" }],

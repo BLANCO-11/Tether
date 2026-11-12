@@ -1,6 +1,7 @@
 import express, { Router } from "express";
 import { z } from "zod";
 import { asyncHandler } from "../middleware/error.middleware.js";
+import { forgeHttpBodySchema } from "../pi-builder/forge-http.js";
 import { forgeMailBodySchema } from "../pi-builder/forge-mail.js";
 import { listActions, piBuilderService, proposeChange, proposeSetting, showCard, usePlugin } from "../pi-builder/service.js";
 
@@ -11,6 +12,15 @@ import { listActions, piBuilderService, proposeChange, proposeSetting, showCard,
  * other gate is in the service, checked on each call.
  */
 export const forgeToolsRouter = Router();
+
+// Vault values, the tool token and strong key patterns never reach Forge in a tool answer, including error bodies,
+// which the app's error middleware sends through this same `res`.
+forgeToolsRouter.use((req, res, next) => {
+  const token = req.header("x-forge-token") ?? "";
+  const json = res.json.bind(res);
+  res.json = ((body: unknown) => json(piBuilderService.scrubForForge(token, body))) as typeof res.json;
+  next();
+});
 
 forgeToolsRouter.post(
   "/data",
@@ -56,6 +66,28 @@ forgeToolsRouter.post(
     const token = req.header("x-forge-token") ?? "";
     const body = forgeMailBodySchema.parse(req.body);
     res.json(await piBuilderService.sendOwnerMail(token, body));
+  }),
+);
+
+/** Forge Agent calls a web API (tools/http.mjs); GET/HEAD direct, writes become a card only the person's click performs; secrets injected by name, bound host only. */
+forgeToolsRouter.post(
+  "/http",
+  express.json({ limit: "1536kb" }),
+  asyncHandler(async (req, res) => {
+    const token = req.header("x-forge-token") ?? "";
+    const body = forgeHttpBodySchema.parse(req.body);
+    res.json(await piBuilderService.httpCall(token, body));
+  }),
+);
+
+/** Forge Agent lists this chat's vault: names, websites and how each is sent; never values. */
+forgeToolsRouter.post(
+  "/secrets",
+  express.json({ limit: "4kb" }),
+  asyncHandler(async (req, res) => {
+    const token = req.header("x-forge-token") ?? "";
+    z.object({}).strict().parse(req.body ?? {});
+    res.json(await piBuilderService.forgeSecrets(token));
   }),
 );
 

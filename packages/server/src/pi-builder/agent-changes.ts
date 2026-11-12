@@ -214,6 +214,12 @@ export async function performConfirmed(
 
 /** The line Forge reads at the start of the next turn about what became of its proposals. */
 export function outcomeLine(p: PiProposal): string {
+  if (p.kind === "http" && p.http) {
+    const { method, url } = p.http;
+    if (p.status === "declined") return `The person CANCELLED the ${method} request to ${url}; nothing was sent. Do not send it again unless they ask.`;
+    if (p.status === "done") return `The person confirmed the ${method} request to ${url} and it was SENT. ${p.result ?? ""}`;
+    return `The ${method} request to ${url} was NOT sent: ${p.result ?? ""}`;
+  }
   if (p.kind === "email" && p.email) {
     const who = p.email.to.join(", ") + (p.email.cc.length ? ` (cc ${p.email.cc.join(", ")})` : "");
     const subject = p.email.subject;

@@ -28,7 +28,7 @@ import { listWorkspaces } from "@/lib/api";
 import { useAsync } from "@/lib/hooks";
 import { crumbsFor } from "@/lib/breadcrumb";
 import { usePageHeaderSlot } from "@/lib/page-header";
-import { ChevronDown, ChevronLeft, Menu, Search } from "@/components/ui/icons";
+import { ChevronDown, ChevronLeft, Search } from "@/components/ui/icons";
 import { ThemeToggle } from "@/components/shell/ThemeToggle";
 import { IconButton } from "@/components/ui/IconButton";
 import { NotificationBell } from "@/components/shell/NotificationBell";
@@ -228,7 +228,7 @@ function WorkspaceSwitcher() {
   );
 }
 
-export function Topbar({ onOpenNav, navExpanded = false }: { onOpenNav?: () => void; navExpanded?: boolean }) {
+export function Topbar() {
   const pathname = usePathname();
   const router = useRouter();
   const crumbs = crumbsFor(pathname);
@@ -302,15 +302,6 @@ export function Topbar({ onOpenNav, navExpanded = false }: { onOpenNav?: () => v
             <ChevronLeft s={18} />
           </IconButton>
         )}
-        <IconButton
-          label={navExpanded ? "Collapse the navigation" : "Expand the navigation"}
-          aria-expanded={navExpanded}
-          onClick={onOpenNav}
-          className="lg:hidden"
-        >
-          <Menu s={18} />
-        </IconButton>
-
         {/* The workspace is the root of where you are — every figure on screen is scoped by it — so it leads the trail. */}
         <WorkspaceSwitcher />
         <span className="hidden text-line lg:inline" aria-hidden>

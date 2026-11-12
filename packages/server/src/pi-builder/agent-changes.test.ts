@@ -126,6 +126,12 @@ describe("a confirmed change", () => {
     expect(outcomeLine({ ...e, status: "declined" })).toMatch(/CANCELLED the email “Hi”.*nothing was sent/);
     expect(outcomeLine({ ...e, status: "failed", result: "boom" })).toMatch(/was NOT sent: boom/);
   });
+  it("an http card reports sent, cancelled and not-sent", () => {
+    const h = { ...p, kind: "http" as const, http: { method: "POST" as const, url: "https://api.x.com/a", headers: {}, body: null, contentType: null, secret: null, expiresAt: "2030-01-01T00:00:00Z" } };
+    expect(outcomeLine({ ...h, status: "done", result: "HTTP 200" })).toMatch(/confirmed the POST request to https:\/\/api.x.com\/a and it was SENT. HTTP 200/);
+    expect(outcomeLine({ ...h, status: "declined" })).toMatch(/CANCELLED the POST request.*nothing was sent/);
+    expect(outcomeLine({ ...h, status: "failed", result: "boom" })).toMatch(/was NOT sent: boom/);
+  });
 });
 
 describe("a batch: one action, many items, one card, one click", () => {

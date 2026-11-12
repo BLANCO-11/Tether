@@ -76,6 +76,26 @@ import { allowedEmptyOutputs, emptyReadsOf, filesBesideTables, largeTablesRead, 
 import { droppedSources, fixPrompt, noProgress, routeFailure, sourceList } from "./fix-loop.js";
 import { firstNameOf, newWelcome, savedWelcome, type WelcomeCatalogue } from "./welcome.js";
 import { workspaceRepo } from "../repositories/workspace.repo.js";
+import { chatSecretService } from "../services/chat-secret.service.js";
+import { ChatSecretError, forgeNoteFor, interceptSecrets } from "./chat-secrets.js";
+import { makeScrubber, scrubDeep } from "./scrub.js";
+import {
+  DEFAULT_FORGE_HTTP_CAPS,
+  ForgeHttpError,
+  cancelHttp,
+  confirmHttp,
+  draftOf,
+  executeHttp,
+  forgeHttpBodySchema,
+  guardedTransport,
+  httpPolicy,
+  prepareHttp,
+  type ForgeHttpContext,
+  type ForgeHttpDeps,
+} from "./forge-http.js";
+import { redactSecretValues } from "@foundry/redact";
+import { db } from "../db/index.js";
+import { webFetches } from "../db/schema.js";
 import { projectService } from "../services/project.service.js";
 import { webFetch, WebFetchError, type WebFetchResult } from "../services/web-fetch.service.js";
 import { projectFileService } from "../services/project-file.service.js";
@@ -188,6 +208,8 @@ type Session = {
   outBefore: Map<string, string>;
   /** The key Forge's own tools present to `/api/forge/*` (`tools/ask-data.mjs`) — this conversation's, nobody else's. */
   toolToken: string;
+  /** Removes this chat's secret values and the tool key from anything Forge says or does on its way out. */
+  scrub: (t: string) => string;
   status: PiSessionStatus;
   goal: string;
   messages: PiChatMessage[];
@@ -566,7 +588,7 @@ function persistForgeSession(s: Session) {
       console.warn(`[pi-builder] Forge's session for chat ${s.chatId} is over ${MAX_SESSION_BYTES} bytes; not stored`);
       return;
     }
-    const text = readFileSync(file, "utf8");
+    const text = s.scrub(readFileSync(file, "utf8"));
     void piChatRepo.update(s.chatId, { forgeSession: text }).catch((e) => {
       console.warn(`[pi-builder] could not store Forge's session for chat ${s.chatId}: ${(e as Error).message}`);
     });
@@ -613,7 +635,46 @@ function touch(s: Session) {
 }
 
 function emit(s: Session, ev: PiEvent) {
-  s.bus.emit("event", ev);
+  s.bus.emit("event", scrubDeep(ev, s.scrub));
+}
+
+/** Rebuild what this conversation scrubs: its chat's secret values plus the tool key. Never logs a value. */
+async function refreshScrubber(s: Session): Promise<void> {
+  try {
+    const secrets = s.chatId ? await chatSecretService.scrubSecrets(s.chatId) : [];
+    s.scrub = makeScrubber(secrets, { token: s.toolToken });
+  } catch (e) {
+    console.warn(`[pi-builder] could not load the secrets to scrub for chat ${s.chatId}: ${(e as Error).name}`);
+  }
+}
+
+// A secret added, changed or removed in a chat takes effect on that chat's live conversation at once.
+chatSecretService.onChanged((chatId) => {
+  for (const s of sessions.values()) if (s.chatId === chatId) void refreshScrubber(s);
+});
+
+/**
+ * Park the secrets caught in a message in the chat's vault (pending until the owner picks a website). Returns the names
+ * kept and the note Forge is given. If they cannot be kept the safe text still goes, and Forge is told to point the
+ * person at Add secret. Never logs a value.
+ */
+async function keepCaughtSecrets(
+  s: Session,
+  chatId: string,
+  caught: Array<{ name: string; value: string; kind: string }>,
+  by: PiAuthor | null,
+): Promise<{ names: string[]; note: string }> {
+  if (caught.length === 0) return { names: [], note: "" };
+  const owner = s.ownerSubject ?? by?.subject ?? null;
+  const couldNot = `\n\n(Tether: the key could not be kept in the vault, so no secret by that name exists. Tell the person, and ask them to add it with Add secret under the message box.)`;
+  if (!owner) return { names: [], note: forgeNoteFor(caught) + couldNot };
+  try {
+    const names = await chatSecretService.storePending(s.workspaceId, chatId, owner, caught);
+    return { names, note: forgeNoteFor(caught) };
+  } catch (e) {
+    console.warn(`[pi-builder] could not keep ${caught.length} pasted secret(s) for chat ${chatId}: ${(e as Error).name}`);
+    return { names: [], note: forgeNoteFor(caught) + couldNot };
+  }
 }
 
 /**
@@ -624,7 +685,7 @@ function emit(s: Session, ev: PiEvent) {
  */
 function persistChat(s: Session) {
   if (!s.chatId) return;
-  const messages = s.messages.filter((m) => !m.welcome);
+  const messages = scrubDeep(s.messages.filter((m) => !m.welcome), s.scrub);
   const draftBundle = s.flowId ? null : { ...readBundle(s.workspaceId, s.id), goal: s.goal };
   void piChatRepo.update(s.chatId, { messages, draftBundle, goal: s.goal, connectionChoices: s.accounts }).catch((e) => {
     console.warn(`[pi-builder] could not store chat ${s.chatId}: ${(e as Error).message}`);
@@ -782,10 +843,10 @@ function publicOf(s: Session): PiSessionPublic {
     chatId: s.chatId,
     status: s.status,
     goal: s.goal,
-    messages: s.messages,
-    liveActivities: s.liveActivities,
-    draftText: s.status === "running" ? s.draftText : "",
-    draftThinking: s.status === "running" ? s.draftThinking : "",
+    messages: scrubDeep(s.messages, s.scrub),
+    liveActivities: scrubDeep(s.liveActivities, s.scrub),
+    draftText: s.status === "running" ? s.scrub(s.draftText) : "",
+    draftThinking: s.status === "running" ? s.scrub(s.draftThinking) : "",
     workflow: readWorkflow(s.workspaceId, s.id),
     files: readBundle(s.workspaceId, s.id).files,
     questions: readQuestions(s.workspaceId, s.id),
@@ -1697,7 +1758,7 @@ async function prepareReferences(s: Session): Promise<string[]> {
   return cardsBlock(refs, s.refsMoved.splice(0));
 }
 
-type RunTurnShown = Pick<PiChatMessage, "text" | "answers" | "by" | "attachments" | "silent"> & {
+type RunTurnShown = Pick<PiChatMessage, "text" | "answers" | "by" | "attachments" | "silent" | "secretsCaught"> & {
   /** Edge jobs already finished — show under What Forge did; chat reply stays a short summary. */
   seedActivities?: PiActivity[];
 };
@@ -1710,6 +1771,14 @@ async function runTurn(
   /** Try again: re-run the last turn — no second copy of the person's message in the chat. */
   retry = false,
 ) {
+  if (s.abort) {
+    const err = new Error("a turn is already running") as Error & { statusCode?: number };
+    err.statusCode = 409;
+    throw err;
+  }
+
+  // Before any event: this chat's secrets (maybe just added) must be known to the scrubber.
+  await refreshScrubber(s);
   if (s.abort) {
     const err = new Error("a turn is already running") as Error & { statusCode?: number };
     err.statusCode = 409;
@@ -1731,6 +1800,7 @@ async function runTurn(
     ...(fixRound === 0 && shown?.by ? { by: shown.by } : {}),
     ...(fixRound === 0 && shown?.attachments?.length ? { attachments: shown.attachments } : {}),
     ...(fixRound === 0 && shown?.silent ? { silent: true } : {}),
+    ...(fixRound === 0 && shown?.secretsCaught?.length ? { secretsCaught: shown.secretsCaught } : {}),
   };
   if (!retry) {
     s.messages.push(userMsg);
@@ -1884,10 +1954,12 @@ async function runTurn(
       ended === "failed" || ended === "timeout" || ended === "exited" || ended === "refused"
         ? turnFailure(ended, { modelError: s.lastModelError, minutes, exitCode: end.exitCode, stderr: end.stderr, reason: end.reason })
         : null;
-    const text = error
-      ? `${error.title}. ${error.said}`
-      : s.draftText.trim() ||
-        (end.ended === "aborted" ? "Stopped." : q.status === "open" ? "A couple of things to settle before I build this." : "Done for now.");
+    const text = s.scrub(
+      error
+        ? `${error.title}. ${error.said}`
+        : s.draftText.trim() ||
+            (end.ended === "aborted" ? "Stopped." : q.status === "open" ? "A couple of things to settle before I build this." : "Done for now."),
+    );
     const ok = ended === "done";
 
     const assistant: PiChatMessage = {
@@ -1895,11 +1967,11 @@ async function runTurn(
       role: "assistant",
       text,
       at: new Date().toISOString(),
-      activities: [...s.liveActivities],
+      activities: scrubDeep([...s.liveActivities], s.scrub),
       mode: s.mode,
       ...(error ? { error } : {}),
       ...(s.draftThinking.trim()
-        ? { thinking: { text: s.draftThinking.trim(), ms: s.thinkingMs + (s.thinkingSince != null ? Date.now() - s.thinkingSince : 0) } }
+        ? { thinking: { text: s.scrub(s.draftThinking.trim()), ms: s.thinkingMs + (s.thinkingSince != null ? Date.now() - s.thinkingSince : 0) } }
         : {}),
       ...(outputs.made.length ? { files: outputs.made } : {}),
       ...(s.proposals.length ? { proposals: s.proposals.splice(0) } : {}),
@@ -2033,6 +2105,7 @@ export type CreatePiSessionOpts = {
 export const piBuilderService = {
   decideProposal,
   decideEmail,
+  decideHttp,
   decideRelayInbox,
   clearAccount,
   async create(workspaceId: string, opts: CreatePiSessionOpts | string = {}): Promise<PiSessionPublic> {
@@ -2137,6 +2210,7 @@ export const piBuilderService = {
       projectId: chat ? null : o.projectId?.trim() || saved?.flow.projectId || null,
       outBefore: outSnapshot(workspaceId, id),
       toolToken,
+      scrub: makeScrubber([], { token: toolToken }),
       status: saved || readWorkflow(workspaceId, id).steps.length ? "ready" : "idle",
       goal: startGoal,
       // A reopened chat brings its conversation back, then today's welcome — except an unsaved chat picking up where
@@ -2197,6 +2271,7 @@ export const piBuilderService = {
     sessions.set(id, s);
     toolTokens.set(toolToken, id);
     scopeIndex.set(sk, id);
+    if (s.chatId) await refreshScrubber(s);
     // The chat is open: load its Forge now, so the first message does not wait for one to start.
     forgePool.warm(workspaceId, id);
     void refreshContext(s);
@@ -2397,17 +2472,22 @@ export const piBuilderService = {
       throw err;
     }
     readyForTurn(s);
-    if (s.mode === "workflow" && !s.goal.trim() && looksLikeAutomationGoal(trimmed)) {
-      s.goal = trimmed;
-      writeGoal(s.workspaceId, s.id, trimmed);
+    // A key pasted into the message is swapped for {{secret:name}} BEFORE anything is stored, shown or sent.
+    const existing = s.chatId ? (await chatSecretService.names(s.chatId)).map((v) => v.name) : [];
+    const { text: safe, caught } = interceptSecrets(trimmed, existing);
+    if (s.mode === "workflow" && !s.goal.trim() && looksLikeAutomationGoal(safe)) {
+      s.goal = safe;
+      writeGoal(s.workspaceId, s.id, safe);
     }
     // The person's first message saves the chat (0095); the files it sends are kept with it.
-    const chatId = await ensureChat(s, chatTitle(trimmed, attached.map((f) => f.name), s.goal), by ?? null);
+    const chatId = await ensureChat(s, chatTitle(safe, attached.map((f) => f.name), s.goal), by ?? null);
+    const kept = await keepCaughtSecrets(s, chatId, caught, by ?? null);
     await keepSentFiles(s, chatId, attached);
     readyForTurn(s);
     // The person's words are shown as they wrote them; the agent is also told where the files are.
-    void runTurn(s, withAttachments(trimmed, attached), 0, {
-      text: trimmed,
+    void runTurn(s, withAttachments(safe, attached) + kept.note, 0, {
+      text: safe,
+      ...(kept.names.length ? { secretsCaught: kept.names } : {}),
       ...(by ? { by } : {}),
       ...(attached.length ? { attachments: attached } : {}),
     });
@@ -2425,8 +2505,19 @@ export const piBuilderService = {
     const forge = forgePool.peek(s.id);
     const refusal = steerRefusal({ running: s.abort != null, testing: s.testing, compacting: s.compacting, forgeBusy: forge?.busy === true });
     if (refusal) throw httpErr(refusal, 409);
-    if (!forge!.steer(trimmed)) throw httpErr("Forge is checking its work now. Your message will wait until it finishes.", 409);
-    const msg: PiChatMessage = { id: randomUUID(), role: "user", text: trimmed, at: new Date().toISOString(), mode: s.mode, ...(by ? { by } : {}) };
+    const existing = s.chatId ? (await chatSecretService.names(s.chatId)).map((v) => v.name) : [];
+    const { text: safe, caught } = interceptSecrets(trimmed, existing);
+    const kept = s.chatId ? await keepCaughtSecrets(s, s.chatId, caught, by ?? null) : { names: [] as string[], note: forgeNoteFor(caught) };
+    if (!forge!.steer(safe + kept.note)) throw httpErr("Forge is checking its work now. Your message will wait until it finishes.", 409);
+    const msg: PiChatMessage = {
+      id: randomUUID(),
+      role: "user",
+      text: safe,
+      at: new Date().toISOString(),
+      mode: s.mode,
+      ...(kept.names.length ? { secretsCaught: kept.names } : {}),
+      ...(by ? { by } : {}),
+    };
     s.messages.push(msg);
     emit(s, { type: "message", message: msg });
     persistChat(s);
@@ -3099,6 +3190,98 @@ export const piBuilderService = {
       if (e instanceof ForgeMailError) throw httpErr(e.message, e.statusCode);
       throw e;
     }
+  },
+
+  /**
+   * Forge Agent calls a web API (tools/http.mjs). A read runs now; anything that changes something becomes a card, and
+   * only the owner's click (`decideHttp`, a user-authenticated route) sends it. The token can never confirm a card.
+   */
+  async httpCall(
+    token: string,
+    input: z.infer<typeof forgeHttpBodySchema>,
+  ): Promise<
+    | { status: "done"; http: Awaited<ReturnType<typeof executeHttp>> }
+    | { status: "pending"; id: string; message: string }
+  > {
+    const sid = toolTokens.get(token);
+    const s = sid ? sessions.get(sid) : undefined;
+    if (!s) throw httpErr("This key does not belong to an open conversation.", 401);
+    if (!s.abort) throw httpErr("Web requests can only be made while Forge is answering a message.", 409);
+    try {
+      const deps = forgeHttpDeps(s);
+      const ctx: ForgeHttpContext = { workspaceId: s.workspaceId, sessionId: s.id, chatId: s.chatId, mode: s.mode, actor: s.requester.actor };
+      const prepared = await prepareHttp(ctx, input, deps);
+      if ((await httpPolicy(ctx, { method: prepared.method, url: prepared.url, secret: prepared.secret?.name ?? null })) === "direct") {
+        return { status: "done", http: await executeHttp(ctx, prepared, deps) };
+      }
+      if (s.proposals.length >= MAX_PROPOSALS_PER_TURN) {
+        throw httpErr(`At most ${MAX_PROPOSALS_PER_TURN} changes can be proposed in one reply. Nothing was sent. Let the person decide these first.`, 409);
+      }
+      const draft = draftOf(prepared, Date.now(), s.scrub);
+      const p: PiProposal = {
+        id: randomUUID(),
+        tool: "http",
+        connector: "Web request",
+        action: `${draft.method} request`,
+        summary: `${draft.method} ${prepared.url.host}${prepared.url.pathname}`.slice(0, 300),
+        params: {},
+        status: "pending",
+        at: new Date().toISOString(),
+        kind: "http",
+        http: draft,
+      };
+      s.proposals.push(p);
+      const t = setTimeout(() => void expireHttpCard(s, p), Date.parse(draft.expiresAt) - Date.now() + 1000);
+      t.unref?.();
+      return {
+        status: "pending",
+        id: p.id,
+        message:
+          "Not sent yet. The person sees a card under your reply with the exact request (method, address, headers, body, and which secret it uses), with Send and Cancel; only their click sends it, within 30 minutes. Say what it will do and that it happens only when they click Send. Do not run it again for this request and do not say it was done. At the start of your next turn you are told the outcome.",
+      };
+    } catch (e) {
+      if (e instanceof ForgeHttpError) throw httpErr(e.message, e.statusCode);
+      throw e;
+    }
+  },
+
+  /** The names and websites of this chat's secrets, for Forge to choose from. Never a value. */
+  async forgeSecrets(token: string): Promise<{
+    secrets: Array<{ name: string; status: string; hosts: string[]; sentAs: { kind: string; name: string | null } }>;
+  }> {
+    const sid = toolTokens.get(token);
+    const s = sid ? sessions.get(sid) : undefined;
+    if (!s) throw httpErr("This key does not belong to an open conversation.", 401);
+    const list = s.chatId ? await chatSecretService.names(s.chatId) : [];
+    return {
+      secrets: list.map((v) => ({
+        name: v.name,
+        status: v.status,
+        hosts: [v.host, ...v.extraHosts].filter((h): h is string => !!h),
+        sentAs: v.placement,
+      })),
+    };
+  },
+
+  /** Scrub a response body on its way back to Forge's tool: this chat's secrets and key if it is live, else the generic patterns. */
+  scrubForForge(token: string, body: unknown): unknown {
+    const sid = toolTokens.get(token);
+    const s = sid ? sessions.get(sid) : undefined;
+    return scrubDeep(body, s ? s.scrub : (t: string) => redactSecretValues(t));
+  },
+
+  // The chat's vault, for the routes (the person's own session; the owner rule is the service's).
+  async secretsList(workspaceId: string, chatId: string, person: { subject: string }) {
+    return vault(() => chatSecretService.list(workspaceId, chatId, person));
+  },
+  async secretsCreate(workspaceId: string, chatId: string, person: { subject: string }, input: unknown) {
+    return vault(() => chatSecretService.create(workspaceId, chatId, person, input));
+  },
+  async secretsUpdate(workspaceId: string, chatId: string, name: string, person: { subject: string }, input: unknown) {
+    return vault(() => chatSecretService.update(workspaceId, chatId, name, person, input));
+  },
+  async secretsRemove(workspaceId: string, chatId: string, name: string, person: { subject: string }) {
+    return vault(() => chatSecretService.remove(workspaceId, chatId, name, person));
   },
 
   async askData(token: string, datasource: string, sql: string): Promise<{ rows: unknown[]; total: number; shown: number }> {
@@ -4403,6 +4586,118 @@ async function approvePendingEdgeUnderFolder(
 }
 
 /** The chat owner's click on an email card: only this (user-authenticated) path sends or cancels a drafted email. */
+/** Map the vault's own error to an HTTP one. */
+async function vault<T>(run: () => Promise<T>): Promise<T> {
+  try {
+    return await run();
+  } catch (e) {
+    if (e instanceof ChatSecretError) throw httpErr(e.message, e.statusCode);
+    throw e;
+  }
+}
+
+/** What `tools/http.mjs` runs against: this chat's vault and the workspace's web-access switch. */
+function forgeHttpDeps(s: Session): ForgeHttpDeps {
+  return {
+    webAccess: async () => (await workspaceRepo.get(s.workspaceId))?.webAccess === true,
+    secret: async (name) => (s.chatId ? chatSecretService.forUse(s.chatId, name) : null),
+    markUsed: async (name) => {
+      if (s.chatId) await chatSecretService.markUsed(s.chatId, name);
+    },
+    transport: guardedTransport,
+    record: async (r) => {
+      await db
+        .insert(webFetches)
+        .values({
+          workspaceId: r.workspaceId,
+          executionId: null,
+          stepId: null,
+          sessionId: r.sessionId.slice(0, 64),
+          actor: r.actor?.slice(0, 255) ?? null,
+          url: r.url,
+          finalUrl: r.finalUrl,
+          status: r.status,
+          contentType: r.contentType,
+          bytes: r.bytes,
+          durationMs: r.durationMs,
+          ok: r.ok,
+          error: r.error,
+          method: r.method,
+          secretName: r.secretName,
+          chatId: r.chatId,
+        })
+        .catch((e) => console.warn(`[forge-http] could not record a call: ${(e as Error).message}`));
+    },
+    scrub: (t) => s.scrub(t),
+    now: Date.now,
+    caps: { ...DEFAULT_FORGE_HTTP_CAPS, timeoutMs: config.forge.httpTimeoutMs, maxBytes: config.forge.httpMaxBytes },
+  };
+}
+
+/** A request card nobody confirmed in time: mark it failed and tell Forge on its next turn. */
+async function expireHttpCard(s: Session, p: PiProposal): Promise<void> {
+  if (p.status !== "pending" || !p.http) return;
+  p.status = "failed";
+  p.result = "Expired: not confirmed within 30 minutes; nothing was sent.";
+  p.decidedAt = new Date().toISOString();
+  s.proposalOutcomes.push(outcomeLine(p));
+  emit(s, { type: "messages", messages: s.messages });
+  persistChat(s);
+}
+
+async function decideHttp(
+  workspaceId: string,
+  sessionId: string,
+  proposalId: string,
+  decision: "send" | "cancel",
+  person: { subject: string; email?: string | null; name?: string | null },
+): Promise<PiProposal> {
+  const s = getOrThrow(workspaceId, sessionId);
+  const p =
+    s.messages.flatMap((m) => m.proposals ?? []).find((x) => x.id === proposalId && x.kind === "http") ??
+    s.proposals.find((x) => x.id === proposalId && x.kind === "http");
+  if (!p || !p.http) throw httpErr("There is no such request in this chat.", 404);
+  try {
+    assertChatOwner(s.ownerSubject, person.subject);
+  } catch (e) {
+    if (e instanceof ForgeMailError) throw httpErr(e.message, e.statusCode);
+    throw e;
+  }
+  if (p.status !== "pending") {
+    throw httpErr(`This request was already ${p.status === "declined" ? "cancelled" : p.status === "done" ? "sent" : "decided"}.`, 409);
+  }
+  const label = person.email || person.name || person.subject;
+  const ctx: ForgeHttpContext = { workspaceId: s.workspaceId, sessionId: s.id, chatId: s.chatId, mode: s.mode, actor: label };
+  const update = (patch: Partial<PiProposal>) => {
+    Object.assign(p, patch);
+    emit(s, { type: "messages", messages: s.messages });
+    persistChat(s);
+  };
+  if (decision === "cancel") {
+    update({ status: "declined", decidedBy: label, decidedAt: new Date().toISOString(), result: "Cancelled; nothing was sent." });
+    await cancelHttp(ctx, p.http, { label }, forgeHttpDeps(s)).catch((e) =>
+      console.warn(`[forge-http] could not record the cancel: ${(e as Error).message}`),
+    );
+    s.proposalOutcomes.push(outcomeLine(p));
+    return p;
+  }
+  // Stage 2 will add a `remember` argument ('chat' | 'always') here, applied through httpPolicy; not now.
+  // Synchronously, before any await: a second click finds it no longer pending and gets 409.
+  update({ status: "running", decidedBy: label, decidedAt: new Date().toISOString() });
+  try {
+    const r = await confirmHttp(ctx, p.http, forgeHttpDeps(s));
+    update({ status: r.outcome === "done" ? "done" : "failed", result: s.scrub(r.message) });
+  } catch (e) {
+    if (e instanceof ForgeHttpError && e.statusCode === 429) {
+      update({ status: "pending", decidedBy: null, decidedAt: null });
+      throw httpErr(e.message, 429);
+    }
+    update({ status: "failed", result: s.scrub((e as Error).message) });
+  }
+  s.proposalOutcomes.push(outcomeLine(p));
+  return p;
+}
+
 async function decideEmail(
   workspaceId: string,
   sessionId: string,
@@ -4476,6 +4771,7 @@ async function decideProposal(
   if (at < 0) throw httpErr("There is no such proposed change in this chat.", 404);
   const p = s.messages[at]!.proposals!.find((x) => x.id === proposalId)!;
   if (p.kind === "email") throw httpErr("Use Send or Cancel on the email card.", 400);
+  if (p.kind === "http") throw httpErr("Use Send or Cancel on the request card.", 400);
   if (p.status !== "pending") throw httpErr(`This change was already ${p.status === "running" ? "started" : p.status}.`, 409);
   // Edge / plugin-relay cards: device or relay owner is the audience. Do NOT use the "asker" rule —
   // a Foundry auto-continue lands as a user row with `by.subject: null` and used to 403 the real person ("bruh").

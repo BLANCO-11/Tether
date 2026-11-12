@@ -6,7 +6,7 @@
 // own request to the server, which re-checks the rules and runs exactly the values shown here, once. The values are
 // shown in full, as they will be sent — what the person reads is what runs.
 import { useState } from "react";
-import type { EdgeAlways, GrantScope, PiAccount, PiEmailDraft, PiAccountQuestion, PiEdgeJob, PiProposal, PiSettingChange } from "@/lib/pi-builder";
+import type { EdgeAlways, PiHttpDraft, GrantScope, PiAccount, PiEmailDraft, PiAccountQuestion, PiEdgeJob, PiProposal, PiSettingChange } from "@/lib/pi-builder";
 import { commandFamily, edgeActionLine, edgeFolderHint } from "@/lib/edge-folder-hint";
 import { SurfaceCard } from "./SurfaceCard";
 import { Button } from "@/components/ui/Button";
@@ -129,12 +129,15 @@ export function accountName(a: PiAccount): string {
   return `${a.personal ? "your own" : "the workspace's"} “${a.label}”`;
 }
 
-export function ProposalCard({ p, onDecide, onEmail }: { p: PiProposal; onDecide: Decide | null; onEmail?: ((id: string, decision: "send" | "cancel") => Promise<void>) | null }) {
+type SendDecide = (id: string, decision: "send" | "cancel") => Promise<void>;
+
+export function ProposalCard({ p, onDecide, onEmail, onHttp }: { p: PiProposal; onDecide: Decide | null; onEmail?: SendDecide | null; onHttp?: SendDecide | null }) {
   if (p.kind === "setting" && p.setting) return <SettingCard p={p} s={p.setting} onDecide={onDecide} />;
   if (p.kind === "account" && p.choice) return <AccountCard p={p} q={p.choice} onDecide={onDecide} />;
   if (p.kind === "edge" && p.edge) return <EdgeCard p={p} e={p.edge} onDecide={onDecide} />;
   if (p.kind === "surface" && p.surface) return <SurfaceCard p={p} onDecide={onDecide} />;
   if (p.kind === "email" && p.email) return <EmailCard p={p} m={p.email} onEmail={onEmail ?? null} />;
+  if (p.kind === "http" && p.http) return <HttpCard p={p} h={p.http} onHttp={onHttp ?? null} />;
   return <ActionCard p={p} onDecide={onDecide} />;
 }
 
@@ -210,6 +213,89 @@ function EmailCard({ p, m, onEmail }: { p: PiProposal; m: PiEmailDraft; onEmail:
           <span className="text-caption text-dim">
             {`Nothing is sent until you click Send. It goes to ${count} ${count === 1 ? "address" : "addresses"} exactly as shown, from Tether's mail service, and is recorded.`}
           </span>
+        </div>
+      )}
+      {expired ? <p className="text-caption text-dim">This card expired, so nothing was sent. Ask Forge again.</p> : null}
+      {(p.status === "done" || p.status === "failed") && p.result ? (
+        <div className={`pc-outcome ${p.status === "done" ? "ok" : "danger"}`}>
+          <span className="min-w-0 whitespace-pre-wrap break-words">{p.result}</span>
+        </div>
+      ) : null}
+      {p.decidedBy && p.status !== "pending" && (
+        <p className="text-caption text-dim">
+          {p.status === "declined" ? "Cancelled" : p.status === "done" ? "Sent" : "Tried"} by {p.decidedBy}
+          {p.decidedAt ? ` · ${new Date(p.decidedAt).toLocaleString()}` : ""}
+        </p>
+      )}
+      {error && <p className="text-xs text-danger">{error}</p>}
+    </section>
+  );
+}
+
+function secretLine(sec: NonNullable<PiHttpDraft["secret"]>): string {
+  const how = sec.placement.kind === "bearer" ? "bearer token" : sec.placement.kind === "header" ? `header ${sec.placement.name}` : `query parameter ${sec.placement.name}`;
+  return `${sec.name}, sent as ${how} to ${sec.host} only`;
+}
+
+/**
+ * Forge drafted this web request. Only this click (the person's own request, to a route Forge has no key for) sends
+ * exactly what is shown here. A secret is named, never shown: the server adds its value when it sends.
+ */
+function HttpCard({ p, h, onHttp }: { p: PiProposal; h: PiHttpDraft; onHttp: SendDecide | null }) {
+  const [busy, setBusy] = useState<"send" | "cancel" | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const expired = p.status === "pending" && Date.now() > Date.parse(h.expiresAt);
+  const state = expired ? { label: "Expired", tone: "neutral" as const } : EMAIL_STATE[p.status];
+  const decide = async (d: "send" | "cancel") => {
+    if (!onHttp) return;
+    setBusy(d);
+    setError(null);
+    try {
+      await onHttp(p.id, d);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(null);
+    }
+  };
+  const headers = Object.entries(h.headers);
+  return (
+    <section aria-label={`Web request to send: ${p.summary}`} className="pc-card">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="pc-eyebrow">Web request · from this chat</span>
+        <span className="ml-auto">
+          <StatusPill status={state.tone}>{state.label}</StatusPill>
+        </span>
+      </div>
+      <p className="text-body font-medium leading-snug text-text">{p.summary}</p>
+      <dl className="pc-values" aria-label="What will be sent">
+        <Fact k="Method">{h.method}</Fact>
+        <Fact k="Address">
+          <span className="break-all">{h.url}</span>
+        </Fact>
+        {headers.length > 0 ? (
+          <Fact k="Headers">
+            {headers.map(([k, v]) => (
+              <div key={k} className="break-all">{`${k}: ${v}`}</div>
+            ))}
+          </Fact>
+        ) : null}
+        {h.body ? (
+          <Fact k="Body">
+            <Value v={h.body} />
+          </Fact>
+        ) : null}
+        {h.secret ? <Fact k="Secret">{secretLine(h.secret)}</Fact> : null}
+      </dl>
+      {p.status === "pending" && !expired && (
+        <div className="flex flex-wrap items-center gap-2 pt-0.5">
+          <Button size="sm" disabled={!!busy || !onHttp} onClick={() => decide("send")}>
+            {busy === "send" ? "Sending…" : "Send"}
+          </Button>
+          <Button size="sm" variant="ghost" disabled={!!busy || !onHttp} onClick={() => decide("cancel")}>
+            Cancel
+          </Button>
+          <span className="text-caption text-dim">Nothing is sent until you click Send. Tether sends exactly this request and records it.</span>
         </div>
       )}
       {expired ? <p className="text-caption text-dim">This card expired, so nothing was sent. Ask Forge again.</p> : null}

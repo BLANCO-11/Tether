@@ -1051,6 +1051,13 @@
       "when": 1797900000000,
       "tag": "0149_tether_email_send_rename",
       "breakpoints": true
+    },
+    {
+      "idx": 150,
+      "version": "7",
+      "when": 1798000000000,
+      "tag": "0150_chat_secrets",
+      "breakpoints": true
     }
   ]
 }

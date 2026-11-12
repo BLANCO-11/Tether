@@ -158,11 +158,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         onNavigate={() => setSmallExpanded(false)}
       />
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
-        {/* The bar carries the rail toggle on small screens, so it replaces
-            the old mobile-only header rather than sitting beside it. It is now
+        {/* The rail expands by tapping it (no hamburger). The bar sits
             outside the scroll region, so it is genuinely fixed rather than
             `sticky` — which it also still declares, harmlessly. */}
-        <Topbar onOpenNav={toggleNav} navExpanded={!effectiveCollapsed} />
+        <Topbar />
         <div className="shell-scroll flex-1 overflow-y-auto">
           {/* Keyed on the workspace: switching remounts every page, so each one
               refetches its (workspace-scoped) data — no per-page wiring needed.

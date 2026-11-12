@@ -1716,6 +1716,9 @@ export const webFetches = pgTable(
     stepId: varchar("step_id", { length: 255 }),
     sessionId: varchar("session_id", { length: 64 }),
     actor: varchar("actor", { length: 255 }),
+    method: varchar("method", { length: 10 }),
+    secretName: varchar("secret_name", { length: 64 }),
+    chatId: uuid("chat_id"),
     url: text("url").notNull(),
     finalUrl: text("final_url"),
     status: integer("status"),
@@ -1985,6 +1988,35 @@ export const piChats = pgTable(
   }),
 );
 export type PiChatRow = typeof piChats.$inferSelect;
+
+/**
+ * A chat's vault (0150): a secret the person gave this chat. The value is write-only (encrypted, never returned by any
+ * route) and is deleted with its chat. It is `pending` until the owner picks the website it may be sent to.
+ */
+export const chatSecrets = pgTable(
+  "chat_secrets",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    workspaceId: uuid("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }),
+    chatId: uuid("chat_id").notNull().references(() => piChats.id, { onDelete: "cascade" }),
+    ownerSubject: varchar("owner_subject", { length: 320 }).notNull(),
+    name: varchar("name", { length: 64 }).notNull(),
+    status: varchar("status", { length: 16 }).notNull().default("active"),
+    valueEnc: text("value_enc").notNull(),
+    boundHost: varchar("bound_host", { length: 253 }),
+    extraHosts: jsonb("extra_hosts").$type<string[]>().notNull().default([]),
+    placementKind: varchar("placement_kind", { length: 16 }).notNull().default("bearer"),
+    placementName: varchar("placement_name", { length: 128 }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }),
+    lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
+  },
+  (t) => ({
+    chatName: uniqueIndex("uq_chat_secrets_chat_name").on(t.chatId, t.name),
+  }),
+);
+export type ChatSecretRow = typeof chatSecrets.$inferSelect;
 
 /** A chat's files (0095): what the person attached, and what Forge made. Encrypted, 50 MB each. */
 export const piChatFiles = pgTable(

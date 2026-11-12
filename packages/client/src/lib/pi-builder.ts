@@ -169,6 +169,8 @@ export type PiChatMessage = {
    * Server-driven turn (edge job settled): still starts a Forge turn, but the workbench does not draw an Asked bubble.
    */
   silent?: boolean;
+  /** Names of keys moved to this chat's vault from this message (the value never reached Forge). */
+  secretsCaught?: string[];
 };
 
 /**
@@ -201,7 +203,7 @@ export type PiProposal = {
    * `edge`: a job on a paired computer that needs Approve before it runs.
    * `email`: a mail Forge drafted to people other than the chat's owner; nothing is sent until the person clicks Send.
    */
-  kind?: "action" | "setting" | "account" | "edge" | "surface" | "email";
+  kind?: "action" | "setting" | "account" | "edge" | "surface" | "email" | "http";
   setting?: PiSettingChange;
   /** `chat` is only on cards decided before actions were kept per person (0117). */
   scope?: GrantScope | "chat" | null;
@@ -212,6 +214,30 @@ export type PiProposal = {
   surface?: PiSurface;
   /** The mail itself, for `kind: "email"`: everything that will go out. */
   email?: PiEmailDraft;
+  /** The web request itself, for `kind: "http"`: everything that will be sent. */
+  http?: PiHttpDraft;
+};
+
+export type ChatSecretPlacement = { kind: "header" | "query" | "bearer"; name: string | null };
+export type ChatSecret = {
+  id: string;
+  name: string;
+  status: "pending" | "active";
+  host: string | null;
+  extraHosts: string[];
+  placement: ChatSecretPlacement;
+  createdAt: string;
+  expiresAt: string | null;
+  lastUsedAt: string | null;
+};
+export type PiHttpDraft = {
+  method: "POST" | "PUT" | "PATCH" | "DELETE";
+  url: string;
+  headers: Record<string, string>;
+  body: string | null;
+  contentType: string | null;
+  secret: { name: string; host: string; placement: ChatSecretPlacement } | null;
+  expiresAt: string;
 };
 
 /** An email Forge drafted, as it will be sent. `expiresAt`: after this the card can no longer be sent. */
@@ -781,6 +807,43 @@ export function decidePiEmail(wsId: string, sessionId: string, proposalId: strin
     method: "POST",
     body: JSON.stringify({}),
   });
+}
+
+/** Send (or cancel) a web request Forge drafted. Only the person Forge was answering may. */
+export function decidePiHttp(wsId: string, sessionId: string, proposalId: string, decision: "send" | "cancel") {
+  return req<{ proposal: PiProposal }>(`/workspaces/${wsId}/pi-builder/sessions/${sessionId}/http/${proposalId}/${decision}`, {
+    method: "POST",
+    body: JSON.stringify({}),
+  });
+}
+
+/** A chat's secret vault. The value is only ever sent here, never returned. */
+export function listChatSecrets(wsId: string, chatId: string) {
+  return req<{ secrets: ChatSecret[] }>(`/workspaces/${wsId}/pi-builder/chats/${chatId}/secrets`);
+}
+
+export function createChatSecret(
+  wsId: string,
+  chatId: string,
+  body: { name: string; host: string; extraHosts?: string[]; placement: ChatSecretPlacement; value: string; expiresAt?: string | null },
+) {
+  return req<{ secret: ChatSecret }>(`/workspaces/${wsId}/pi-builder/chats/${chatId}/secrets`, { method: "POST", body: JSON.stringify(body) });
+}
+
+export function updateChatSecret(
+  wsId: string,
+  chatId: string,
+  name: string,
+  body: { value?: string; host?: string; extraHosts?: string[]; placement?: ChatSecretPlacement; expiresAt?: string | null },
+) {
+  return req<{ secret: ChatSecret }>(`/workspaces/${wsId}/pi-builder/chats/${chatId}/secrets/${encodeURIComponent(name)}`, {
+    method: "PATCH",
+    body: JSON.stringify(body),
+  });
+}
+
+export function deleteChatSecret(wsId: string, chatId: string, name: string) {
+  return req<void>(`/workspaces/${wsId}/pi-builder/chats/${chatId}/secrets/${encodeURIComponent(name)}`, { method: "DELETE" });
 }
 
 /** Do (or cancel) a change Forge Agent proposed. Only the person Forge was answering may; the server checks. */

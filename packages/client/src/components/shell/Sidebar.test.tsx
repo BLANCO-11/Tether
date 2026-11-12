@@ -180,4 +180,23 @@ describe("Sidebar — rail at every width (no drawer)", () => {
     screen.getByText("Chats").click();
     expect(onNavigate).toHaveBeenCalled();
   });
+
+  it("a tap on the collapsed rail background expands it, but a nav link does not toggle", async () => {
+    vi.mocked(api.getMe).mockResolvedValue(me(false));
+    const onToggle = vi.fn();
+    render(<Sidebar collapsed onToggleCollapsed={onToggle} />);
+    await waitFor(() => expect(document.querySelector('a[href="/chats"]')).toBeTruthy());
+    document.querySelector<HTMLElement>("nav")!.click();
+    expect(onToggle).toHaveBeenCalledTimes(1);
+    document.querySelector<HTMLElement>('a[href="/chats"]')!.click();
+    expect(onToggle).toHaveBeenCalledTimes(1);
+  });
+
+  it("the logo expands a collapsed rail instead of navigating", () => {
+    vi.mocked(api.getMe).mockResolvedValue(me(false));
+    const onToggle = vi.fn();
+    render(<Sidebar collapsed onToggleCollapsed={onToggle} />);
+    document.querySelector<HTMLElement>('a[href="/dashboard"]')!.click();
+    expect(onToggle).toHaveBeenCalledTimes(1);
+  });
 });

@@ -67,13 +67,14 @@ import {
   WorkbenchBody,
   WorkbenchRail,
 } from "@/components/layout/Workbench";
-import { Check, ChevronDown, ChevronLeft, ChevronRight, PanelRight, Paperclip, Send, Workflow } from "@/components/ui/icons";
+import { Check, ChevronDown, ChevronLeft, ChevronRight, Key, PanelRight, Paperclip, Send, Workflow } from "@/components/ui/icons";
 import { AttachmentTray, DropOverlay, FileCards, SentAttachments, useChatAttachments } from "./ChatAttachments";
 import { ReferenceChips, ReferencePicker, useWorkflowReferences } from "./WorkflowReferences";
 import { mentionAt, setPiModel, withoutMention } from "@/lib/pi-builder";
-import { ATTACH_ACCEPT, clearPiAccount, decidePiEmail, decidePiProposal, type GrantScope, type PiAccountChoice, type PiAttachment, type PiProposal } from "@/lib/pi-builder";
+import { ATTACH_ACCEPT, clearPiAccount, decidePiEmail, decidePiHttp, decidePiProposal, type GrantScope, type PiAccountChoice, type PiAttachment, type PiProposal } from "@/lib/pi-builder";
 import { ChatConnections } from "./ChatConnections";
 import { ProposalCard } from "./ProposalCard";
+import { PastedSecretBanner, SecretsDialog } from "./ChatSecrets";
 import { commonEdgeFolder, edgeFolderHint } from "@/lib/edge-folder-hint";
 import { Button } from "@/components/ui/Button";
 import { useAutoGrow } from "@/lib/use-auto-grow";
@@ -1165,6 +1166,12 @@ function Workbench_({
     () => (sessionIdForDecide ? async (id: string, decision: "send" | "cancel") => void (await decidePiEmail(workspaceId, sessionIdForDecide, id, decision)) : null),
     [sessionIdForDecide, workspaceId],
   );
+  const decideHttp = useMemo(
+    () => (sessionIdForDecide ? async (id: string, decision: "send" | "cancel") => void (await decidePiHttp(workspaceId, sessionIdForDecide, id, decision)) : null),
+    [sessionIdForDecide, workspaceId],
+  );
+  const [secretsOpen, setSecretsOpen] = useState(false);
+  const secretsCaughtCount = useMemo(() => messages.filter((m) => m.secretsCaught?.length).length, [messages]);
   /** Pending edge Approves — pinned above the composer so scrolling the transcript cannot hide them. */
   const pendingEdgeApprovals = useMemo(() => {
     const out: PiProposal[] = [];
@@ -1270,6 +1277,7 @@ function Workbench_({
     >
     <DecideProposal.Provider value={decideProposal}>
     <DecideEmail.Provider value={decideEmail}>
+    <DecideHttp.Provider value={decideHttp}>
     <div className="relative flex h-full min-h-0 flex-col">
       {/* Same 48px draft strip the manual builder uses, with Tether actions */}
 
@@ -1474,6 +1482,7 @@ function Workbench_({
                         )}
                       </div>
                     ) : null}
+                    <PastedSecretBanner workspaceId={workspaceId} chatId={chatId} refreshKey={secretsCaughtCount} />
                     <BackgroundChip live={bg.live} onOpen={() => setBgOpen(true)} />
                     <StorageNotice storage={storage} onOpenFiles={() => openFilesPane()} />
                     <ReferenceChips
@@ -1647,6 +1656,21 @@ function Workbench_({
                         >
                           <Paperclip s={15} />
                         </button>
+                        <button
+                          type="button"
+                          onClick={() => setSecretsOpen(true)}
+                          disabled={!chatId}
+                          aria-label="Add secret"
+                          title={
+                            chatId
+                              ? "Add secret: a key for a website, kept in this chat's vault; Forge uses it by name and never sees it"
+                              : "Send a first message to save this chat; then you can add secrets"
+                          }
+                          className="-ml-1.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-muted transition-colors duration-150 hover:bg-surface-2 hover:text-text disabled:opacity-40"
+                        >
+                          <Key s={15} />
+                        </button>
+                        {chatId ? <SecretsDialog workspaceId={workspaceId} chatId={chatId} open={secretsOpen} onClose={() => setSecretsOpen(false)} /> : null}
                         {mode !== "agent" ? (
                           <button
                             type="button"
@@ -1829,6 +1853,7 @@ function Workbench_({
         }
       />
     </div>
+    </DecideHttp.Provider>
     </DecideEmail.Provider>
     </DecideProposal.Provider>
     {memoryPromo && projectId && memoryEnabled ? (
@@ -2233,12 +2258,13 @@ export function ReadOnlyConversation({ messages }: { messages: PiChatMessage[] }
 function Proposals({ proposals }: { proposals: PiProposal[] }) {
   const decide = useContext(DecideProposal);
   const decideEmail = useContext(DecideEmail);
+  const decideHttp = useContext(DecideHttp);
   const shown = proposals.filter((p) => !(p.kind === "edge" && p.status === "pending"));
   if (!shown.length) return null;
   return (
     <div className="space-y-2">
       {shown.map((p) => (
-        <ProposalCard key={p.id} p={p} onDecide={decide} onEmail={decideEmail} />
+        <ProposalCard key={p.id} p={p} onDecide={decide} onEmail={decideEmail} onHttp={decideHttp} />
       ))}
     </div>
   );
@@ -2333,6 +2359,8 @@ const DecideProposal = createContext<
 >(null);
 /** Send or cancel an email Forge drafted in this chat (null until the session exists). */
 const DecideEmail = createContext<((id: string, decision: "send" | "cancel") => Promise<void>) | null>(null);
+/** Send or cancel a web request Forge drafted in this chat (null until the session exists). */
+const DecideHttp = createContext<((id: string, decision: "send" | "cancel") => Promise<void>) | null>(null);
 /** Opens a chat file's preview in the Files pane. */
 const OpenChatFile = createContext<((name: string) => void) | null>(null);
 /** Project memory (Phase 4): Remember on a message when the chat lives in a project. */

@@ -44,6 +44,13 @@ W = {
  ('POST','pi-builder/sessions/:sessionId/model'):'flows.write',
  ('POST','pi-builder/sessions/:sessionId/mail/:proposalId/send'):'flows.write',
  ('POST','pi-builder/sessions/:sessionId/mail/:proposalId/cancel'):'flows.write',
+ ('POST','pi-builder/sessions/:sessionId/http/:proposalId/send'):'flows.write',
+ ('POST','pi-builder/sessions/:sessionId/http/:proposalId/cancel'):'flows.write',
+ # chat vault: owner-only, decided in the service (like a chat's PATCH/DELETE)
+ ('GET','pi-builder/chats/:chatId/secrets'):'flows.read',
+ ('POST','pi-builder/chats/:chatId/secrets'):'flows.read',
+ ('PATCH','pi-builder/chats/:chatId/secrets/:name'):'flows.read',
+ ('DELETE','pi-builder/chats/:chatId/secrets/:name'):'flows.read',
  ('POST','pi-builder/sessions/:sessionId/steer'):'flows.write',
  # Workflow references (2026-10-17): listing what can be referenced and the chat's references is reading; adding,
  # moving a pin and removing one change what the build learns from. Same-workspace and per-chat rules are in the service.
@@ -408,6 +415,8 @@ EX = {
  ('POST','/api/forge/file'):"Forge's per-conversation tool key (a workspace File opened while building)",
  ('POST','/api/forge/fetch'):"Forge's per-conversation tool key (a public web address read while building; web access checked in the service)",
  ('POST','/api/forge/mail'):"Forge's per-conversation tool key (Forge Agent; emails the chat's owner only, recipient resolved in the service, no `to` accepted)",
+ ('POST','/api/forge/http'):"Forge's per-conversation tool key (Forge Agent; GET/HEAD direct, any write becomes a card only the person's click performs; vault secrets injected server-side for their bound host)",
+ ('POST','/api/forge/secrets'):"Forge's per-conversation tool key (Forge Agent; lists this chat's vault names and websites, never values)",
  ('POST','/api/forge/plugin'):"Forge's per-conversation tool key (assistant mode; a connector READ — a write is refused in the service)",
  ('POST','/api/forge/propose'):"Forge's per-conversation tool key (Forge Agent; PROPOSES a change, performs nothing — the person's click does)",
  ('POST','/api/forge/actions'):"Forge's per-conversation tool key (Forge Agent; lists the connected services' actions, changes nothing)",

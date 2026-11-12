@@ -28,6 +28,26 @@ describe("the assignments a reasonable person would get wrong", () => {
     expect([...EXEMPT.keys()].filter((k) => k.startsWith("POST /api/forge") && k.includes("mail"))).toEqual(["POST /api/forge/mail"]);
   });
 
+  it("a web request Forge drafted is sent or cancelled only by a signed-in person; the chat vault is owner-only", () => {
+    for (const verb of ["send", "cancel"]) {
+      const p = `${WS}/pi-builder/sessions/:sessionId/http/:proposalId/${verb}`;
+      expect(permOf("POST", p)).toBe("flows.write");
+      expect(requirementFor("POST", p)?.kind).toBe("workspace");
+    }
+    expect([...EXEMPT.keys()].filter((k) => k.startsWith("POST /api/forge") && k.includes("http"))).toEqual(["POST /api/forge/http"]);
+    for (const [verb, path] of [
+      ["GET", "secrets"],
+      ["POST", "secrets"],
+      ["PATCH", "secrets/:name"],
+      ["DELETE", "secrets/:name"],
+    ] as const) {
+      const p = `${WS}/pi-builder/chats/:chatId/${path}`;
+      expect(permOf(verb, p)).toBe("flows.read");
+      expect(requirementFor(verb, p)?.kind).toBe("workspace");
+    }
+    expect([...EXEMPT.keys()].filter((k) => k.includes("secrets"))).toEqual(["POST /api/forge/secrets"]);
+  });
+
   it("a WRITE that looks like a read: testing a datasource dials the tenant's database", () => {
     // It connects with the stored credential. That is not a read of Foundry's own data.
     expect(permOf("POST", `${WS}/datasources/:dsId/test`)).toBe("datasources.write");
@@ -152,7 +172,7 @@ describe("the exemptions, each for its own stated reason", () => {
     // 41–42: edge plugin relay POST/GET (device Bearer).
     // 43–45: email sign-in code request/verify/status (pre-session, API key + throttles).
     // 46: Forge emailing the chat's owner (personal thin; per-conversation tool key; recipient resolved in the service).
-    expect(EXEMPT.size).toBe(46);
+    expect(EXEMPT.size).toBe(48);
     expect(EXEMPT.get("POST /api/llm/complete")?.reason).toBe("requireLlmKey");
     expect(EXEMPT.get("POST /api/web/fetch")?.reason).toBe("requireWebKey");
     for (const path of [

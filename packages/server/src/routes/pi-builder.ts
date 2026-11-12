@@ -660,6 +660,88 @@ piBuilderRouter.post(
   }),
 );
 
+/** Only this request, under the person's identity, sends a request Forge drafted; Forge's tool key cannot reach it. */
+piBuilderRouter.post(
+  "/sessions/:sessionId/http/:proposalId/send",
+  asyncHandler(async (req, res) => {
+    z.object({}).strict().parse(req.body ?? {});
+    if (!req.user?.subject) throw Object.assign(new Error("confirming a web request needs a signed-in person"), { statusCode: 401 });
+    const proposal = await piBuilderService.decideHttp(req.params.workspaceId!, req.params.sessionId!, req.params.proposalId!, "send", {
+      subject: req.user.subject,
+      email: req.user.email ?? null,
+      name: req.user.name ?? null,
+    });
+    res.json({ proposal });
+  }),
+);
+
+/** Only this request, under the person's identity, sends a request Forge drafted; Forge's tool key cannot reach it. */
+piBuilderRouter.post(
+  "/sessions/:sessionId/http/:proposalId/cancel",
+  asyncHandler(async (req, res) => {
+    z.object({}).strict().parse(req.body ?? {});
+    if (!req.user?.subject) throw Object.assign(new Error("confirming a web request needs a signed-in person"), { statusCode: 401 });
+    const proposal = await piBuilderService.decideHttp(req.params.workspaceId!, req.params.sessionId!, req.params.proposalId!, "cancel", {
+      subject: req.user.subject,
+      email: req.user.email ?? null,
+      name: req.user.name ?? null,
+    });
+    res.json({ proposal });
+  }),
+);
+
+/**
+ * The chat's vault (owner-only): secrets Forge may inject by name into a web request for their bound host. The value is
+ * never in any response. An Admin cannot read or change another person's chat secrets, which is why `mayChangeChat` is
+ * not used here: the service checks the owner.
+ */
+const vaultCall = (req: Request) => {
+  if (!req.user?.subject) throw Object.assign(new Error("the vault needs a signed-in person"), { statusCode: 401 });
+  return {
+    workspaceId: req.params.workspaceId!,
+    chatId: z.string().uuid().parse(req.params.chatId),
+    person: { subject: req.user.subject },
+  };
+};
+
+piBuilderRouter.get(
+  "/chats/:chatId/secrets",
+  asyncHandler(async (req, res) => {
+    const { workspaceId, chatId, person } = vaultCall(req);
+    res.json({ secrets: await piBuilderService.secretsList(workspaceId, chatId, person) });
+  }),
+);
+
+piBuilderRouter.post(
+  "/chats/:chatId/secrets",
+  express.json({ limit: "32kb" }),
+  asyncHandler(async (req, res) => {
+    const { workspaceId, chatId, person } = vaultCall(req);
+    res.status(201).json({ secret: await piBuilderService.secretsCreate(workspaceId, chatId, person, req.body) });
+  }),
+);
+
+/** Rotate the value and/or set host / placement / expiry; confirms a pending one. */
+piBuilderRouter.patch(
+  "/chats/:chatId/secrets/:name",
+  express.json({ limit: "32kb" }),
+  asyncHandler(async (req, res) => {
+    const { workspaceId, chatId, person } = vaultCall(req);
+    const name = z.string().min(1).max(64).parse(req.params.name);
+    res.json({ secret: await piBuilderService.secretsUpdate(workspaceId, chatId, name, person, req.body) });
+  }),
+);
+
+piBuilderRouter.delete(
+  "/chats/:chatId/secrets/:name",
+  asyncHandler(async (req, res) => {
+    const { workspaceId, chatId, person } = vaultCall(req);
+    const name = z.string().min(1).max(64).parse(req.params.name);
+    await piBuilderService.secretsRemove(workspaceId, chatId, name, person);
+    res.status(204).end();
+  }),
+);
+
 /** "Change" on the chat's accounts: forget the connection chosen for a service; the next call asks again (8.5). */
 piBuilderRouter.post(
   "/sessions/:sessionId/accounts/clear",

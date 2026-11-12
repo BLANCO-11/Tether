@@ -71,6 +71,11 @@ const refused = (host: string, reason: string | null) =>
     `web_fetch reads public web addresses only, and ${host} is ${REASON[reason ?? ""] ?? "not a public address"}.`,
   );
 
+/** The same refusal the guarded lookup raises, for other callers that dial under their own rules. */
+export function refusedAddress(host: string, reason: string | null): WebFetchError {
+  return refused(host, reason);
+}
+
 /**
  * The request's DNS lookup, guarded: every address the name resolves to must be public, and the one dialled is one of
  * those. Used as `lookup` on the request, so it runs at connection time for this very socket.
@@ -89,7 +94,7 @@ export function guardedLookup(hostname: string, options: { all?: boolean; family
   });
 }
 
-const READABLE = /^(text\/|application\/(json|xml|xhtml\+xml|rss\+xml|atom\+xml|ld\+json|[a-z.+-]*\+json|[a-z.+-]*\+xml|javascript|x-javascript|csv)\b)/i;
+export const READABLE = /^(text\/|application\/(json|xml|xhtml\+xml|rss\+xml|atom\+xml|ld\+json|[a-z.+-]*\+json|[a-z.+-]*\+xml|javascript|x-javascript|csv)\b)/i;
 
 /** Credential-shaped query values are not stored in the record (the address itself is). */
 export function redactUrl(raw: string): string {
@@ -154,7 +159,7 @@ function once(url: URL, method: "GET" | "HEAD", signal: AbortSignal): Promise<Ra
   });
 }
 
-async function checkLiteral(url: URL): Promise<void> {
+export async function checkLiteral(url: URL): Promise<void> {
   const d = await classifyHost(url.hostname, STRICT);
   // A name is checked again, for real, by the guarded lookup at connection time; this refuses literals and names that
   // already resolve somewhere private, before anything is dialled.

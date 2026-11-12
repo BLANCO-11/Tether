@@ -392,12 +392,26 @@ export function Sidebar({
       />
 
       <aside
-        className={`rail-surface absolute inset-y-0 left-0 z-50 flex h-full shrink-0 flex-col overflow-hidden border-r border-line bg-surface transition-[width] duration-[280ms] ease-[cubic-bezier(.2,.8,.2,1)] motion-reduce:transition-none ${
+        // Collapsed, a tap on any empty part of the rail expands it; links and buttons keep their own job.
+        onClick={(e) => {
+          if (collapsed && !(e.target as Element).closest("a,button,input,[role=menuitem]")) onToggleCollapsed?.();
+        }}
+        className={`${collapsed ? "cursor-pointer " : ""}rail-surface absolute inset-y-0 left-0 z-50 flex h-full shrink-0 flex-col overflow-hidden border-r border-line bg-surface transition-[width] duration-[280ms] ease-[cubic-bezier(.2,.8,.2,1)] motion-reduce:transition-none ${
           collapsed ? "w-[var(--sidebar-collapsed-w)]" : "w-[var(--sidebar-w)]"
         }`}
       >
         <div className="flex h-topbar shrink-0 items-center gap-2 overflow-hidden border-b border-line px-3.5">
-          <Link href="/dashboard" onClick={onNavigate} className="flex min-w-0 items-center gap-2.5">
+          <Link
+            href="/dashboard"
+            onClick={(e) => {
+              // Collapsed, the logo expands the rail rather than navigating away.
+              if (collapsed) {
+                e.preventDefault();
+                onToggleCollapsed?.();
+              } else onNavigate?.();
+            }}
+            className="flex min-w-0 items-center gap-2.5"
+          >
             <span className="btn-grad flex h-7 w-7 shrink-0 items-center justify-center rounded-lg" style={{ color: "var(--on-cta)" }}>
               <Cube s={16} />
             </span>

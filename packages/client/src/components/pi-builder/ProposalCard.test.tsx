@@ -304,3 +304,36 @@ describe("an email card", () => {
     expect(screen.queryByRole("button")).toBeNull();
   });
 });
+
+describe("a web request card", () => {
+  const http = (over: Partial<NonNullable<PiProposal["http"]>> = {}) => ({
+    method: "POST" as const,
+    url: "https://api.example.com/v1/tweet",
+    headers: { Accept: "application/json" },
+    body: '{"text":"hi"}',
+    contentType: "application/json",
+    secret: { name: "twitterapi-key", host: "api.example.com", placement: { kind: "header" as const, name: "X-API-Key" } },
+    expiresAt: new Date(Date.now() + 3600_000).toISOString(),
+    ...over,
+  });
+  const card = (over: Partial<PiProposal> = {}, h = http()) => p({ kind: "http", summary: "Post a tweet", params: {}, http: h, ...over });
+  it("shows method, address and where the secret goes, and Send and Cancel call onHttp", async () => {
+    const onHttp = vi.fn().mockResolvedValue(undefined);
+    const onDecide = vi.fn();
+    render(<ProposalCard p={card()} onDecide={onDecide} onHttp={onHttp} />);
+    expect(screen.getByText("POST")).toBeTruthy();
+    expect(screen.getByText("https://api.example.com/v1/tweet")).toBeTruthy();
+    expect(screen.getByText("Accept: application/json")).toBeTruthy();
+    expect(screen.getByText("twitterapi-key, sent as header X-API-Key to api.example.com only")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+    await waitFor(() => expect(onHttp).toHaveBeenCalledWith("p1", "send"));
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    await waitFor(() => expect(onHttp).toHaveBeenCalledWith("p1", "cancel"));
+    expect(onDecide).not.toHaveBeenCalled();
+  });
+  it("an expired card offers no Send", () => {
+    render(<ProposalCard p={card({}, http({ expiresAt: new Date(Date.now() - 1000).toISOString() }))} onDecide={null} onHttp={vi.fn()} />);
+    expect(screen.getByText("Expired")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Send" })).toBeNull();
+  });
+});

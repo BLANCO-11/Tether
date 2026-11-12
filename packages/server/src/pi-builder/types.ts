@@ -1,4 +1,5 @@
 import type { ForgeEmailDraft } from "./forge-mail.js";
+import type { ForgeHttpDraft } from "./forge-http.js";
 export type PiStep = {
   id: string;
   /** One plain sentence: what this step does, for a person reading it (2026-10-11). Required on code steps. */
@@ -126,6 +127,8 @@ export type PiChatMessage = {
   role: "user" | "assistant" | "system";
   text: string;
   at: string;
+  /** Names of secrets moved from this message to the chat's vault (the values are never kept here). */
+  secretsCaught?: string[];
   /** The chat's mode when this was said (0097): Workflow Builder or Forge Agent. Absent on older messages (workflow). */
   mode?: "workflow" | "agent";
   /** A "Switched to …" note, with the mode the chat was in before it — so the next switch can replace it. */
@@ -195,7 +198,7 @@ export type PiProposal = {
    * `setting`: not a call to the service but switching one of its actions on or off (agent-grants.ts). `params` is then
    * empty and `setting` says everything the card shows; the person picks WHERE (`scope`) by the button they press.
    */
-  kind?: "action" | "setting" | "account" | "edge" | "surface" | "email";
+  kind?: "action" | "setting" | "account" | "edge" | "surface" | "email" | "http";
   setting?: PiSettingChange;
   /** `account`: which connection this chat should use for a service — the person picks one of `options`. */
   choice?: PiAccountQuestion;
@@ -208,6 +211,8 @@ export type PiProposal = {
   relay?: { requestId: string; deviceId: string; deviceName: string };
   /** `email`: an email Forge drafted to someone other than the owner; only the chat owner's click sends it (forge-mail.ts). */
   email?: ForgeEmailDraft;
+  /** `http`: a web request that changes something, drafted by Forge; only the chat owner's click sends it (forge-http.ts). */
+  http?: ForgeHttpDraft;
   /** `surface`: Forge-authored info/ask card (list or choice) — see surface-card.ts. */
   surface?: PiSurface;
   /** Where the person applied a setting change. */

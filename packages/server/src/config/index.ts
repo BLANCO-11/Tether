@@ -486,6 +486,10 @@ export const config = {
     idleMs: Number(process.env.FORGE_IDLE_MS ?? 5 * 60_000),
     leaveGraceMs: Number(process.env.FORGE_LEAVE_GRACE_MS ?? 30_000),
     turnTimeoutMs: Number(process.env.FORGE_TURN_TIMEOUT_MS ?? 10 * 60_000),
+    /** How long one web request Forge makes (tools/http.mjs) may take before it is given up on. */
+    httpTimeoutMs: Number(process.env.FORGE_HTTP_TIMEOUT_MS?.trim() || 10_000),
+    /** The most bytes read from one web response Forge asks for; the rest is dropped. */
+    httpMaxBytes: Number(process.env.FORGE_HTTP_MAX_BYTES?.trim() || 2 * 1024 * 1024),
     /** A conversation nobody has had open this long leaves server memory; it reloads from the database. */
     forgetAfterMs: Number(process.env.FORGE_FORGET_AFTER_MS ?? 30 * 60_000),
     /**

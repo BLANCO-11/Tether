@@ -15,7 +15,13 @@
  *      a redactor someone switches off.
  */
 import { describe, expect, it } from "vitest";
-import { redactSecrets, redactJsonString, REDACTED } from "./index.js";
+import {
+  redactSecrets,
+  redactJsonString,
+  redactSecretValues,
+  findSecretValues,
+  REDACTED,
+} from "./index.js";
 
 describe("redactSecrets", () => {
   it("removes credential-shaped keys at any depth", () => {
@@ -83,5 +89,81 @@ describe("redactJsonString", () => {
   it("passes a normal step-API envelope through unchanged", () => {
     const body = JSON.stringify({ results: [{ ok: true, data: [] }], succeeded: 1, failed: 0, warnings: [] });
     expect(JSON.parse(redactJsonString(body))).toEqual(JSON.parse(body));
+  });
+});
+
+describe("findSecretValues", () => {
+  const cases: [string, string][] = [
+    ["anthropic", "sk-ant-api03-AbCdEfGhIjKlMnOpQrStUv"],
+    ["openai", "sk-proj-AAAAbbbbCCCCdddd1234"],
+    ["github", "ghp_" + "a1B2c3D4e5".repeat(3) + "xyz"],
+    ["github", "github_pat_" + "a1B2c3D4e5".repeat(4)],
+    ["aws", "AKIAIOSFODNN7EXAMPLE"],
+    ["slack", "xoxb-1234567890-abcdefghij"],
+    ["google", "AIza" + "SyA1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6Q"],
+    ["stripe", "sk_live_" + "a1B2c3D4e5F6g7H8"],
+    ["jwt", "eyJhbGciOiJIUzI1.eyJzdWIiOiIxMjM0.SflKxwRJSMeKKF2QT4"],
+    ["private-key", "-----BEGIN RSA PRIVATE KEY-----\nMIIabc\n-----END RSA PRIVATE KEY-----"],
+  ];
+  for (const [kind, value] of cases) {
+    it(`finds ${kind} inside a sentence`, () => {
+      const text = `please use ${value} for this, thanks`;
+      const hits = findSecretValues(text);
+      const hit = hits.find((h) => h.kind === kind);
+      expect(hit).toBeDefined();
+      expect(hit!.strong).toBe(true);
+      expect(hit!.value).toBe(value);
+      expect(hit!.start).toBe(text.indexOf(value));
+      expect(hit!.end).toBe(text.indexOf(value) + value.length);
+    });
+  }
+
+  it("reports only the token for Bearer", () => {
+    const token = "abcdefghijklmnopqrstuvwx";
+    const text = `Authorization: Bearer ${token}`;
+    const hits = findSecretValues(text);
+    expect(hits).toHaveLength(1);
+    expect(hits[0]).toMatchObject({ kind: "bearer", value: token, start: text.indexOf(token) });
+  });
+
+  it("finds a prefixed key only with heuristics on", () => {
+    const text = "my key is twtr_9fK2LmQ8xZ7pR4sT1vW3yB6n ok";
+    expect(findSecretValues(text).map((h) => h.kind)).toEqual(["prefixed"]);
+    expect(findSecretValues(text, { heuristics: false })).toEqual([]);
+  });
+
+  it("finds a 40-char hex string", () => {
+    const hex = "0123456789abcdef0123456789abcdef01234567";
+    expect(findSecretValues(`sha ${hex}`).map((h) => h.kind)).toEqual(["hex"]);
+  });
+
+  it("does not flag ordinary text", () => {
+    for (const t of [
+      "e9eea8d0-1c2b-4d3e-9f00-123456789abc",
+      "The quick brown fox jumps over the lazy dog near the river bank.",
+      "https://example.com/some/long/path/segment/abcdefghijklmnopqrstuvwxyz012345",
+      "snake_case_name",
+    ]) {
+      expect(findSecretValues(t)).toEqual([]);
+    }
+  });
+
+  it("finds a key inside a query string", () => {
+    const hits = findSecretValues("https://x.example/a?api_key=sk-proj-AAAAbbbbCCCCdddd1234&b=1");
+    expect(hits.map((h) => h.value)).toEqual(["sk-proj-AAAAbbbbCCCCdddd1234"]);
+  });
+
+  it("does not double-report an sk-ant key", () => {
+    const hits = findSecretValues("sk-ant-api03-AbCdEfGhIjKlMnOpQrStUv");
+    expect(hits).toHaveLength(1);
+    expect(hits[0].kind).toBe("anthropic");
+  });
+});
+
+describe("redactSecretValues", () => {
+  it("replaces strong hits only", () => {
+    expect(redactSecretValues("key sk-proj-AAAAbbbbCCCCdddd1234 and twtr_9fK2LmQ8xZ7pR4sT1vW3yB6n")).toBe(
+      `key ${REDACTED} and twtr_9fK2LmQ8xZ7pR4sT1vW3yB6n`,
+    );
   });
 });

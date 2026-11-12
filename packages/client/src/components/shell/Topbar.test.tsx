@@ -124,6 +124,13 @@ describe("the Back button", () => {
     expect(header?.querySelector("button, a")).toBe(screen.getByLabelText("Back"));
   });
 
+  it("has no hamburger — the rail expands by tapping it", () => {
+    currentPathname = "/runs/run-7";
+    render(<Topbar />);
+    expect(screen.queryByLabelText("Expand the navigation")).toBeNull();
+    expect(screen.queryByLabelText("Collapse the navigation")).toBeNull();
+  });
+
   it("navigates to the real previous route when there is one", () => {
     currentPathname = "/runs/run-7";
     withHistory(3);
